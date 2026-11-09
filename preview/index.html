@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deye EMS — podgląd interfejsu</title>
+<style>
+  body {margin:0;background:#f3f6f7;font:15px system-ui;color:#20383d}
+  .demo {padding:12px 24px;background:#e3eef8;text-align:center;line-height:1.5}
+</style>
+<div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.</div>
+<deye-ems-panel id="preview"></deye-ems-panel>
+<script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
+<script>
+  // Deliberately generic samples: no household history, credentials or API.
+  const start=Math.floor(Date.now()/1800000)*1800000;
+  const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
+  const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
+  const deadline=night.toISOString();
+  const example={mode:"shadow",options:{min_soc_percent:50,capacity_kwh:66,
+    grid_import_limit_kw:12,grid_phase_limit_kw:5,reserve_margin_soc_percent:5,
+    winter_weather_soc_percent:75,grid_current_max_a:108,charge_max_kw:5.3,
+    discharge_max_kw:10,grid_max_soc_percent:95,
+    extra_loads:[{name:"Przykładowy dodatkowy obwód",energy_entity:"sensor.demo_energy",
+      power_entity:"sensor.demo_power",included_in_load:false}]},sources:{},data:{
+    updated_at:new Date().toISOString(),inputs:{soc:64,soc_valid:true,
+      telemetry_valid:true,grid_power:4600,load_power:2800,
+      total_load_with_outside_w:3400,outside_load_w:600,battery_power:-1200,current_a:26},
+    control:{next_a:28,cap_a:42,read_setting_a:26,target_soc:75,
+      target_deadline:deadline,target_source:"dated_cache",reason:"ramp_up"},
+    plan:{status:"ok",quality:"valid",generated_at:new Date().toISOString(),
+      targets:{night:{soc_percent:75,deadline},peak:{soc_percent:70,deadline:peak.toISOString()}},
+      rows:Array.from({length:96},(_,i)=>({timestamp:new Date(start+i*1800000).toISOString(),
+        soc_percent:Math.min(96,Math.max(50,64+13*Math.sin(i/11))),
+        pv_kw:Math.max(0,5*Math.sin((i%48-12)/12)),load_kw:2.8,
+        grid_import_kw:i<16?1.8:0}))}}};
+  document.getElementById("preview").hass={states:{},async callWS(message){
+    if(message.command==="mode")example.mode=message.mode;
+    if(message.command==="option")example.options[message.key]=message.value;
+    example.data.updated_at=new Date().toISOString();
+    example.data.control.target_soc=Math.max(75,example.options.min_soc_percent);
+    return structuredClone(example);
+  }};
+</script>
+</html>

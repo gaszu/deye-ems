@@ -1,0 +1,126 @@
+{
+  "title": "Deye EMS",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Deye EMS — własny silnik",
+        "description": "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
+        "data": {
+          "min_soc_percent": "Minimalny bezpieczny SoC",
+          "capacity_kwh": "Pojemność akumulatora",
+          "grid_import_limit_kw": "Maksymalny import łącznie",
+          "grid_phase_limit_kw": "Maksymalny import na fazę"
+        }
+      }
+    },
+    "error": {
+      "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel."
+    },
+    "abort": {
+      "already_configured": "Integracja Deye EMS jest już skonfigurowana."
+    }
+  },
+  "options": {
+    "step": {
+      "parameters": {
+        "title": "Parametry silnika",
+        "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.",
+        "data": {
+          "min_soc_percent": "Minimalny bezpieczny SoC",
+          "capacity_kwh": "Pojemność akumulatora",
+          "grid_import_limit_kw": "Maksymalny import łącznie",
+          "grid_phase_limit_kw": "Maksymalny import na fazę",
+          "reserve_margin_soc_percent": "Dodatkowy bufor prognozy",
+          "winter_weather_soc_percent": "Zimowy cel przy słabej prognozie PV",
+          "grid_current_max_a": "Maksymalny prąd ładowania z sieci",
+          "charge_max_kw": "Modelowy limit ładowania baterii",
+          "discharge_max_kw": "Modelowy limit rozładowania baterii",
+          "grid_max_soc_percent": "Maksymalny cel doładowania z sieci"
+        }
+      },
+      "sources": {
+        "title": "Pomiary i sterowanie",
+        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Nie są wymagane żadne helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.",
+        "data": {
+          "soc": "soc",
+          "voltage": "voltage",
+          "bms_charge_current": "bms charge current",
+          "bms_blocking_charge": "bms blocking charge",
+          "battery_power": "battery power",
+          "grid_power": "grid power",
+          "load_power": "load power",
+          "grid_current_number": "grid current number",
+          "max_charge_current_number": "max charge current number",
+          "pv_today": "pv today",
+          "pv_tomorrow": "pv tomorrow",
+          "pv_day3": "pv day3",
+          "pc_energy_total": "pc energy total",
+          "pc_energy_today": "pc energy today",
+          "pc_energy_yesterday": "pc energy yesterday",
+          "solar_sell": "solar sell",
+          "tou_enabled": "tou enabled",
+          "energy_priority": "energy priority",
+          "work_mode": "work mode",
+          "grid_l1_power": "grid l1 power",
+          "load_l1_power": "load l1 power",
+          "grid_l2_power": "grid l2 power",
+          "load_l2_power": "load l2 power",
+          "grid_l3_power": "grid l3 power",
+          "load_l3_power": "load l3 power",
+          "tou_soc_1": "tou soc 1",
+          "tou_gc_1": "tou gc 1",
+          "tou_time_1": "tou time 1",
+          "tou_soc_2": "tou soc 2",
+          "tou_gc_2": "tou gc 2",
+          "tou_time_2": "tou time 2",
+          "tou_soc_3": "tou soc 3",
+          "tou_gc_3": "tou gc 3",
+          "tou_time_3": "tou time 3",
+          "tou_soc_4": "tou soc 4",
+          "tou_gc_4": "tou gc 4",
+          "tou_time_4": "tou time 4",
+          "tou_soc_5": "tou soc 5",
+          "tou_gc_5": "tou gc 5",
+          "tou_time_5": "tou time 5",
+          "tou_soc_6": "tou soc 6",
+          "tou_gc_6": "tou gc 6",
+          "tou_time_6": "tou time 6"
+        }
+      },
+      "add_load": {
+        "title": "Dodatkowe zużycia",
+        "description": "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik. Licznik energii powinien podawać Wh lub kWh. Zaznaczenie LOAD zapobiega podwójnemu doliczaniu. Odbiornik poza LOAD wymaga również pomiaru mocy dla ograniczania importu.",
+        "data": {
+          "name": "Nazwa odbiornika",
+          "energy_entity": "Encja licznika energii",
+          "power_entity": "Encja chwilowej mocy (opcjonalnie)",
+          "included_in_load": "Zużycie jest już ujęte w głównym pomiarze LOAD"
+        }
+      },
+      "remove_load": {
+        "title": "Usuń dodatkowe zużycie",
+        "description": "Usunięcie kanału nie usuwa encji źródłowej ani jej historii.",
+        "data": {
+          "load_id": "Odbiornik do usunięcia"
+        }
+      },
+      "init": {
+        "title": "Deye EMS",
+        "menu_options": {
+          "parameters": "Parametry i bezpieczny SoC",
+          "sources": "Encje pomiarowe i sterujące",
+          "add_load": "Dodaj dodatkowe zużycie",
+          "remove_load": "Usuń dodatkowe zużycie"
+        }
+      }
+    },
+    "error": {
+      "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
+      "duplicate_load": "Ten licznik energii jest już dodany."
+    },
+    "abort": {
+      "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
+      "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki."
+    }
+  }
+}
