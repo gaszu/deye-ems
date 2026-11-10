@@ -6,9 +6,11 @@ import probatio as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
+from homeassistant.helpers import entity_registry as er
 
 from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OPTION_RANGES
 from .solcast import validate_config
+from .solcast_import import import_existing_options
 
 
 def _schema(values, keys):
@@ -48,6 +50,9 @@ def _solcast_input(user_input, previous):
         "initial_requests_used": user_input.get("initial_requests_used", 10),
         "dampening_factor": user_input.get("dampening_factor", 1.),
         "hourly_factors": factors, "config_generation": uuid4().hex}
+    for name in ("half_hourly_factors", "site_factors", "exclude_sites", "import_report", "import_metadata"):
+        if name in previous:
+            result[name] = previous[name]
     validate_config(result)
     return result
 
@@ -125,10 +130,16 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         fields[vol.Optional("hourly_factors", default=hourly if isinstance(hourly, str) else " ".join(map(str, hourly)))] = selector.TextSelector()
         if adaptive:
             fields[vol.Required("accept_manual_calibration", default=False)] = selector.BooleanSelector()
+        report = getattr(self, "_import_report", {})
+        note = "Zapisany klucz pozostaje ukryty. Puste pole zachowuje dotychczasowy klucz."
+        if report.get("calibration_imported"):
+            note = "Bieżące współczynniki korekty zostały odczytane i skopiowane. Będą stosowane tylko do surowej prognozy API, bez ponownej korekty prognoz HA."
+        if adaptive:
+            note += " Przeniesiono stan współczynników, nie cały mechanizm dalszego automatycznego uczenia ani jego historię. Sprawdź ustawienia i potwierdź ten zakres migracji."
+        if "source_suppression_not_implemented" in report.get("warnings", []):
+            note += " Warunek wstrzymywania kalibracji ze źródłowej integracji zachowano jako opis; EMS go nie wykonuje."
         return self.async_show_form(step_id="solcast_manual", errors=errors,
-            data_schema=vol.Schema(fields), description_placeholders={"import_note":
-                "Poprzedni Solcast używa automatycznej lub osobnej kalibracji dla instalacji. Te korekty nie zostały skopiowane; wprowadź je ręcznie i potwierdź." if adaptive else
-                "Zapisany klucz pozostaje ukryty. Puste pole zachowuje dotychczasowy klucz."})
+            data_schema=vol.Schema(fields), description_placeholders={"import_note": note})
 
     async def async_step_solcast_import(self, user_input=None):
         if self._mapping_locked():
@@ -141,11 +152,21 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
             if entry is None:
                 return self.async_abort(reason="no_solcast_to_import")
             source = {**entry.data, **entry.options}
-            self._import_adaptive = bool(source.get("auto_dampen") or source.get("site_damp"))
-            self._solcast_draft = {**self._solcast_values(), "api_key": source.get("api_key", ""),
-                "resource_ids": [], "dampening_factor": 1.,
-                "hourly_factors": [1.] * 24 if self._import_adaptive else [source.get(f"damp{h:02}", 1.) for h in range(24)],
-                "initial_requests_used": 10}
+            attributes = None
+            registry = er.async_get(self.hass)
+            for record in er.async_entries_for_config_entry(registry, entry.entry_id):
+                if record.platform == "solcast_solar" and record.unique_id == "dampen":
+                    state = self.hass.states.get(record.entity_id)
+                    if state is not None and state.state not in ("unknown", "unavailable"):
+                        attributes = dict(state.attributes)
+                    break
+            try:
+                imported = import_existing_options(source, attributes)
+            except (ValueError, TypeError):
+                return self.async_abort(reason="solcast_import_incomplete")
+            self._import_report = imported["report"]
+            self._import_adaptive = self._import_report.get("needs_manual_review", False)
+            self._solcast_draft = {**imported["config"], "import_report": self._import_report}
             return await self.async_step_solcast_manual()
         return self.async_show_form(step_id="solcast_import", data_schema=vol.Schema({
             vol.Required("source_entry"): selector.SelectSelector(selector.SelectSelectorConfig(

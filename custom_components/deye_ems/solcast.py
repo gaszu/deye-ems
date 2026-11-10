@@ -61,6 +61,11 @@ def _config(config):
         raise ValueError("invalid_resource_ids")
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate_resource_ids")
+    excluded = config.get("exclude_sites", [])
+    if not isinstance(excluded, (list, tuple)) or len(excluded) > 32 or any(
+            not isinstance(i, str) or not _ID.fullmatch(i) or key in i for i in excluded
+            ) or len(set(excluded)) != len(excluded):
+        raise ValueError("invalid_exclude_sites")
     poll, limit = config.get("poll_interval_minutes", 360), config.get("max_requests_per_day", 10)
     factor = config.get("dampening_factor", 1.0)
     if not (_number(poll) and 15 <= poll <= 1440 and _number(limit)
@@ -76,11 +81,27 @@ def _config(config):
     if not isinstance(hourly, (list, tuple)) or len(hourly) != 24 or any(
             not _number(v) or not 0 <= v <= 2 for v in hourly):
         raise ValueError("invalid_hourly_factors")
+    half_hourly = config.get("half_hourly_factors")
+    if half_hourly is None:
+        half_hourly = [1.] * 48
+    if not isinstance(half_hourly, (list, tuple)) or len(half_hourly) != 48 or any(
+            not _number(v) or not 0 <= v <= 2 for v in half_hourly):
+        raise ValueError("invalid_half_hourly_factors")
+    site_factors = config.get("site_factors", {})
+    if not isinstance(site_factors, dict) or len(site_factors) > 32:
+        raise ValueError("invalid_site_factors")
+    for rid, factors in site_factors.items():
+        if not isinstance(rid, str) or not _ID.fullmatch(rid) or key in rid:
+            raise ValueError("invalid_site_factor_resource_id")
+        if not isinstance(factors, (list, tuple)) or len(factors) != 48 or any(
+                not _number(v) or not 0 <= v <= 2 for v in factors):
+            raise ValueError("invalid_site_half_hourly_factors")
     initial = config.get("initial_requests_used")
     if initial is not None and (not _number(initial) or int(initial) != initial or not 0 <= initial <= 1000):
         raise ValueError("invalid_initial_requests_used")
-    return dict(api_key=key, ids=list(ids), poll=poll*60, limit=int(limit), factor=factor,
-                hourly=list(hourly), initial=initial)
+    return dict(api_key=key, ids=list(ids), exclude=list(excluded), poll=poll*60, limit=int(limit), factor=factor,
+                hourly=list(hourly), half_hourly=list(half_hourly),
+                site_factors={rid: list(factors) for rid, factors in site_factors.items()}, initial=initial)
 
 
 def validate_config(config):
@@ -314,10 +335,16 @@ class SolcastClient:
                     "coverage_reason": "forecast_coverage_incomplete", "periods": [], "sites": [], "quota": self._quota(cfg, now)}
         periods = []
         for at in sorted(t for t in common if start <= t < start+72*3600):
-            factor = cfg["factor"] * cfg["hourly"][datetime.fromtimestamp(at, _WARSAW).hour]
+            local = datetime.fromtimestamp(at, _WARSAW)
+            half = local.hour*2 + local.minute//30
+            factor = cfg["factor"] * cfg["hourly"][local.hour] * cfg["half_hourly"][half]
+            # Cache stays raw. Each site's explicit correction is applied once
+            # before summing; global/time corrections apply once to the sum.
+            corrected = [(rows[at], cfg["site_factors"][rid][half] if rid in cfg["site_factors"] else 1.)
+                         for rid, rows in zip(ids, per_site)]
             periods.append(dict(period_start=datetime.fromtimestamp(at, _UTC).isoformat(),
-                pv_estimate=sum(rows[at]["pv_estimate"] for rows in per_site)*factor,
-                pv_estimate10=sum(rows[at]["pv_estimate10"] for rows in per_site)*factor))
+                pv_estimate=sum(row["pv_estimate"]*site_factor for row, site_factor in corrected)*factor,
+                pv_estimate10=sum(row["pv_estimate10"]*site_factor for row, site_factor in corrected)*factor))
         known = {site["resource_id"]: site for site in self._state["sites"]}
         return {"status": "ok" if downloaded else "cached", "reason": reason,
                 "source": "solcast_api" if downloaded else "solcast_dated_cache", "periods": periods,
@@ -332,13 +359,15 @@ class SolcastClient:
                 return {"status": "unavailable", "reason": str(error), "periods": [], "sites": []}
             if not await self._initialize_quota(cfg, now):
                 return {"status": "unavailable", "reason": "quota_store_failed", "periods": [], "sites": []}
-            ids, discovery_reason = cfg["ids"], "resource_ids_missing"
-            if not ids:
+            configured_ids, discovery_reason = cfg["ids"], "resource_ids_missing"
+            if not configured_ids:
                 discovery = await self._sites(cfg, now, False)
-                ids = [site["resource_id"] for site in discovery["sites"]]
+                configured_ids = [site["resource_id"] for site in discovery["sites"]]
                 discovery_reason = discovery["reason"]
+            ids = [rid for rid in configured_ids if rid not in cfg["exclude"]]
             if not ids:
-                return {"status": "unavailable", "reason": discovery_reason, "periods": [], "sites": [], "quota": self._quota(cfg, now)}
+                return {"status": "unavailable", "reason": "all_sites_excluded" if configured_ids else discovery_reason,
+                        "periods": [], "sites": [], "quota": self._quota(cfg, now)}
             downloaded, reason = False, "poll_interval"
             start = int(now.timestamp()//1800)*1800
             for rid in ids:

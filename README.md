@@ -8,9 +8,9 @@ Pierwsza wersja zachowuje mechanizmy obecnego EMS: harmonogram G13, sezonowe cel
 
 **Marketplace (HA 2026.11+): Ustawienia → Marketplace → Dodaj z linku → `https://github.com/gaszu/ha-deye-ems` → typ Integracja → Instaluj.** Następnie dodaj Deye EMS w Urządzeniach i usługach. Repozytorium jest publicznym kodem integracji; indywidualne ustawienia i dane domu pozostają w HA.
 
-[Instrukcja instalacji](INSTALL.md) · [Przejście z obecnego EMS i powrót](MIGRATION.md)
+[Specyfikacja 1.0.0](SPECIFICATION.md) · [Instrukcja instalacji](INSTALL.md) · [Przejście z obecnego EMS i powrót](MIGRATION.md)
 
-Pakiet: [deye-ems-0.1.0.zip](dist/deye-ems-0.1.0.zip). Po skopiowaniu katalogu integracji i restarcie HA: **Ustawienia → Urządzenia i usługi → Dodaj integrację → Deye EMS**. Panel **Deye EMS** pojawia się w menu bocznym. Pierwsze dodanie uruchamia obserwację, bez poleceń do falownika.
+Pakiet: [deye-ems-1.0.0.zip](dist/deye-ems-1.0.0.zip). Po skopiowaniu katalogu integracji i restarcie HA: **Ustawienia → Urządzenia i usługi → Dodaj integrację → Deye EMS**. Panel **Deye EMS** pojawia się w menu bocznym. Pierwsze dodanie uruchamia obserwację, bez poleceń do falownika.
 
 ## Najważniejsze ustawienia
 
@@ -37,7 +37,7 @@ Konto i instalacje zakłada się w [Solcast Toolkit](https://toolkit.solcast.com
 
 Prognoza całej instalacji jest domyślnie używana **1:1**. Pole mocy kWp wiąże prognozę i jej cache z konfiguracją instalacji; nie mnoży ponownie już skalibrowanej prognozy. Osobny tryb profilu referencyjnego oblicza `prognoza / moc referencyjna × moc zainstalowana`. Wybiera się go świadomie dla profilu innej mocy. Brak wpisanej mocy PV blokuje przejęcie sterowania i jest widoczny jako brak konfiguracji.
 
-Import z `solcast_solar` kopiuje lokalnie dostępny klucz i stałe korekty godzinowe. Jeżeli poprzednia integracja ma automatyczną kalibrację lub korekty poszczególnych instalacji, kreator zgłasza brak pełnego przeniesienia i wymaga ręcznego sprawdzenia. Nie wyłącza poprzedniego źródła samoczynnie.
+Import z `solcast_solar` kopiuje lokalnie dostępny klucz, limit konta, wykluczenia i bieżące współczynniki z sensora korekt przypisanego do tej integracji. Obsługuje 24/48 punktów i tabele instalacji; tabela globalna ma pierwszeństwo. Importowane korekty stosuje tylko do surowych odpowiedzi własnego API. Prognozy odczytywane z encji HA są już skorygowane i nie otrzymują ich ponownie. Przeniesiony jest stan współczynników, bez pełnej historii i mechanizmu dalszego samouczenia poprzedniej integracji. Kreator opisuje ten zakres i prosi o jego potwierdzenie. Nie wyłącza poprzedniego źródła samoczynnie.
 
 Standardowy limit Hobbyist to 10 zapytań na dobę UTC dla całego konta. Każda instalacja zużywa oddzielne zapytanie. Rejestr jest zapisywany przed próbą HTTP, obejmuje błędy i pozostaje po restarcie lub zmianie konfiguracji. Wpisane początkowe zużycie nie zmniejsza istniejącego rejestru, a po zmianie konfiguracji może go podnieść; przy nieznanym zużyciu domyślne 10 wstrzymuje zapytania do kolejnej doby UTC. Nie należy równolegle odpytywać tego samego konta przez dwa klienty. Brak jednej instalacji lub części horyzontu nie jest zastępowany zerem. Cache ma datę pobrania i identyfikację źródła.
 
@@ -71,7 +71,7 @@ To własny deterministyczny planer z bilansem energii i projekcją 48 h, nie dek
 
 Silnik nie zmienia firmware, Shutdown, osobnego limitu PV ani trybów Solar Sell / Load First / Zero Export To Load. Oczekuje właściwej konfiguracji tych trybów. Jego ograniczanie importu reaguje na dostępne pomiary i nie zastępuje zabezpieczeń elektrycznych falownika i BMS.
 
-Wersja 0.1.0 ma testy offline planera, regulatora, runtime, pomiarów slotów i panelu. Testy runtime zastępują wyłącznie granicę API HA atrapami. Załadowanie w rzeczywistym HA i reakcja falownika wymagają osobnego etapu uruchomienia; samo repozytorium nie oznacza przejęcia produkcji.
+Wersja 1.0.0 ma testy offline planera, regulatora, runtime, pomiarów slotów i panelu. Testy runtime zastępują wyłącznie granicę API HA atrapami. Załadowanie w rzeczywistym HA i reakcja falownika wymagają osobnego etapu uruchomienia; samo repozytorium nie oznacza przejęcia produkcji.
 
 ## Rozwój
 

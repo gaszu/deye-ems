@@ -31,7 +31,7 @@ Jest to instalacja z własnego repozytorium Marketplace. Projekt nie jest jeszcz
 4. Dopasuj częstotliwość i limit konta. Dwie instalacje i pobieranie co 6 h zużywają zwykle 8 zapytań na dobę; wykrywanie lub nieudane próby też mogą zużyć zapytanie. Standardowy plan Hobbyist pozwala na 10 na dobę UTC. Nie ustawiaj wyższego limitu bez odpowiedniego planu Solcast.
 5. Wpisz rzeczywistą liczbę zapytań już wykorzystanych tego dnia na tym koncie. Gdy jej nie znasz, pozostaw 10 i poczekaj na nową dobę. Wpisane zużycie nie zmniejsza istniejącego rejestru; po zmianie konfiguracji może go podnieść.
 6. Zostaw mnożnik 1 i puste korekty godzinowe, jeśli nie wymagają zmiany. Prognoza Solcast jest już obliczona dla mocy zapisanej w portalu; w EMS pozostaw tryb **prognoza całej instalacji, bez skalowania**.
-7. Alternatywnie wybierz **Importuj dostępne ustawienia z HA**. Klucz zostanie skopiowany lokalnie, bez wyświetlania. Automatyczna kalibracja poprzedniej integracji wymaga osobnego sprawdzenia; kreator poda odpowiedni komunikat.
+7. Alternatywnie wybierz **Importuj dostępne ustawienia z HA**. Klucz, limit konta, wykluczenia i bieżące 24/48 współczynników zostaną skopiowane lokalnie. Sensor korekt jest wyszukiwany w rejestrze wybranej integracji, bez zależności od jego polskiej nazwy. Import zachowuje stan korekt, bez całej historii i algorytmu dalszego samouczenia; kreator poda zakres i poprosi o potwierdzenie. Brak kompletnych korekt zatrzymuje import zamiast zgadywać wartości.
 8. Podczas przełączania źródła zatrzymaj odpytywanie poprzedniego klienta Solcast. Sprawdź datę prognozy i stan API w panelu EMS. Zmiany źródła wykonuje się w obserwacji; produkcyjne przejęcie wymaga kompletnej konfiguracji.
 
 ## Wymagane pomiary

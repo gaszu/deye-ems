@@ -91,6 +91,26 @@ class SolcastTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(later["status"], "cached")
         self.assertEqual(len(h.requests), 3)
 
+    async def test_excluded_site_is_neither_requested_nor_summed_for_explicit_or_discovered_ids(self):
+        for selected in (["roof-a", "roof-b"], []):
+            with self.subTest(selected=selected):
+                h = Harness()
+                result = await h.client.async_forecast(config(resource_ids=selected,
+                                                exclude_sites=["roof-b"]), NOW)
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["periods"][0]["pv_estimate"], 2.)
+                self.assertEqual([site["resource_id"] for site in result["sites"]], ["roof-a"])
+                self.assertFalse(any("/roof-b/forecasts" in request[0] for request in h.requests))
+                self.assertEqual(len(h.requests), 1 if selected else 2)
+
+    async def test_all_explicit_sites_excluded_returns_unavailable_without_http(self):
+        h = Harness()
+        result = await h.client.async_forecast(config(exclude_sites=["roof-a"]), NOW)
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["reason"], "all_sites_excluded")
+        self.assertEqual(result["periods"], [])
+        self.assertEqual(h.requests, [])
+
     async def test_missing_selected_site_or_period_never_becomes_zero(self):
         h = Harness()
         h.responses = [dict(status=200, headers={}, data=forecast()),
@@ -141,6 +161,80 @@ class SolcastTests(unittest.IsolatedAsyncioTestCase):
         result = await h.client.async_forecast(config(hourly_factors=factors), NOW)
         self.assertEqual(result["periods"][0]["pv_estimate"], 1.)
         self.assertEqual(result["periods"][2]["pv_estimate"], 2.)
+
+    async def test_half_hourly_dampening_distinguishes_both_halves_of_one_hour(self):
+        h = Harness()
+        factors = [1.] * 48
+        factors[24], factors[25] = .2, .8  # 12:00 and 12:30 Europe/Warsaw.
+        result = await h.client.async_forecast(config(half_hourly_factors=factors), NOW)
+        self.assertAlmostEqual(result["periods"][0]["pv_estimate"], .4)
+        self.assertAlmostEqual(result["periods"][1]["pv_estimate"], 1.6)
+        self.assertAlmostEqual(result["periods"][2]["pv_estimate"], 2.)
+        self.assertAlmostEqual(result["periods"][0]["pv_estimate10"], .24)
+
+    async def test_per_site_correction_precedes_aggregation_and_global_corrections(self):
+        h = Harness()
+        h.responses = [dict(status=200, headers={}, data=forecast(p50=2., p10=1.2)),
+                       dict(status=200, headers={}, data=forecast(p50=4., p10=2.4))]
+        a, b, half, hourly = [1.]*48, [1.]*48, [1.]*48, [1.]*24
+        a[24], b[24], a[25], b[25] = .5, 1.5, 1., .5
+        half[24], hourly[12] = .25, .5
+        cfg = config(resource_ids=["roof-a", "roof-b"], dampening_factor=.8,
+                     hourly_factors=hourly, half_hourly_factors=half,
+                     site_factors={"roof-a": a, "roof-b": b})
+        result = await h.client.async_forecast(cfg, NOW)
+        # First half: (2*.5 + 4*1.5) * .8 * .5 * .25 = .7 kW.
+        self.assertAlmostEqual(result["periods"][0]["pv_estimate"], .7)
+        self.assertAlmostEqual(result["periods"][0]["pv_estimate10"], .42)
+        # Second half: (2*1 + 4*.5) * .8 * .5 * 1 = 1.6 kW.
+        self.assertAlmostEqual(result["periods"][1]["pv_estimate"], 1.6)
+        self.assertAlmostEqual(result["periods"][1]["pv_estimate10"], .96)
+
+    async def test_cached_raw_forecast_is_not_dampened_twice(self):
+        h = Harness()
+        original = await h.client.async_forecast(config(), NOW)
+        raw = h.client.state["per_site"]
+        half, site = [.5]*48, [.8]*48
+        cfg = config(half_hourly_factors=half, site_factors={"roof-a": site})
+        adjusted = await h.client.async_forecast(cfg, NOW)
+        repeated = await h.client.async_forecast(cfg, NOW)
+        self.assertEqual(adjusted["periods"], repeated["periods"])
+        self.assertAlmostEqual(adjusted["periods"][0]["pv_estimate"], .8)
+        self.assertEqual(h.client.state["per_site"], raw)
+        self.assertEqual(len(h.requests), 1)
+        identity = await h.client.async_forecast(config(half_hourly_factors=[1.]*48,
+                                      site_factors={"roof-a": [1.]*48}), NOW)
+        self.assertEqual(identity["periods"], original["periods"])
+
+    async def test_repeated_dst_hour_uses_the_same_local_half_hour_factors(self):
+        at = datetime.fromisoformat("2026-10-25T02:00:00+02:00")
+        h = Harness()
+        h.responses = [dict(status=200, headers={}, data=forecast(at))]
+        half = [1.]*48
+        half[4], half[5] = .4, .6
+        result = await h.client.async_forecast(config(half_hourly_factors=half), at)
+        self.assertEqual([round(row["pv_estimate"], 5) for row in result["periods"][:4]],
+                         [.8, 1.2, .8, 1.2])
+
+    async def test_unselected_site_factors_are_unused_but_invalid_ids_are_rejected(self):
+        h = Harness()
+        result = await h.client.async_forecast(config(site_factors={"other-roof": [0.]*48}), NOW)
+        self.assertEqual(result["periods"][0]["pv_estimate"], 2.)
+        for rid in ("../roof", "https://example.invalid/roof", SECRET):
+            h = Harness()
+            result = await h.client.async_forecast(config(site_factors={rid: [1.]*48}), NOW)
+            self.assertEqual(result["reason"], "invalid_site_factor_resource_id")
+            self.assertEqual(h.requests, [])
+
+    def test_invalid_half_hourly_and_site_factors_are_refused_offline(self):
+        for factors in ([1.]*47, [1.]*49, [True]*48, [float("nan")]*48, [-.1]*48, [2.1]*48):
+            with self.subTest(factors=factors[:1], length=len(factors)):
+                with self.assertRaisesRegex(ValueError, "invalid_half_hourly_factors"):
+                    validate_config(config(half_hourly_factors=factors))
+                with self.assertRaisesRegex(ValueError, "invalid_site_half_hourly_factors"):
+                    validate_config(config(site_factors={"roof-a": factors}))
+        with self.assertRaisesRegex(ValueError, "invalid_site_factors"):
+            validate_config(config(site_factors=[]))
 
     async def test_failures_and_429_spend_budget_before_transport_and_never_retry_early(self):
         h = Harness()
@@ -271,6 +365,8 @@ class SolcastTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(validate_config(config()))
         with self.assertRaisesRegex(ValueError, "invalid_hourly_factors"):
             validate_config(config(hourly_factors=[1, 2]))
+        with self.assertRaisesRegex(ValueError, "invalid_exclude_sites"):
+            validate_config(config(exclude_sites=["../roof"]))
         with self.assertRaises(ValueError) as error:
             validate_config(config(api_key="bad\nheader"))
         self.assertNotIn(SECRET, str(error.exception))

@@ -15,6 +15,9 @@ exec((ROOT/"const.py").read_text(encoding="utf-8"), C)
 spec = importlib.util.spec_from_file_location("offline_solcast", ROOT/"solcast.py")
 SOLCAST = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(SOLCAST)
+spec = importlib.util.spec_from_file_location("offline_solcast_import", ROOT/"solcast_import.py")
+IMPORTER = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(IMPORTER)
 
 def load(filename, values):
     tree = ast.parse((ROOT/filename).read_text(encoding="utf-8"))
@@ -52,6 +55,9 @@ class Installation(unittest.IsolatedAsyncioTestCase):
     def flow(self):
         return load("config_flow.py", {**C, "__name__":"offline_flow",
             "uuid4": uuid4, "validate_config": SOLCAST.validate_config,
+            "import_existing_options": IMPORTER.import_existing_options,
+            "er": SimpleNamespace(async_get=lambda h:None, async_entries_for_config_entry=lambda r,e:[
+                SimpleNamespace(platform="solcast_solar",unique_id="dampen",entity_id="sensor.corrections")]),
             "vol": SimpleNamespace(Required=Marker,Optional=Marker,Secret=lambda k:k,Schema=Schema),
             "selector": Selectors(),
             "callback": lambda f:f, "config_entries": SimpleNamespace(ConfigFlow=Flow,OptionsFlow=Flow)})
@@ -119,9 +125,11 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         flow.config_entry = SimpleNamespace(options={},data={})
         old = SimpleNamespace(entry_id="old",title="Solcast",data={}, options={
             "api_key":"synthetic-key-for-test", "auto_dampen":True,"damp12":.7})
-        flow.hass = SimpleNamespace(config_entries=SimpleNamespace(async_entries=lambda _: [old]))
+        flow.hass = SimpleNamespace(config_entries=SimpleNamespace(async_entries=lambda _: [old]),
+            states=SimpleNamespace(get=lambda _: SimpleNamespace(state="on", attributes={"integration_automated":True,
+                "factors":[{"interval":f"{i//2:02}:{i%2*30:02}","factor":1.} for i in range(48)]})))
         r = await flow.async_step_solcast_import({"source_entry":"old"})
-        self.assertIn("nie zostały skopiowane", r["description_placeholders"]["import_note"])
+        self.assertIn("zostały odczytane i skopiowane", r["description_placeholders"]["import_note"])
         self.assertNotIn("synthetic-key-for-test", repr(r))
         r = await flow.async_step_solcast_manual({"resource_ids":"site-a"})
         self.assertEqual(r["errors"]["base"], "import_calibration_required")
@@ -129,6 +137,7 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r["type"], "create_entry")
         self.assertEqual(r["data"]["solcast"]["api_key"], "synthetic-key-for-test")
         self.assertEqual(r["data"]["solcast"]["hourly_factors"], [1.] * 24)
+        self.assertEqual(r["data"]["solcast"]["half_hourly_factors"], [1.] * 48)
         self.assertTrue(old.options["auto_dampen"])
 
     async def test_inconsistent_soc_settings_are_rejected(self):

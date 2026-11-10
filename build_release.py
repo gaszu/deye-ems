@@ -24,7 +24,7 @@ data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika ene
     "initial_requests_used": "Zapytania już wykorzystane dziś na koncie (UTC)",
     "dampening_factor": "Stały mnożnik korekty prognozy",
     "hourly_factors": "24 mnożniki godzinowe 00–23 (oddzielone spacjami; puste = 1)",
-    "accept_manual_calibration": "Rozumiem, że automatyczna kalibracja poprzedniej integracji nie została przeniesiona",
+    "accept_manual_calibration": "Rozumiem zakres importu współczynników i brak kontynuacji poprzedniego samouczenia",
     "source_entry": "Obecna integracja Solcast"})
 descriptions = {
     "user": ("Deye EMS — własny silnik", "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później."),
@@ -33,7 +33,7 @@ descriptions = {
     "add_load": ("Dodatkowe zużycia", "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik. Licznik energii powinien podawać Wh lub kWh. Zaznaczenie LOAD zapobiega podwójnemu doliczaniu. Odbiornik poza LOAD wymaga również pomiaru mocy dla ograniczania importu."),
     "remove_load": ("Usuń dodatkowe zużycie", "Usunięcie kanału nie usuwa encji źródłowej ani jej historii."),
     "solcast_manual": ("Solcast wewnątrz EMS", "Wbudowany klient nie wymaga osobnej integracji Solcast. Klucz i identyfikatory znajdziesz w toolkit.solcast.com.au. Moc AC/DC, kierunek i nachylenie paneli ustaw w portalu Solcast; EMS pobiera prognozę dla zapisanej tam instalacji. Zwykły limit Hobbyist: 10 zapytań na dobę UTC, każde pobranie dla każdej instalacji zużywa osobne zapytanie. Nie odpytuj równocześnie tego konta innym klientem. Przy nieznanym zużyciu pozostaw 10; klient zaczeka na nową dobę UTC. Wpisane zużycie nie zmniejsza rejestru; po zmianie konfiguracji może go podnieść. {import_note}"),
-    "solcast_import": ("Import dostępnych ustawień Solcast", "Klucz jest kopiowany lokalnie w HA. Można przenieść stałe mnożniki godzinowe. Automatyczna kalibracja i osobne korekty poszczególnych instalacji wymagają ręcznego sprawdzenia; kreator je zgłosi. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta."),
+    "solcast_import": ("Import dostępnych ustawień Solcast", "Klucz, limit konta i wykluczenia są kopiowane lokalnie w HA. Kreator odczytuje bieżące współczynniki z sensora korekt przypisanego do wybranej integracji. Przenosi ich stan, bez pełnej historii i mechanizmu dalszego samouczenia. Prognozy sensorów HA są już skorygowane — nie korygujemy ich ponownie. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta."),
 }
 step_fields = {
     "user": ["min_soc_percent", "capacity_kwh", "pv_peak_kwp", "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"],
@@ -54,10 +54,11 @@ doc = {"title": "Deye EMS",
                   "duplicate_load": "Ten licznik energii jest już dodany.",
                   "pv_reference_required": "Wpisz moc referencyjną profilu przed włączeniem skalowania.",
                   "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
-                  "import_calibration_required": "Sprawdź korekty prognozy i potwierdź, że automatyczna kalibracja nie została przeniesiona."},
+                  "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia."},
         "abort": {"no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
             "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki."}}}
 doc["options"]["abort"]["no_solcast_to_import"] = "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie."
+doc["options"]["abort"]["solcast_import_incomplete"] = "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką."
 doc["options"]["step"]["init"] = {"title": "Deye EMS",
     "menu_options": {"parameters": "Parametry i bezpieczny SoC", "sources": "Encje pomiarowe i sterujące",
         "solcast": "Solcast — połączenie i ustawienia", "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}
@@ -86,7 +87,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
     for path in sorted(COMPONENT.rglob("*")):
         if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
             z.write(path, path.relative_to(ROOT).as_posix())
-    for name in ("README.md","INSTALL.md","MIGRATION.md","VALIDATION.md","LICENSE"):
+    for name in ("README.md","INSTALL.md","MIGRATION.md","VALIDATION.md","SPECIFICATION.md","LICENSE"):
         if (ROOT/name).is_file():
             z.write(ROOT/name,name)
 with zipfile.ZipFile(archive) as z:
