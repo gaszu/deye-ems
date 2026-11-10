@@ -8,6 +8,8 @@ Poprawka panelu, 10 listopada 2026:
 - Pełny zestaw Python po poprawce: **213/213 PASS**.
 - Specyfikacja algorytmu pozostaje 1.0.0. Wydanie 1.0.1 nie zmienia obliczeń ani parametrów użytkownika.
 - Workflow GitHub wykonuje testy i buduje paczkę przed utworzeniem nowego wydania. Istniejące tagi i pliki wydań pozostają niezmienione.
+- Po instalacji 1.0.1 przez natywny Marketplace i restarcie HA sprawdzono prawdziwe wywołania `deye_ems/status` oraz polecenia `recalculate` i `mode`: poprawne odpowiedzi bez wcześniejszego `Unknown error`. Rejestr paneli HA wskazuje komponent `deye-ems-panel-1-0-1` i moduł `?v=1.0.1`.
+- Po uzyskaniu świeżych pomiarów i pełnego planu ponownie włączono produkcyjne sterowanie bez konfliktów właścicieli. Weryfikacja API nie jest równoznaczna z wizualnym sprawdzeniem wszystkich widoków przeglądarki.
 
 ## Weryfikacja bazowej wersji 1.0.0
 
