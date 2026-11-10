@@ -25,15 +25,15 @@ class FakeShadow {
   querySelectorAll(selector) {return this.nodes.filter(n=>selector==="[data-save]"?n.dataset.save!==undefined:selector==="input[data-key]"?n.attrs.tag==="input"&&n.dataset.key!==undefined:false);}
 }
 
-function fixture() {
-  const registry = new Map();
+function fixture(previousElements = []) {
+  const registry = new Map(previousElements);
   class HTMLElement {attachShadow(){this.shadowRoot=new FakeShadow();return this.shadowRoot;}}
   class ClockDate extends Date {static now(){return NOW;}}
   const context = vm.createContext({HTMLElement,Date:ClockDate,console,
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel");
+  const Panel = registry.get("deye-ems-panel-1-0-1");
   const panel = new Panel();
   const calls=[];
   panel._hass={states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
@@ -44,8 +44,16 @@ function fixture() {
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
       plan:{status:"ok",quality:"valid",generated_at:new Date(NOW).toISOString(),targets:{night:{soc_percent:80,deadline:"2026-11-11T07:00:00+01:00"},peak:{soc_percent:65,deadline:"2026-11-11T16:00:00+01:00"}},rows:[]}}};
   panel.render();
-  return {panel,calls};
+  return {panel,calls,registry};
 }
+
+test("an existing browser session registers the updated panel alongside the old element",()=>{
+  class LegacyPanel {}
+  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel]]);
+  assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.1/);
+});
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
   const {panel}=fixture();

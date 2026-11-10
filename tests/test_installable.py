@@ -162,6 +162,11 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(static.await_count,1)
         self.assertEqual(panel.await_count,2)
         self.assertTrue(panel.await_args.kwargs["require_admin"])
+        self.assertEqual(panel.await_args.kwargs["webcomponent_name"],
+            "deye-ems-panel-" + C["VERSION"].replace(".", "-"))
+        self.assertIn("?v=" + C["VERSION"], panel.await_args.kwargs["module_url"])
+        self.assertIn('const PANEL_TAG = "' + panel.await_args.kwargs["webcomponent_name"] + '"',
+            (ROOT/"frontend/deye-ems-panel.js").read_text(encoding="utf-8"))
         self.assertEqual(e.runtime_data.mode,"shadow")
 
     async def test_manifest_platforms_and_bundled_panel_exist(self):

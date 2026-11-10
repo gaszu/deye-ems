@@ -27,7 +27,7 @@ async def async_setup_entry(hass, entry):
         hass.data[DOMAIN + "_static"] = True
     if not hass.data.get(DOMAIN + "_panel"):
         await panel_custom.async_register_panel(hass,
-            frontend_url_path=PANEL_PATH, webcomponent_name="deye-ems-panel",
+            frontend_url_path=PANEL_PATH, webcomponent_name="deye-ems-panel-" + VERSION.replace(".", "-"),
             sidebar_title="Deye EMS", sidebar_icon="mdi:solar-power",
             module_url=f"/deye_ems_static/deye-ems-panel.js?v={VERSION}",
             require_admin=True, config_panel_domain=DOMAIN)

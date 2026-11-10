@@ -1,4 +1,15 @@
-# Sprawdzenia wersji 1.0.0
+# Sprawdzenia wersji 1.0.1
+
+Poprawka panelu, 10 listopada 2026:
+
+- Ustalono natywną przyczynę braku danych: `AttributeError: ActiveConnection has no attribute require_admin` w obu handlerach WebSocket. Zastąpiono wywołanie oficjalnym dekoratorem HA 2026.11, w kolejności przed `async_response`.
+- 8 nowych testów granicy WebSocket PASS: administrator, blokada zwykłego użytkownika i braku użytkownika przed uruchomieniem handlera, polecenia, błędy walidacji i brak prywatnych ustawień Solcast w odpowiedzi.
+- 15 testów panelu Node.js PASS, w tym regresja aktualizacji komponentu przy już zarejestrowanej poprzedniej wersji w przeglądarce. Rejestracja HA, nazwa elementu i URL modułu wskazują tę samą wersję.
+- Pełny zestaw Python po poprawce: **213/213 PASS**.
+- Specyfikacja algorytmu pozostaje 1.0.0. Wydanie 1.0.1 nie zmienia obliczeń ani parametrów użytkownika.
+- Workflow GitHub wykonuje testy i buduje paczkę przed utworzeniem nowego wydania. Istniejące tagi i pliki wydań pozostają niezmienione.
+
+## Weryfikacja bazowej wersji 1.0.0
 
 Data: 10 listopada 2026, Europe/Warsaw.
 

@@ -18,9 +18,9 @@ def _payload(coordinator):
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/status"})
+@websocket_api.require_admin
 @websocket_api.async_response
 async def status(hass, connection, msg):
-    connection.require_admin()
     coordinator = _coordinator(hass)
     if coordinator is None:
         connection.send_error(msg["id"], "not_loaded", "Deye EMS is not loaded")
@@ -32,9 +32,9 @@ async def status(hass, connection, msg):
     vol.Required("command"): vol.In(("recalculate", "mode", "option")),
     vol.Optional("mode"): vol.In(("shadow", "active")),
     vol.Optional("key"): str, vol.Optional("value"): vol.Any(float, int)})
+@websocket_api.require_admin
 @websocket_api.async_response
 async def command(hass, connection, msg):
-    connection.require_admin()
     coordinator = _coordinator(hass)
     if coordinator is None:
         connection.send_error(msg["id"], "not_loaded", "Deye EMS is not loaded")

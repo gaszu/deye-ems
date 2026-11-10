@@ -9,7 +9,7 @@ Pierwsza wersja zachowuje mechanizmy obecnego EMS: harmonogram G13, sezonowe cel
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Kliknij przycisk **Marketplace**, wskaż swoją instancję HA i zaakceptuj dodanie repozytorium, jeśli pojawi się taka propozycja.
-2. Wybierz **Instaluj** i wersję **v1.0.0**. Jeśli HA poprosi o restart, wykonaj go.
+2. Wybierz **Instaluj** i wersję **v1.0.1**. Jeśli HA poprosi o restart, wykonaj go.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems). Jeżeli jest już skonfigurowana, [otwórz istniejącą integrację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 W HA znajdziesz ją pod **Ustawienia → Urządzenia i usługi → Integracje → Deye EMS**. Jej panel pojawia się w menu bocznym administratora; po instalacji lub restarcie odśwież stronę. Pierwszy start to obserwacja.
@@ -18,7 +18,9 @@ Wymagany HA **2026.11+**. Przycisk otwiera normalną instalację Marketplace i o
 
 [Specyfikacja 1.0.0](SPECIFICATION.md) · [Instrukcja instalacji](INSTALL.md) · [Przejście z obecnego EMS i powrót](MIGRATION.md)
 
-Alternatywna instalacja ręczna: [deye-ems-1.0.0.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.0/deye-ems-1.0.0.zip).
+Alternatywna instalacja ręczna: [deye-ems-1.0.1.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.1/deye-ems-1.0.1.zip).
+
+Wersja **1.0.1** naprawia pobieranie danych i polecenia panelu w HA 2026.11 oraz załadowanie aktualnego komponentu w otwartej sesji przeglądarki. [Opis poprawki](release-notes/1.0.1.md). Specyfikacja silnika pozostaje 1.0.0.
 
 ## Najważniejsze ustawienia
 

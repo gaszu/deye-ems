@@ -1,0 +1,65 @@
+name: Test and release integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'custom_components/**'
+      - 'tests/**'
+      - 'build_release.py'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deye-ems-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'gaszu/ha-deye-ems' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py'
+          node --test tests/test_frontend.cjs
+      - name: Build package
+        id: package
+        run: |
+          python build_release.py
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          version = json.loads(Path('custom_components/deye_ems/manifest.json').read_text())['version']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          PY
+      - name: Publish new version once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          tag="v$RELEASE_VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; keeping its tag and assets unchanged."
+            exit 0
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists without a release; inspect it before publishing."
+            exit 1
+          fi
+          gh release create "$tag" "dist/deye-ems-$RELEASE_VERSION.zip" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Deye EMS $RELEASE_VERSION" \
+            --notes-file "release-notes/$RELEASE_VERSION.md" --latest
