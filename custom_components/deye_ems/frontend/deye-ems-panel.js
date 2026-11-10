@@ -1,5 +1,5 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-4";
+const PANEL_TAG = "deye-ems-panel-1-0-5";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -63,15 +63,86 @@ const solcastMessages = {
 };
 
 class DeyeEMSPanel extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;}
-  set hass(value){this._hass=value;if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}}
+  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;}
+  set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
   disconnectedCallback(){clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);}
   async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=payload;this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}this.render();}
-  async command(args,draftKey=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=await this._hass.callWS({type:"deye_ems/command",...args});if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=e.message||String(e);return false;}finally{this.busy=false;this.render();}}
+  async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=await this._hass.callWS({type:"deye_ems/command",...args});if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
   kw(key){const v=this.measurement(key);return v===null?null:v/1000;}
+  panelThemeNames(){return Object.keys(this._hass?.themes?.themes||{}).sort((a,b)=>a.localeCompare(b));}
+  savedPanelTheme(){return typeof this.payload?.appearance?.theme==="string"?this.payload.appearance.theme:"";}
+  applyPanelTheme(){
+    // Local equivalent of HA applyThemesOnElement's custom-theme path:
+    // base rules, then current-mode rules, CSSOM on this host, stale-key reset.
+    // HA's existing profile supplies native defaults; no global theme is set.
+    const name=this.savedPanelTheme(),themes=this._hass?.themes,themesByName=themes?.themes||{};
+    const present=!!name&&Object.hasOwn(themesByName,name)&&themesByName[name]&&typeof themesByName[name]==="object";
+    const missing=!!name&&!present;
+    const values=new Map();
+    if(present){
+      const theme=themesByName[name],dark=typeof this._hass?.selectedTheme?.dark==="boolean"?
+        this._hass.selectedTheme.dark:themes.darkMode===true;
+      const {modes,...base}=theme;
+      const rules={...base,...(modes?.[dark?"dark":"light"]||{})};
+      for(const [key,value] of Object.entries(rules)){
+        if(!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(key)||!["string","number","boolean"].includes(typeof value))continue;
+        values.set("--"+key,String(value));
+        if(typeof value==="string"&&/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)&&!Object.hasOwn(rules,"rgb-"+key)){
+          const hex=value.slice(1),expanded=hex.length===3?hex.split("").map(char=>char+char).join(""):hex;
+          values.set("--rgb-"+key,[0,2,4].map(index=>parseInt(expanded.slice(index,index+2),16)).join(","));
+        }
+      }
+      // Rebind the filled HA button's few palette references locally. An
+      // inherited computed semantic color would otherwise keep the profile's
+      // palette instead of this named theme's palette.
+      const normal=dark?"10":"90",hover=dark?"20":"80",ink=dark?"60":"40";
+      values.set("--ems-button-background",Object.hasOwn(rules,"ha-color-primary-"+normal)?
+        "var(--ha-color-primary-"+normal+")":"var(--secondary-background-color,var(--card-background-color))");
+      values.set("--ems-button-hover",Object.hasOwn(rules,"ha-color-primary-"+hover)?
+        "var(--ha-color-primary-"+hover+")":"var(--secondary-background-color,var(--card-background-color))");
+      values.set("--ems-button-text",Object.hasOwn(rules,"ha-color-primary-"+ink)?
+        "var(--ha-color-primary-"+ink+")":"var(--primary-color)");
+      values.set("color-scheme",dark?"dark":"light");
+    }
+    let changed=missing!==this.appearanceMissing;
+    for(const key of this.appliedThemeValues.keys())if(!values.has(key)){this.style.removeProperty(key);changed=true;}
+    for(const [key,value] of values)if(this.appliedThemeValues.get(key)!==value){this.style.setProperty(key,value);changed=true;}
+    this.appliedThemeValues=values;this.appearanceMissing=missing;
+    return changed;
+  }
+  async saveAppearance(){
+    if(this.busy||this.appearanceDraft===null)return;
+    const theme=this.appearanceDraft;
+    if(theme!==""&&!this.panelThemeNames().includes(theme)){
+      this.appearanceError="Ten motyw nie jest już dostępny w HA. Wybierz inny motyw.";
+      this.render();return;
+    }
+    const ok=await this.command({command:"appearance",theme},null,
+      "Nie udało się zapisać motywu panelu. Odśwież listę motywów HA i spróbuj ponownie.");
+    if(ok){this.appearanceDraft=null;this.appearanceError="";}
+    else this.appearanceError=this.error;
+    this.render();
+  }
+  appearanceHtml(){
+    const saved=this.savedPanelTheme(),selected=this.appearanceDraft??saved,names=this.panelThemeNames();
+    const missing=selected!==""&&!names.includes(selected);
+    const options='<option value="" '+(selected===""?'selected':'')+'>Bieżący motyw HA</option>'+
+      names.map(name=>'<option value="'+esc(name)+'" '+(selected===name?'selected':'')+'>'+esc(name)+'</option>').join("")+
+      (missing?'<option value="'+esc(selected)+'" selected disabled>'+esc(selected)+' — niedostępny</option>':'');
+    return '<section><h2>Wygląd panelu</h2><label>Motyw panelu<select id="panel-theme" data-appearance-theme="true" '+(this.busy?'disabled':'')+'>'+options+'</select></label>'+
+      '<p class="legend">Motyw dotyczy tylko tego panelu. Możesz wybrać ten sam motyw co w swoim widoku HA. Nie zmienia sterowania ani motywu całego HA.</p>'+
+      (this.appearanceMissing?'<p role="status" class="notice warning">Zapisany motyw jest niedostępny. Panel używa bieżącego motywu HA.</p>':'')+
+      (this.appearanceError?'<p role="alert" class="notice error">'+esc(this.appearanceError)+'</p>':'')+
+      '<button id="appearance-save" '+(this.busy||missing||this.appearanceDraft===null||selected===saved?'disabled':'')+'>Zapisz motyw panelu</button></section>';
+  }
+  bindAppearance(){
+    const select=this.shadowRoot.getElementById("panel-theme");
+    select?.addEventListener("change",()=>{this.appearanceDraft=select.value;this.appearanceError="";this.render();});
+    this.shadowRoot.getElementById("appearance-save")?.addEventListener("click",()=>this.saveAppearance());
+  }
   clearSolcastSecret(){
     this.solcastSecret="";
     this.shadowRoot.querySelectorAll("[data-solcast-secret]").forEach(input=>{input.value="";});
@@ -330,11 +401,14 @@ class DeyeEMSPanel extends HTMLElement {
   render(){
     // A polling response must not replace a focused input or its caret. Drafts
     // also survive rendering after blur, failed commands and later refreshes.
+    this.applyPanelTheme();
     const solcastStage=[this.solcastOpen,this.solcastFlow?.type,this.solcastFlow?.step_id,this.solcastConfirmDisable].join(":");
-    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice;
-    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-solcast-field],select[data-solcast-field]"))return;
+    const appearanceStage=[this.savedPanelTheme(),this.appearanceMissing,this.panelThemeNames().join("|"),this.appearanceError,this.appearanceDraft].join(":");
+    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage;
+    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-solcast-field],select[data-solcast-field],select[data-appearance-theme]"))return;
     this.renderedMode=this.payload?.mode;this.renderedError=this.error;this.renderedLoadsReady=Array.isArray(this.payload?.effective_loads);
     this.renderedSolcastStage=solcastStage;this.renderedSolcastError=this.solcastError;this.renderedSolcastNotice=this.solcastNotice;
+    this.renderedAppearanceStage=appearanceStage;
     const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{};
     const active=p.mode==="active", targets=plan.targets||{}, rows=plan.rows||[];
@@ -355,9 +429,10 @@ class DeyeEMSPanel extends HTMLElement {
     const phaseModel=fresh&&d.inputs?.grid_charge_balanced===true?"Bilansowanie poboru GRID potwierdzone":"Wariant zachowawczy — bilansowanie GRID niepotwierdzone";
     const basicField=(key,button)=>{const r=ranges[key],value=Object.hasOwn(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(labels[key])+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" '+(this.busy?'disabled':'')+'>'+esc(button)+'</button></label>';};
     this.shadowRoot.innerHTML='<style>'+
-      'select{margin-top:7px;width:100%;border:1px solid var(--divider-color,#ded9e7);border-radius:8px;background:var(--ems-field);color:var(--ems-text);padding:10px;font:inherit}.solcast-editor{border-top:1px solid var(--divider-color,#e1deea);margin-top:18px;padding-top:6px}.solcast-note{white-space:pre-line}'+
-      ':host{--ems-page:var(--primary-background-color,#f4f2f8);--ems-card:var(--card-background-color,#faf9fd);--ems-text:var(--primary-text-color,#38343f);--ems-accent:var(--primary-color,#a29bbc);--ems-button-bg:var(--secondary-background-color,#e7e3ef);--ems-button-hover:var(--secondary-background-color,#ded9ea);--ems-secondary-button-bg:var(--secondary-background-color,#eeebf5);--ems-button-border:var(--divider-color,#d9d4e4);--ems-active-bg:var(--secondary-background-color,#e4ece6);--ems-observe-bg:var(--secondary-background-color,#e6eaf2);--ems-notice:var(--secondary-background-color,#ece9f2);--ems-warning-bg:var(--secondary-background-color,#f3ede2);--ems-error-bg:var(--secondary-background-color,#f2e6eb);--ems-field:var(--primary-background-color,#f5f3f9);--ems-check:var(--primary-color,#8784a5);--ems-chart-color:#789587;--ems-reserve-color:#a79172;--ems-link:var(--primary-text-color,#514c65);--ems-focus:var(--ems-text);display:block;background:var(--ems-page);color:var(--ems-text);font:15px system-ui;min-height:100vh}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color,#77717e);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:100px;background:var(--ems-active-bg);color:var(--ems-text);font-weight:650}.pill.shadow{background:var(--ems-observe-bg);color:var(--ems-text)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--ems-card);border:1px solid var(--divider-color,#e1deea);border-radius:16px;padding:22px}.label,.sub{display:block;color:var(--secondary-text-color,#716b79);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--ems-notice);border-radius:12px;line-height:1.6;margin:18px 0}.error,.warning{background:var(--ems-warning-bg);color:var(--ems-text)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button{font:inherit;cursor:pointer;border:1px solid var(--ems-button-border);border-radius:10px;padding:11px 16px;background:var(--ems-button-bg);color:var(--ems-text);font-weight:600}button.secondary{background:var(--ems-secondary-button-bg);color:var(--ems-text)}button[disabled]{opacity:1;cursor:not-allowed}svg{width:100%;height:230px;display:block}.legend{font-size:12px;color:var(--secondary-text-color,#716b79)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--secondary-text-color,#716b79)}input{margin-top:7px;width:100%;border:1px solid var(--divider-color,#ded9e7);border-radius:8px;background:var(--ems-field);color:var(--ems-text);padding:10px;font:inherit}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color,#e1deea)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color,#716b79);font-size:12px;line-height:1.7;margin-top:24px}a{color:var(--ems-link);text-decoration-color:var(--ems-accent);text-decoration-thickness:2px;text-underline-offset:3px}@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}'+
-      'summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color,#e1deea);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0;accent-color:var(--ems-check)}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form{border-top:1px solid var(--divider-color,#e1deea);margin-top:18px;padding-top:6px}@media(max-width:600px){.load-row{align-items:flex-start;flex-direction:column}}@supports(background:color-mix(in srgb,#000,#fff)){:host{--ems-page:color-mix(in srgb,var(--ems-accent) 3%,var(--primary-background-color,#f4f2f8));--ems-card:color-mix(in srgb,var(--ems-accent) 3%,var(--card-background-color,#faf9fd));--ems-button-bg:color-mix(in srgb,var(--ems-accent) 17%,var(--ems-card));--ems-button-hover:color-mix(in srgb,var(--ems-accent) 25%,var(--ems-card));--ems-secondary-button-bg:color-mix(in srgb,var(--ems-accent) 7%,var(--ems-card));--ems-button-border:color-mix(in srgb,var(--ems-accent) 32%,var(--divider-color,#d9d4e4));--ems-active-bg:color-mix(in srgb,#9eb4a6 19%,var(--ems-card));--ems-observe-bg:color-mix(in srgb,#a7b6cd 18%,var(--ems-card));--ems-notice:color-mix(in srgb,var(--ems-accent) 9%,var(--ems-card));--ems-warning-bg:color-mix(in srgb,var(--warning-color,#c9ab7c) 13%,var(--ems-card));--ems-error-bg:color-mix(in srgb,var(--error-color,#bd939d) 10%,var(--ems-card));--ems-field:color-mix(in srgb,var(--ems-accent) 4%,var(--primary-background-color,#f5f3f9));--ems-check:color-mix(in srgb,var(--ems-accent) 65%,#8fa89d);--ems-focus:color-mix(in srgb,var(--ems-accent) 60%,var(--ems-text));--ems-chart-color:color-mix(in srgb,#8fa89d 75%,var(--ems-text));--ems-reserve-color:color-mix(in srgb,#b7a27d 75%,var(--ems-text));}}.pill{border:1px solid var(--ems-button-border)}.warning{border:1px solid var(--ems-button-border)}.error{background:var(--ems-error-bg);border:1px solid var(--ems-button-border)}button:hover:not(:disabled){background:var(--ems-button-hover)}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ems-focus);outline-offset:3px}button:disabled,input:disabled,select:disabled{opacity:1;color:var(--secondary-text-color,#74707d);background:var(--ems-notice);border-color:var(--divider-color,#d9d4e4);cursor:not-allowed}input,select{caret-color:var(--ems-check);accent-color:var(--ems-check)}svg polyline{stroke:var(--ems-chart-color)}svg line{stroke:var(--ems-reserve-color)}a:hover{background:var(--ems-button-bg)}::selection{background:var(--ems-button-bg);color:var(--ems-text)}</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
+      ":host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color,#fafafa));color:var(--primary-text-color,#212121);font:15px var(--primary-font-family,var(--ha-font-family-body,system-ui))}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:var(--ha-border-radius-pill,100px);background:var(--label-badge-background-color,var(--secondary-background-color));color:var(--label-badge-text-color,var(--primary-text-color));border:1px solid var(--divider-color);font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:var(--ha-card-backdrop-filter,none);border-width:var(--ha-card-border-width,1px);border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));box-shadow:var(--ha-card-box-shadow,none);color:var(--primary-text-color);padding:22px}.label,.sub{display:block;color:var(--secondary-text-color);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,12px);line-height:1.6;margin:18px 0}.warning{border-inline-start:4px solid var(--warning-color)}.error{border-inline-start:4px solid var(--error-color)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}"+
+      "button{font:inherit;cursor:pointer;border:1px solid transparent;border-radius:var(--ha-button-border-radius,var(--ha-border-radius-pill,20px));padding:11px 16px;background:var(--ems-button-background,var(--ha-color-fill-primary-normal-resting,var(--secondary-background-color)));color:var(--ems-button-text,var(--ha-color-on-primary-normal,var(--primary-color)));font-weight:var(--ha-font-weight-medium,600);box-shadow:var(--ha-button-box-shadow,none)}button.secondary{background:transparent;color:var(--primary-color);border-color:var(--divider-color)}button:hover:not(:disabled){background:var(--ems-button-hover,var(--ha-color-fill-primary-normal-hover,var(--secondary-background-color)))}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ha-color-focus,var(--primary-color));outline-offset:3px}button:disabled,input:disabled,select:disabled{opacity:1;color:var(--input-disabled-ink-color,var(--secondary-text-color));background:var(--input-disabled-fill-color,var(--secondary-background-color));border-color:var(--divider-color);cursor:not-allowed}svg{width:100%;height:230px;display:block}svg polyline{stroke:var(--primary-color)}svg line{stroke:var(--warning-color,var(--secondary-text-color))}.legend{font-size:12px;color:var(--secondary-text-color)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--input-label-ink-color,var(--secondary-text-color))}input,select{margin-top:7px;width:100%;border:1px solid var(--input-idle-line-color,var(--divider-color));border-radius:var(--ha-border-radius-md,8px);background:var(--input-fill-color,var(--ha-color-form-background,var(--secondary-background-color)));color:var(--input-ink-color,var(--primary-text-color));padding:10px;font:inherit;caret-color:var(--primary-color);accent-color:var(--primary-color)}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color);font-size:12px;line-height:1.7;margin-top:24px}a{color:var(--primary-color);text-underline-offset:3px}summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form,.solcast-editor{border-top:1px solid var(--divider-color);margin-top:18px;padding-top:6px}.solcast-note{white-space:pre-line}"+
+      "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
+      '</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
       (this.error?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Stała rezerwa '+num(floor)+'%')+
       card("Sieć / dom",num(this.kw("grid_power"))+' / '+num(this.kw("load_power")),"kW","Sieć: + pobór, − eksport · dom: wszystkie wybrane obwody")+
@@ -376,19 +451,20 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Prognoza modelu</h2>'+(plan.quality==="valid"?'<div class="grid">'+card("Modelowy cel przed 07:00",num(targets.night?.soc_percent),"%",time(targets.night?.deadline))+
       card("Modelowy cel przed szczytem",num(targets.peak?.soc_percent),"%",time(targets.peak?.deadline))+
       '</div>':'')+
-      (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke="#cf8455" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke="#189c80" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Zielona linia: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':'<div class="notice">Brak kompletnej prognozy. Silnik pokazuje zachowawcze cele i przyczynę braku planu.</div>')+
-      '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary><section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp"].includes(key)).map(([key,label])=>{
+      (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':'<div class="notice">Brak kompletnej prognozy. Silnik pokazuje zachowawcze cele i przyczynę braku planu.</div>')+
+      '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary>'+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
       '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">GRID L1 / L2 / L3: '+num(this.kw("grid_l1_power"))+' / '+num(this.kw("grid_l2_power"))+' / '+num(this.kw("grid_l3_power"))+' kW · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
       '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.4.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.5.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
     if(details)details.open=detailsOpen;
     this.bindLoads();
     this.bindSolcast();
+    this.bindAppearance();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));
     this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active?"shadow":"active"}));
     this.shadowRoot.querySelectorAll("input[data-key]").forEach(input=>input.addEventListener("input",()=>{this.drafts[input.dataset.key]=input.value;}));

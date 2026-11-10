@@ -100,6 +100,7 @@ def load_module():
         "websocket_api": api,
         "callback": lambda func: func,
         "HomeAssistantError": HomeAssistantError,
+        "DATA_APPEARANCE": "deye_ems_appearance",
         "vol": SimpleNamespace(
             Required=lambda key: key, Optional=lambda key: key,
             In=lambda values: values, Any=lambda *values: values),
@@ -186,6 +187,8 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
                 ("command", {"id": 13, "type": "deye_ems/command", "command": "load_toggle",
                              "original_energy_entity": "sensor.test", "enabled": False,
                              "expected_loads_revision": "old"}),
+                ("command", {"id": 14, "type": "deye_ems/command", "command": "appearance",
+                             "theme": "synthetic-night"}),
             ):
                 with self.subTest(admin=user is not None, handler=handler, message=message["id"]):
                     module, _ = load_module()
@@ -236,7 +239,8 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, _ = load_module()
         co = coordinator()
         payload = module["_payload"](co)
-        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision"})
+        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance"})
+        self.assertEqual(payload["appearance"], {"theme": ""})
         self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]))
         self.assertEqual(payload["options"]["min_soc_percent"], 50)
         self.assertEqual(payload["sources"]["soc"], "sensor.test_soc")
@@ -279,3 +283,46 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, api = load_module()
         module["async_register"](Hass())
         self.assertEqual(api.registered, [module["status"], module["command"]])
+
+    async def test_appearance_changes_in_active_mode_without_energy_engine_calls(self):
+        module, _ = load_module()
+        co = coordinator()
+        co.mode = "active"
+        hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+        appearance = SimpleNamespace(appearance={"theme": ""})
+        async def save(theme):
+            appearance.appearance = {"theme": theme}
+        appearance.async_set_theme = AsyncMock(side_effect=save)
+        hass.data[module["DATA_APPEARANCE"]] = appearance
+        before = json.dumps(co.options, sort_keys=True)
+        for message_id, theme in ((20, "synthetic-night"), (21, "")):
+            module["command"](hass, connection, {"id": message_id, "type": "deye_ems/command",
+                "command": "appearance", "theme": theme})
+            await hass.drain()
+            self.assertEqual(connection.results[-1][1]["appearance"], {"theme": theme})
+            self.assertEqual(connection.results[-1][1]["mode"], "active")
+        module["status"](hass, connection, {"id": 22, "type": "deye_ems/status"})
+        await hass.drain()
+        self.assertEqual(connection.results[-1][1]["appearance"], {"theme": ""})
+        self.assertEqual(connection.errors, [])
+        self.assertEqual(json.dumps(co.options, sort_keys=True), before)
+        for method in ("async_recalculate", "async_set_mode", "async_set_option",
+                       "async_save_load", "async_delete_load", "async_toggle_load"):
+            getattr(co, method).assert_not_awaited()
+
+    async def test_appearance_validation_and_save_errors_do_not_publish_success(self):
+        for error in (ValueError("Unknown theme"), HomeAssistantError("Save failed")):
+            with self.subTest(error=type(error).__name__):
+                module, _ = load_module()
+                co = coordinator()
+                hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+                appearance = SimpleNamespace(appearance={"theme": "synthetic-night"},
+                    async_set_theme=AsyncMock(side_effect=error))
+                hass.data[module["DATA_APPEARANCE"]] = appearance
+                module["command"](hass, connection, {"id": 23, "type": "deye_ems/command",
+                    "command": "appearance", "theme": "unknown-theme"})
+                await hass.drain()
+                self.assertEqual(connection.results, [])
+                self.assertEqual(connection.errors, [(23, "invalid_request", str(error))])
+                self.assertEqual(appearance.appearance, {"theme": "synthetic-night"})
+                co.async_set_option.assert_not_awaited()

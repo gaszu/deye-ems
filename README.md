@@ -4,17 +4,17 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.4
+## Instalacja wersji 1.0.5
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.4** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.5** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.4.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.4/deye-ems-1.0.4.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.4.md).
+Alternatywnie pobierz [deye-ems-1.0.5.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.5/deye-ems-1.0.5.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.5.md).
 
 ## Konfiguracja
 
@@ -64,11 +64,11 @@ Model zakłada, że główny LOAD obejmuje modelowane odbiorniki. Użytkownik mu
 
 ## Panel, aktualizacje i testy
 
-Panel pokazuje tryb, cele, przepływy, plan i diagnostykę. Wersja 1.0.4 udostępnia kreator Solcast i pastelową kolorystykę korzystającą z motywu HA. Integracja tworzy własne encje sensor, binary_sensor, number, select i button.
+Panel pokazuje tryb, cele, przepływy, plan i diagnostykę. W ustawieniach zaawansowanych pole **Motyw panelu** pozwala wybrać dowolny zainstalowany motyw HA albo dziedziczyć bieżący motyw profilu. Wygląd jest stosowany lokalnie w EMS, łącznie z tłem i kartami, bez zmiany innych dashboardów. Integracja tworzy własne encje sensor, binary_sensor, number, select i button.
 
 Aktualizacja kodu zachowuje istniejącą konfigurację i źródło prognozy. Nie usuwaj wpisu integracji ani magazynu runtime podczas zwykłej aktualizacji. Włączenie sterowania pozostaje osobną, świadomą czynnością.
 
-Wyniki wersji 1.0.4: **279 testów Python i 48 testów panelu PASS**. Testy są offline; podgląd przeglądarki używa danych syntetycznych. Zakres i ograniczenia opisuje [VALIDATION.md](VALIDATION.md).
+Testy są offline; podgląd przeglądarki używa danych syntetycznych. Aktualne wyniki, zakres i ograniczenia opisuje [VALIDATION.md](VALIDATION.md).
 
 ```shell
 python -m unittest discover -s tests -q

@@ -5,6 +5,7 @@ from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import Platform
 
+from .appearance import AppearanceManager, DATA_APPEARANCE
 from .const import DOMAIN, PLATFORMS, VERSION
 from .coordinator import DeyeEMSCoordinator
 from .websocket import async_register
@@ -13,6 +14,10 @@ PANEL_PATH = "deye-ems"
 
 
 async def async_setup_entry(hass, entry):
+    if DATA_APPEARANCE not in hass.data:
+        appearance = AppearanceManager(hass)
+        await appearance.async_load()
+        hass.data[DATA_APPEARANCE] = appearance
     coordinator = DeyeEMSCoordinator(hass, entry)
     await coordinator.async_initialize()
     entry.runtime_data = coordinator

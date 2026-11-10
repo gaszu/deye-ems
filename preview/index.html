@@ -4,13 +4,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deye EMS — podgląd interfejsu</title>
 <style>
-  :root {color-scheme:light dark;--primary-background-color:#f4f2f8;--secondary-background-color:#eae7f0;--card-background-color:#faf9fd;--primary-text-color:#38343f;--secondary-text-color:#746e7e;--divider-color:#dfdae7;--primary-color:#a29bbc;--warning-color:#bea16f;--error-color:#b98e9b}
+  :root {color-scheme:light;--primary-background-color:#fafafa;--secondary-background-color:#e5e5e5;--card-background-color:#ffffff;--primary-text-color:#212121;--secondary-text-color:#727272;--divider-color:#e0e0e0;--primary-color:#03a9f4;--warning-color:#ffa600;--error-color:#db4437}
   body {margin:0;background:var(--primary-background-color);font:15px system-ui;color:var(--primary-text-color)}
   .demo {padding:12px 24px;background:var(--secondary-background-color);border-bottom:1px solid var(--divider-color);color:var(--primary-text-color);text-align:center;line-height:1.5}
-  @media(prefers-color-scheme:dark) {:root {--primary-background-color:#24222c;--secondary-background-color:#302e3b;--card-background-color:#2d2b36;--primary-text-color:#eeeaf4;--secondary-text-color:#c4bdcf;--divider-color:#45404f;--primary-color:#b2acd1;--warning-color:#bba879;--error-color:#bb91a2}}
+  .demo label {display:block;margin-top:8px}.demo select {padding:6px 10px;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px}
 </style>
-<div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.</div>
-<deye-ems-panel-1-0-4 id="preview"></deye-ems-panel-1-0-4>
+<div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.<label>Tryb profilu w podglądzie <select id="preview-theme-mode"><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label></div>
+<deye-ems-panel-1-0-5 id="preview"></deye-ems-panel-1-0-5>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -18,7 +18,7 @@
   const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
   const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
   const deadline=night.toISOString();
-  const example={entry_id:"preview-entry",mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
+  const example={entry_id:"preview-entry",appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,reserve_margin_soc_percent:5,
     winter_weather_soc_percent:75,grid_current_max_a:108,charge_max_kw:5.3,
     discharge_max_kw:10,grid_max_soc_percent:95,
@@ -59,7 +59,19 @@
         "Bieżące współczynniki zostały odczytane i skopiowane. To stan kalibracji, bez dalszego samouczenia. Dane podglądu są wyłącznie syntetyczne.":
         "Podgląd: możesz wpisać dowolny syntetyczny klucz o długości co najmniej 8 znaków. Nie wpisuj prawdziwego klucza."}};
   }
-  document.getElementById("preview").hass={states:{
+  const previewHass={themes:{theme:"default",darkMode:false,themes:{
+    "synthetic-neutral":{
+      "primary-color":"#526b7d","ha-card-background":"var(--card-background-color)",
+      "ha-card-border-radius":"18px","ha-card-border-width":"1px","ha-card-box-shadow":"none",
+      "lovelace-background":"var(--primary-background-color)",
+      "ha-color-primary-90":"#dce6ed","ha-color-primary-80":"#c6d7e2","ha-color-primary-40":"#34596e",
+      "ha-color-primary-10":"#1c303d","ha-color-primary-20":"#2b4555","ha-color-primary-60":"#a9c4d5",
+      modes:{light:{"primary-background-color":"#eef1f3","secondary-background-color":"#e1e8ed",
+        "card-background-color":"#ffffff","primary-text-color":"#24323b","secondary-text-color":"#536773","divider-color":"#d1dce3"},
+        dark:{"primary-background-color":"#172127","secondary-background-color":"#24343d",
+          "card-background-color":"#25333b","primary-text-color":"#edf3f6","secondary-text-color":"#b6c8d2","divider-color":"#405660"}}
+    }
+  }},selectedTheme:{dark:false},states:{
     "sensor.demo_pump_energy":{state:"123",attributes:{friendly_name:"Pompa ciepła — energia",unit_of_measurement:"kWh"}},
     "sensor.demo_cwu_energy":{state:"456",attributes:{friendly_name:"CWU — energia",unit_of_measurement:"kWh"}},
     "sensor.demo_cwu_power":{state:"500",attributes:{friendly_name:"CWU — moc",unit_of_measurement:"W"}}
@@ -95,6 +107,7 @@
     example.data.updated_at=new Date().toISOString();example.data.plan.generated_at=new Date().toISOString();
     return {type:"create_entry",flow_id:id};
   },async callWS(message){
+    if(message.command==="appearance")example.appearance={theme:message.theme};
     if(["load_save","load_delete","load_toggle"].includes(message.command)){
       if(example.mode==="active")throw Error("Przejdź do obserwacji przed zmianą odbiorników.");
       if(message.expected_loads_revision!==example.loads_revision)throw Error("Lista odbiorników uległa zmianie.");
@@ -111,5 +124,19 @@
     example.data.control.target_soc=Math.max(75,example.options.min_soc_percent);
     return structuredClone(example);
   }};
+  const previewPanel=document.getElementById("preview");
+  previewPanel.hass=previewHass;
+  document.getElementById("preview-theme-mode").addEventListener("change",event=>{
+    const dark=event.target.value==="dark";
+    previewHass.themes={...previewHass.themes,darkMode:dark};
+    previewHass.selectedTheme={dark};
+    const profile=dark?{"primary-background-color":"#111111","secondary-background-color":"#282828",
+      "card-background-color":"#1c1c1c","primary-text-color":"#e1e1e1","secondary-text-color":"#b5b5b5","divider-color":"#404040"}:
+      {"primary-background-color":"#fafafa","secondary-background-color":"#e5e5e5",
+        "card-background-color":"#ffffff","primary-text-color":"#212121","secondary-text-color":"#727272","divider-color":"#e0e0e0"};
+    for(const [key,value] of Object.entries(profile))document.documentElement.style.setProperty("--"+key,value);
+    document.documentElement.style.colorScheme=dark?"dark":"light";
+    previewPanel.hass={...previewHass};
+  });
 </script>
 </html>

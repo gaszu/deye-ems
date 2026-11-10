@@ -147,11 +147,14 @@ class Installation(unittest.IsolatedAsyncioTestCase):
 
     async def test_reload_registers_panel_again_but_static_path_only_once(self):
         static,panel = AsyncMock(),AsyncMock()
+        appearance = SimpleNamespace(async_load=AsyncMock(), appearance={"theme": "synthetic-night"})
+        appearance_factory = Mock(return_value=appearance)
         h=SimpleNamespace(data={},http=SimpleNamespace(async_register_static_paths=static),
             config_entries=SimpleNamespace(async_forward_entry_setups=AsyncMock(),
                 async_unload_platforms_or_raise=AsyncMock(),async_reload=AsyncMock()))
         m=load("__init__.py",{**C,"__name__":"offline_init","__file__":str(ROOT/"__init__.py"),
             "Path":Path,"Platform":lambda p:p,"DeyeEMSCoordinator":Coordinator,
+            "AppearanceManager": appearance_factory, "DATA_APPEARANCE": "deye_ems_appearance",
             "StaticPathConfig":lambda *a:a,"async_register":Mock(),
             "frontend":SimpleNamespace(async_remove_panel=Mock()),
             "panel_custom":SimpleNamespace(async_register_panel=panel)})
@@ -160,6 +163,9 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         await m["async_unload_entry"](h,e)
         await m["async_setup_entry"](h,e)
         self.assertEqual(static.await_count,1)
+        appearance_factory.assert_called_once_with(h)
+        appearance.async_load.assert_awaited_once_with()
+        self.assertIs(h.data["deye_ems_appearance"], appearance)
         self.assertEqual(panel.await_count,2)
         self.assertTrue(panel.await_args.kwargs["require_admin"])
         self.assertEqual(panel.await_args.kwargs["webcomponent_name"],

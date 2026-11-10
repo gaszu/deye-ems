@@ -8,6 +8,12 @@ const {test} = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "../custom_components/deye_ems/frontend/deye-ems-panel.js"), "utf8");
 const NOW = Date.parse("2026-11-10T22:00:00+01:00");
 const decode = value => value.replaceAll("&quot;", '"').replaceAll("&#39;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+class FakeStyle {
+  constructor(){this.values=new Map();}
+  setProperty(key,value){this.values.set(key,value);}
+  removeProperty(key){const previous=this.values.get(key);this.values.delete(key);return previous||"";}
+  getPropertyValue(key){return this.values.get(key)||"";}
+}
 
 class FakeNode {
   constructor(attrs) {this.attrs=attrs;this.dataset={};this.events={};this.value=decode(attrs.value??"");this.open=attrs.tag==="details"&&attrs.open===true;this.checked=attrs.checked===true;this.disabled=attrs.disabled===true;this.required=attrs.required===true;for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
@@ -18,7 +24,7 @@ class FakeNode {
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],node=this.nodes.find(n=>n.dataset.solcastField===name);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=name?this.nodes.find(n=>n.dataset.solcastField===name):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
   querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
@@ -27,18 +33,19 @@ class FakeShadow {
 
 function fixture(previousElements = []) {
   const registry = new Map(previousElements);
-  class HTMLElement {attachShadow(){this.shadowRoot=new FakeShadow();return this.shadowRoot;}}
+  class HTMLElement {constructor(){this.style=new FakeStyle();}attachShadow(){this.shadowRoot=new FakeShadow();return this.shadowRoot;}}
   class ClockDate extends Date {static now(){return NOW;}}
   const context = vm.createContext({HTMLElement,Date:ClockDate,console,
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-4");
+  const Panel = registry.get("deye-ems-panel-1-0-5");
   const panel = new Panel();
   const calls=[];
-  panel._hass={states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
+  panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
+    states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -52,8 +59,8 @@ test("an existing browser session registers the updated panel alongside the old 
   const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel]]);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-4"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.4/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.5/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
@@ -607,4 +614,174 @@ test("a valid plan from before Solcast SAVE cannot enable resume, and a new plan
   assert.equal(calls.some(call=>call.command==="mode"),false);
   await panel.shadowRoot.getElementById("solcast-resume").events.click();
   assert.equal(calls.at(-1).command,"mode");assert.equal(calls.at(-1).mode,"active");
+});
+
+function appearanceThemes(panel){
+  panel._hass.themes={theme:"default",darkMode:false,themes:{
+    "synthetic-neutral":{
+      "primary-color":"#2468ac","ha-card-background":"var(--card-background-color)",
+      "lovelace-background":"var(--background-image)","background-image":"linear-gradient(#123456,#654321)",
+      "ha-card-border-radius":"19px","ha-card-box-shadow":"none",
+      "ha-color-primary-90":"#dae5ef","ha-color-primary-80":"#c4d5e5","ha-color-primary-40":"#28587d",
+      "ha-color-primary-10":"#102a3c","ha-color-primary-20":"#1c3c52","ha-color-primary-60":"#8eb9d7",
+      modes:{light:{"card-background-color":"#f7f9fb","primary-text-color":"#24303a"},
+        dark:{"card-background-color":"#24303a","primary-text-color":"#f7f9fb"}}
+    },
+    "synthetic-plain":{"primary-color":"#135724","primary-background-color":"#f0f0f0"}
+  }};
+}
+
+test("a saved HA theme applies base and current-mode CSS variables only on the panel host",()=>{
+  const {panel}=fixture();appearanceThemes(panel);
+  const original=JSON.stringify(panel._hass.themes);
+  panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  assert.equal(panel.style.getPropertyValue("--primary-color"),"#2468ac");
+  assert.equal(panel.style.getPropertyValue("--card-background-color"),"#f7f9fb");
+  assert.equal(panel.style.getPropertyValue("--ha-card-background"),"var(--card-background-color)");
+  assert.equal(panel.style.getPropertyValue("--lovelace-background"),"var(--background-image)");
+  assert.equal(panel.style.getPropertyValue("--ha-card-border-radius"),"19px");
+  assert.equal(panel.style.getPropertyValue("--rgb-primary-color"),"36,104,172");
+  assert.equal(panel.style.getPropertyValue("color-scheme"),"light");
+  assert.equal(JSON.stringify(panel._hass.themes),original);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/#2468ac|#123456|#654321/);
+  assert.doesNotMatch(source,/frontend\/set_theme|document\.documentElement|document\.body|color-mix\(/);
+});
+
+test("HA mode changes reapply named-theme variables and local native button palette references",()=>{
+  const {panel}=fixture();appearanceThemes(panel);
+  panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  assert.equal(panel.style.getPropertyValue("--ems-button-background"),"var(--ha-color-primary-90)");
+  const themes={...panel._hass.themes,darkMode:true};
+  panel.hass={...panel._hass,themes,selectedTheme:{}};
+  assert.equal(panel.style.getPropertyValue("--card-background-color"),"#24303a");
+  assert.equal(panel.style.getPropertyValue("--primary-text-color"),"#f7f9fb");
+  assert.equal(panel.style.getPropertyValue("--ems-button-background"),"var(--ha-color-primary-10)");
+  assert.equal(panel.style.getPropertyValue("--ems-button-text"),"var(--ha-color-primary-60)");
+  assert.equal(panel.style.getPropertyValue("color-scheme"),"dark");
+  panel.hass={...panel._hass,selectedTheme:{dark:false}};
+  assert.equal(panel.style.getPropertyValue("--card-background-color"),"#f7f9fb");
+  assert.equal(panel.style.getPropertyValue("color-scheme"),"light");
+});
+
+test("a dark-only named theme preserves its base without guessing a mode from its colors or name",()=>{
+  const {panel}=fixture();
+  panel._hass.themes.themes["synthetic-dark-only"]={
+    "card-background-color":"#191919","primary-text-color":"#eeeeee",modes:{dark:{}}
+  };
+  panel.payload.appearance={theme:"synthetic-dark-only"};panel.render();
+  assert.equal(panel.style.getPropertyValue("--card-background-color"),"#191919");
+  assert.equal(panel.style.getPropertyValue("--primary-text-color"),"#eeeeee");
+  assert.equal(panel.style.getPropertyValue("color-scheme"),"light");
+  panel.hass={...panel._hass,selectedTheme:{dark:true}};
+  assert.equal(panel.style.getPropertyValue("--card-background-color"),"#191919");
+  assert.equal(panel.style.getPropertyValue("color-scheme"),"dark");
+});
+
+test("changing or removing a theme resets stale CSSOM keys, RGB helpers and button aliases",()=>{
+  const {panel}=fixture();appearanceThemes(panel);
+  panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  panel.payload.appearance={theme:"synthetic-plain"};panel.render();
+  assert.equal(panel.style.getPropertyValue("--primary-color"),"#135724");
+  assert.equal(panel.style.getPropertyValue("--background-image"),"");
+  assert.equal(panel.style.getPropertyValue("--ha-card-background"),"");
+  assert.equal(panel.style.getPropertyValue("--ha-color-primary-90"),"");
+  assert.equal(panel.style.getPropertyValue("--ems-button-text"),"var(--primary-color)");
+  panel.payload.appearance={theme:""};panel.render();
+  assert.equal(panel.style.values.size,0);
+  assert.equal(panel.appearanceMissing,false);
+});
+
+test("missing saved themes warn and inherit the current HA profile without saving a replacement",()=>{
+  const {panel,calls}=fixture();appearanceThemes(panel);
+  panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  delete panel._hass.themes.themes["synthetic-neutral"];panel.render();
+  assert.equal(panel.style.values.size,0);assert.equal(panel.appearanceMissing,true);
+  assert.match(panel.appearanceHtml(),/motyw jest niedostępny/);
+  assert.match(panel.appearanceHtml(),/Panel używa bieżącego motywu HA/);
+  assert.equal(panel.shadowRoot.getElementById("panel-theme").value,"synthetic-neutral");
+  assert.equal(calls.length,0);assert.equal(panel.payload.appearance.theme,"synthetic-neutral");
+});
+
+test("appearance selection is a draft until the explicit server-confirmed save, including active mode",async()=>{
+  const {panel,calls}=fixture();appearanceThemes(panel);panel.payload.mode="active";panel.render();
+  const before=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,plan:panel.payload.data.plan});
+  const select=panel.shadowRoot.getElementById("panel-theme");
+  select.value="synthetic-neutral";select.events.change();
+  assert.equal(panel.style.values.size,0);assert.equal(calls.length,0);
+  assert.equal(panel.shadowRoot.getElementById("appearance-save").disabled,false);
+  panel._hass.callWS=async message=>{calls.push(message);return {...panel.payload,appearance:{theme:message.theme}};};
+  await panel.saveAppearance();
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[
+    {type:"deye_ems/command",command:"appearance",theme:"synthetic-neutral"}
+  ]);
+  assert.equal(panel.payload.appearance.theme,"synthetic-neutral");
+  assert.equal(panel.appearanceDraft,null);
+  assert.equal(panel.style.getPropertyValue("--primary-color"),"#2468ac");
+  assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,plan:panel.payload.data.plan}),before);
+});
+
+test("a failed appearance save preserves the draft and old theme and uses a safe error",async()=>{
+  const {panel}=fixture();appearanceThemes(panel);
+  panel.payload.appearance={theme:"synthetic-plain"};panel.appearanceDraft="synthetic-neutral";panel.render();
+  panel._hass.callWS=async()=>{throw Error("untrusted-theme-data-from-server");};
+  await panel.saveAppearance();
+  assert.equal(panel.payload.appearance.theme,"synthetic-plain");
+  assert.equal(panel.appearanceDraft,"synthetic-neutral");
+  assert.equal(panel.style.getPropertyValue("--primary-color"),"#135724");
+  assert.match(panel.appearanceHtml(),/Nie udało się zapisać motywu/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/untrusted-theme-data-from-server/);
+});
+
+test("appearance drafts and select focus survive polling without changing saved styles",async()=>{
+  const {panel}=fixture();appearanceThemes(panel);panel.render();
+  let select=panel.shadowRoot.getElementById("panel-theme");select.value="synthetic-neutral";select.events.change();
+  select=panel.shadowRoot.getElementById("panel-theme");panel.shadowRoot.activeElement=select;
+  const html=panel.shadowRoot.innerHTML;
+  await panel.refresh();
+  assert.equal(panel.shadowRoot.innerHTML,html);assert.equal(panel.appearanceDraft,"synthetic-neutral");
+  assert.equal(panel.style.values.size,0);
+  panel.shadowRoot.activeElement=null;panel.render();
+  assert.equal(panel.shadowRoot.getElementById("panel-theme").value,"synthetic-neutral");
+});
+
+test("theme values and RGB helpers update on theme reload without retaining stale mode variables",()=>{
+  const {panel}=fixture();appearanceThemes(panel);panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  panel._hass.themes.themes["synthetic-neutral"]={"primary-color":"#abc","rgb-primary-color":"1,2,3"};
+  panel.hass={...panel._hass};
+  assert.equal(panel.style.getPropertyValue("--primary-color"),"#abc");
+  assert.equal(panel.style.getPropertyValue("--rgb-primary-color"),"1,2,3");
+  assert.equal(panel.style.getPropertyValue("--card-background-color"),"");
+  assert.equal(panel.style.getPropertyValue("--background-image"),"");
+});
+
+test("theme names are escaped and theme definitions never enter the HTML or status payload",()=>{
+  const {panel}=fixture();appearanceThemes(panel);
+  const name='<img src=x onerror="unexpected()">';
+  panel._hass.themes.themes[name]={"primary-color":"#56789a","bad key; color:red":"ignored",nested:{secret:"not-a-css-value"}};
+  panel.payload.appearance={theme:name};panel.render();
+  assert.match(panel.appearanceHtml(),/&lt;img/);assert.doesNotMatch(panel.shadowRoot.innerHTML,/<img/);
+  assert.equal(panel.style.getPropertyValue("--primary-color"),"#56789a");
+  assert.equal(panel.style.getPropertyValue("--bad key; color:red"),"");
+  assert.equal(panel.style.getPropertyValue("--nested"),"");
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/#56789a|not-a-css-value/);
+  assert.equal(Object.hasOwn(panel.payload,"themes"),false);
+});
+
+test("the inherited appearance option never calls HA global theme APIs or applies a fabricated default theme",async()=>{
+  const {panel,calls}=fixture();appearanceThemes(panel);panel.payload.appearance={theme:"synthetic-plain"};panel.render();
+  panel.appearanceDraft="";
+  panel._hass.callWS=async message=>{calls.push(message);return {...panel.payload,appearance:{theme:message.theme}};};
+  await panel.saveAppearance();
+  assert.equal(panel.style.values.size,0);assert.equal(calls.length,1);assert.equal(calls[0].theme,"");
+  assert.equal(calls[0].command,"appearance");assert.equal(panel._hass.themes.theme,"default");
+  assert.doesNotMatch(panel.appearanceHtml(),/value="default"/);
+});
+
+test("a removed draft theme cannot be sent and HA card and Lovelace shape variables remain in the stylesheet",async()=>{
+  const {panel,calls}=fixture();appearanceThemes(panel);panel.appearanceDraft="synthetic-gone";
+  await panel.saveAppearance();
+  assert.equal(calls.length,0);assert.match(panel.appearanceHtml(),/nie jest już dostępny/);
+  for(const variable of ["--lovelace-background","--ha-card-background","--ha-card-border-radius","--ha-card-border-width","--ha-card-box-shadow","--ha-card-backdrop-filter","--input-fill-color","--primary-color"]){
+    assert.ok(source.includes(variable),variable);
+  }
 });

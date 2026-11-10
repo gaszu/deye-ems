@@ -1,4 +1,13 @@
-# Sprawdzenia wersji 1.0.4
+# Sprawdzenia wersji 1.0.5
+
+- **289/289 testów Python PASS** i **60/60 testów panelu PASS**.
+- Preferencja wyglądu ma osobny Store. Testy obejmują walidację dostępnych nazw motywów, admin-only WebSocket, trwały zapis przed publikacją, błąd zapisu bez zmiany wartości oraz serializację równoległych zapisów. Błąd odczytu kosmetycznej preferencji nie blokuje startu sterownika.
+- Zapis wyglądu w active nie wywołuje koordynatora, przeładowania, planowania ani usług urządzeń. Konfiguracja energii i połączenia Solcast pozostaje oddzielona.
+- Testy interfejsu obejmują lokalny CSSOM hosta, base i reguły trybu light/dark, odwołania zmiennych, wartości RGB, usuwanie starych kluczy i powrót do dziedziczenia profilu. Brak motywu nie powoduje automatycznego zapisu innej preferencji.
+- Sprawdzono zachowanie wyboru przy odświeżaniu, bezpieczne wyświetlanie nazw motywów i zachowanie poprzedniego wyglądu po błędzie zapisu. Kod nie zmienia motywu dokumentu ani globalnego profilu HA.
+- W przeglądarce na syntetycznych danych sprawdzono zastosowanie motywu z obrazem tła i półprzezroczystymi kartami, zapis innego motywu w jasnym trybie, usunięcie lokalnych zmiennych przy powrocie do dziedziczenia oraz ponowne zastosowanie wybranego motywu. Kolory podglądu pochodzą z definicji motywu, bez własnego przemalowywania.
+
+## Sprawdzenia wersji 1.0.4
 
 Wyniki dotyczą testów oprogramowania offline i syntetycznych scenariuszy przeglądarkowych. Nie stanowią raportu z konkretnej instalacji HA ani potwierdzenia fizycznej reakcji falownika.
 
