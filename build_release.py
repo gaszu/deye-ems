@@ -16,19 +16,32 @@ data_pl.update({key: key.replace("_", " ") for key in const.DEFAULT_SOURCES})
 data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika energii",
     "power_entity": "Encja chwilowej mocy (opcjonalnie)",
     "included_in_load": "Zużycie jest już ujęte w głównym pomiarze LOAD",
-    "load_id": "Odbiornik do usunięcia"})
+    "load_id": "Odbiornik do usunięcia", "pv_forecast_mode": "Sposób interpretacji prognozy PV",
+    "api_key": "Klucz API Solcast (puste pole zachowuje zapisany)",
+    "resource_ids": "Identyfikatory instalacji Solcast (oddzielone przecinkami; puste = wykrywanie)",
+    "poll_interval_minutes": "Odstęp pobierania (minuty)",
+    "max_requests_per_day": "Limit zapytań konta na dobę UTC",
+    "initial_requests_used": "Zapytania już wykorzystane dziś na koncie (UTC)",
+    "dampening_factor": "Stały mnożnik korekty prognozy",
+    "hourly_factors": "24 mnożniki godzinowe 00–23 (oddzielone spacjami; puste = 1)",
+    "accept_manual_calibration": "Rozumiem, że automatyczna kalibracja poprzedniej integracji nie została przeniesiona",
+    "source_entry": "Obecna integracja Solcast"})
 descriptions = {
     "user": ("Deye EMS — własny silnik", "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później."),
     "parameters": ("Parametry silnika", "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor."),
     "sources": ("Pomiary i sterowanie", "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Nie są wymagane żadne helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji."),
     "add_load": ("Dodatkowe zużycia", "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik. Licznik energii powinien podawać Wh lub kWh. Zaznaczenie LOAD zapobiega podwójnemu doliczaniu. Odbiornik poza LOAD wymaga również pomiaru mocy dla ograniczania importu."),
     "remove_load": ("Usuń dodatkowe zużycie", "Usunięcie kanału nie usuwa encji źródłowej ani jej historii."),
+    "solcast_manual": ("Solcast wewnątrz EMS", "Wbudowany klient nie wymaga osobnej integracji Solcast. Klucz i identyfikatory znajdziesz w toolkit.solcast.com.au. Moc AC/DC, kierunek i nachylenie paneli ustaw w portalu Solcast; EMS pobiera prognozę dla zapisanej tam instalacji. Zwykły limit Hobbyist: 10 zapytań na dobę UTC, każde pobranie dla każdej instalacji zużywa osobne zapytanie. Nie odpytuj równocześnie tego konta innym klientem. Przy nieznanym zużyciu pozostaw 10; klient zaczeka na nową dobę UTC. Wpisane zużycie nie zmniejsza rejestru; po zmianie konfiguracji może go podnieść. {import_note}"),
+    "solcast_import": ("Import dostępnych ustawień Solcast", "Klucz jest kopiowany lokalnie w HA. Można przenieść stałe mnożniki godzinowe. Automatyczna kalibracja i osobne korekty poszczególnych instalacji wymagają ręcznego sprawdzenia; kreator je zgłosi. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta."),
 }
 step_fields = {
-    "user": ["min_soc_percent", "capacity_kwh", "grid_import_limit_kw", "grid_phase_limit_kw"],
-    "parameters": list(const.OPTION_RANGES), "sources": list(const.DEFAULT_SOURCES),
+    "user": ["min_soc_percent", "capacity_kwh", "pv_peak_kwp", "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"],
+    "parameters": [*const.OPTION_RANGES, "pv_forecast_mode"], "sources": list(const.DEFAULT_SOURCES),
     "add_load": ["name", "energy_entity", "power_entity", "included_in_load"],
     "remove_load": ["load_id"],
+    "solcast_manual": ["api_key", "resource_ids", "poll_interval_minutes", "max_requests_per_day", "initial_requests_used", "dampening_factor", "hourly_factors", "accept_manual_calibration"],
+    "solcast_import": ["source_entry"],
 }
 steps = {key: {"title": title, "description": description, "data": {k: data_pl[k] for k in step_fields[key]}}
     for key, (title, description) in descriptions.items()}
@@ -38,12 +51,19 @@ doc = {"title": "Deye EMS",
         "abort": {"already_configured": "Integracja Deye EMS jest już skonfigurowana."}},
     "options": {"step": {key: steps[key] for key in descriptions if key != "user"},
         "error": {"invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
-                  "duplicate_load": "Ten licznik energii jest już dodany."},
+                  "duplicate_load": "Ten licznik energii jest już dodany.",
+                  "pv_reference_required": "Wpisz moc referencyjną profilu przed włączeniem skalowania.",
+                  "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
+                  "import_calibration_required": "Sprawdź korekty prognozy i potwierdź, że automatyczna kalibracja nie została przeniesiona."},
         "abort": {"no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
             "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki."}}}
+doc["options"]["abort"]["no_solcast_to_import"] = "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie."
 doc["options"]["step"]["init"] = {"title": "Deye EMS",
     "menu_options": {"parameters": "Parametry i bezpieczny SoC", "sources": "Encje pomiarowe i sterujące",
-        "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}
+        "solcast": "Solcast — połączenie i ustawienia", "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}
+doc["options"]["step"]["solcast"] = {"title": "Solcast wewnątrz EMS", "menu_options": {
+    "solcast_manual": "Połącz / zmień ustawienia", "solcast_import": "Importuj dostępne ustawienia z HA",
+    "solcast_disable": "Wyłącz pobieranie przez EMS"}}
 COMPONENT.joinpath("translations").mkdir(exist_ok=True)
 for path in (COMPONENT/"strings.json", COMPONENT/"translations/pl.json"):
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")

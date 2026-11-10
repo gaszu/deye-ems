@@ -1,9 +1,13 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
-  capacity_kwh: "Pojemność akumulatora (kWh)",
+  capacity_kwh: "Pojemność magazynu (kWh)",
+  pv_peak_kwp: "Moc paneli PV (kWp)",
+  pv_forecast_reference_kwp: "Moc referencyjna profilu PV (kWp)",
   grid_import_limit_kw: "Limit importu razem (kW)",
   grid_phase_limit_kw: "Limit importu na fazę (kW)",
+  inverter_max_power_kw: "Moc falownika łącznie (kW)",
+  inverter_phase_max_power_kw: "Dopuszczalna moc na fazę (kW)",
   reserve_margin_soc_percent: "Bufor prognozy (p.p.)",
   winter_weather_soc_percent: "Zimowy cel przy słabym PV (%)",
   grid_current_max_a: "Limit prądu z sieci (A)",
@@ -13,7 +17,9 @@ const labels = {
 };
 const ranges = {
   min_soc_percent:[40,90,1], capacity_kwh:[1,1000,.1],
+  pv_peak_kwp:[.1,1000,.1],pv_forecast_reference_kwp:[.1,1000,.1],
   grid_import_limit_kw:[1,12,.1],grid_phase_limit_kw:[.5,5,.1],
+  inverter_max_power_kw:[.1,1000,.1],inverter_phase_max_power_kw:[.1,500,.1],
   reserve_margin_soc_percent:[0,10,1],winter_weather_soc_percent:[45,95,1],
   grid_current_max_a:[0,108,1],charge_max_kw:[.1,12,.1],
   discharge_max_kw:[.1,12,.1],grid_max_soc_percent:[45,95,1]
@@ -65,9 +71,13 @@ class DeyeEMSPanel extends HTMLElement {
     const safeReason=String(reason).replace(/^safety_/,"");
     const statusText=Object.hasOwn(reasons,reason)?reasons[reason]:Object.hasOwn(reasons,safeReason)?reasons[safeReason]:"Silnik sprawdza plan i dostępne dane";
     const extraLoads=Array.isArray(o.extra_loads)?o.extra_loads:[];
+    const solcast=d.solcast||{},quota=solcast.quota||{};
+    const solcastLabels={ok:"Prognoza pobrana",cached:"Prognoza z datowanego cache",unavailable:"Brak aktualnej prognozy API",not_configured:"Połączenie nieustawione",ha_entities:"Prognoza z wybranych encji HA",disabled:"Pobieranie wyłączone"};
+    const solcastStatus=Object.hasOwn(solcastLabels,solcast.status)?solcastLabels[solcast.status]:"Oczekiwanie na prognozę";
     const sourceNames={own_plan:"bieżący plan",dated_cache:"ostatni poprawny plan",dated_cache_with_retained_raise:"plan z dodatkowym zapasem",unreachable_plan_raise:"podwyższony zapas",winter_fallback:"zapas na zimę",summer_emergency_fallback:"awaryjne doładowanie",own_deterministic_planner:"bieżący plan"};
     const selectedSource=Object.hasOwn(sourceNames,c.target_source)?sourceNames[c.target_source]:"oczekiwanie na plan";
     const mode=active?"Sterowanie aktywne":"Obserwacja";
+    const basicField=(key,button)=>{const r=ranges[key],value=Object.hasOwn(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(labels[key])+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" '+(this.busy?'disabled':'')+'>'+esc(button)+'</button></label>';};
     this.shadowRoot.innerHTML='<style>'+
       ':host{display:block;background:var(--primary-background-color,#f3f6f7);color:var(--primary-text-color,#182b33);font:15px system-ui;min-height:100vh}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color,#64787f);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:100px;background:#dff2eb;color:#12664b;font-weight:650}.pill.shadow{background:#e6edf4;color:#39566e}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#e1e7e9);border-radius:16px;padding:22px}.label,.sub{display:block;color:var(--secondary-text-color,#627780);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color,#eaf0f2);border-radius:12px;line-height:1.6;margin:18px 0}.error,.warning{background:#fff0d7;color:#774e0c}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:11px 16px;background:#147a64;color:white;font-weight:600}button.secondary{background:var(--secondary-background-color,#e7edef);color:var(--primary-text-color,#294750)}button[disabled]{opacity:.5;cursor:wait}svg{width:100%;height:230px;display:block}.legend{font-size:12px;color:var(--secondary-text-color,#627780)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--secondary-text-color,#627780)}input{margin-top:7px;width:100%;border:1px solid var(--divider-color,#d9e2e5);border-radius:8px;background:var(--primary-background-color,#f6f8f9);color:var(--primary-text-color,#192d35);padding:10px;font:inherit}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color,#e1e7e9)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color,#627780);font-size:12px;line-height:1.7;margin-top:24px}a{color:#18876f}@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}'+
       'summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
@@ -81,14 +91,17 @@ class DeyeEMSPanel extends HTMLElement {
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
       ((plan.unreachable||c.unreachable)?'<div class="notice warning">Dostępna energia lub moc może nie wystarczyć do osiągnięcia celu. Limit poboru ma pierwszeństwo.</div>':'')+
       '<div class="actions"><button id="mode" '+(this.busy?'disabled':'')+'>'+(active?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div>'+
-      '<section class="reserve"><h2>Stała rezerwa akumulatora</h2><label>'+esc(labels.min_soc_percent)+'<input data-key="min_soc_percent" type="number" min="40" max="90" step="1" value="'+esc(Object.prototype.hasOwnProperty.call(this.drafts,"min_soc_percent")?this.drafts.min_soc_percent:o.min_soc_percent??"")+'"><button data-save="min_soc_percent" '+(this.busy?'disabled':'')+'>Zapisz rezerwę</button></label><p class="legend">Zapas energii pozostawiany w akumulatorze, niezależnie od pogody.</p></section>'+
+      '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Rezerwa jest dolną granicą niezależną od pogody. Pojemność służy do przeliczania procentów na energię.</p></section>'+
+      '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
+      (numeric(quota.utc?.used)!==null?'<p class="legend">Zapytania dziś (UTC): '+num(quota.utc.used,0)+' / '+num(quota.limit,0)+'</p>':'')+
+      '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p><a href="/config/integrations/integration/deye_ems">Połącz i skonfiguruj Solcast</a></section>'+
       '<section><h2>Dodatkowe zużycia</h2><ul>'+extraLoads.map(load=>'<li>'+esc(load.name||load.energy_entity||"Obwód")+' <span class="legend">'+(load.included_in_load?'już w pomiarze domu':'dodatkowy obwód')+'</span></li>').join("")+'</ul>'+
       (!extraLoads.length?'<p class="legend">Brak dodatkowych obwodów. Podstawą pozostaje pomiar domu.</p>':'')+'<a href="/config/integrations/integration/deye_ems">Dodaj lub usuń obwód</a></section>'+
       '<section><h2>Prognoza modelu</h2>'+(plan.quality==="valid"?'<div class="grid">'+card("Modelowy cel przed 07:00",num(targets.night?.soc_percent),"%",time(targets.night?.deadline))+
       card("Modelowy cel przed szczytem",num(targets.peak?.soc_percent),"%",time(targets.peak?.deadline))+
       '</div>':'')+
       (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke="#cf8455" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke="#189c80" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Zielona linia: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':'<div class="notice">Brak kompletnej prognozy. Silnik pokazuje zachowawcze cele i przyczynę braku planu.</div>')+
-      '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary><section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>key!=="min_soc_percent").map(([key,label])=>{
+      '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary><section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
       '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p class="legend">Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+

@@ -6,6 +6,8 @@ Pierwsza wersja zachowuje mechanizmy obecnego EMS: harmonogram G13, sezonowe cel
 
 ## Instalacja
 
+**Marketplace (HA 2026.11+): Ustawienia → Marketplace → Dodaj z linku → `https://github.com/gaszu/ha-deye-ems` → typ Integracja → Instaluj.** Następnie dodaj Deye EMS w Urządzeniach i usługach. Repozytorium jest publicznym kodem integracji; indywidualne ustawienia i dane domu pozostają w HA.
+
 [Instrukcja instalacji](INSTALL.md) · [Przejście z obecnego EMS i powrót](MIGRATION.md)
 
 Pakiet: [deye-ems-0.1.0.zip](dist/deye-ems-0.1.0.zip). Po skopiowaniu katalogu integracji i restarcie HA: **Ustawienia → Urządzenia i usługi → Dodaj integrację → Deye EMS**. Panel **Deye EMS** pojawia się w menu bocznym. Pierwsze dodanie uruchamia obserwację, bez poleceń do falownika.
@@ -16,6 +18,8 @@ Pakiet: [deye-ems-0.1.0.zip](dist/deye-ems-0.1.0.zip). Po skopiowaniu katalogu i
 |---|---:|
 | **Minimalny bezpieczny SoC** — stałe dolne ograniczenie | **40%**, regulowane 40–90% |
 | Pojemność baterii | 66 kWh |
+| Zainstalowana moc paneli PV | Do wpisania, w kWp |
+| Moc falownika łącznie / dopuszczalna na fazę | 12 kW / 5 kW, osobne parametry |
 | Limit łącznego importu domu i ładowania | 12 kW |
 | Limit importu na fazę | 5 kW |
 | Maksymalny prąd sieciowy baterii | 108 A, dodatkowo BMS i Deye |
@@ -24,6 +28,18 @@ Pakiet: [deye-ems-0.1.0.zip](dist/deye-ems-0.1.0.zip). Po skopiowaniu katalogu i
 | Maksymalny cel doładowania z sieci | 95% |
 
 Stała rezerwa jest osobnym ustawieniem. Cel ładowania zależny od prognozy nigdy nie zastępuje tej rezerwy. Ustawienia zapisuje HA w konfiguracji integracji, a jej własny cache i rejestr prób — zarządzany magazyn HA. Nie należy edytować tych plików ręcznie.
+
+## Solcast wewnątrz EMS
+
+**Konfiguruj → Solcast — połączenie i ustawienia** uruchamia wbudowany klient API. Nie trzeba instalować osobnej integracji Solcast. W kreatorze podaje się klucz, identyfikatory instalacji, odstęp pobierania, limit zapytań oraz stały mnożnik i opcjonalne 24 mnożniki godzinowe. Klucz pozostaje w konfiguracji HA; panel, plan, cache i diagnostyka nie ujawniają go.
+
+Konto i instalacje zakłada się w [Solcast Toolkit](https://toolkit.solcast.com.au/). Dla planu Hobbyist moc AC/DC, kierunek i nachylenie paneli oraz sprawność konfiguruje się w tym portalu. Wbudowany moduł pobiera prognozę dla zapisanych tam instalacji; nie zmienia geometrii przez komercyjne API. Zasady opisuje [oficjalna dokumentacja Solcast](https://docs.solcast.com.au/docs/section/rooftop-sites-hobbyist).
+
+Prognoza całej instalacji jest domyślnie używana **1:1**. Pole mocy kWp wiąże prognozę i jej cache z konfiguracją instalacji; nie mnoży ponownie już skalibrowanej prognozy. Osobny tryb profilu referencyjnego oblicza `prognoza / moc referencyjna × moc zainstalowana`. Wybiera się go świadomie dla profilu innej mocy. Brak wpisanej mocy PV blokuje przejęcie sterowania i jest widoczny jako brak konfiguracji.
+
+Import z `solcast_solar` kopiuje lokalnie dostępny klucz i stałe korekty godzinowe. Jeżeli poprzednia integracja ma automatyczną kalibrację lub korekty poszczególnych instalacji, kreator zgłasza brak pełnego przeniesienia i wymaga ręcznego sprawdzenia. Nie wyłącza poprzedniego źródła samoczynnie.
+
+Standardowy limit Hobbyist to 10 zapytań na dobę UTC dla całego konta. Każda instalacja zużywa oddzielne zapytanie. Rejestr jest zapisywany przed próbą HTTP, obejmuje błędy i pozostaje po restarcie lub zmianie konfiguracji. Wpisane początkowe zużycie nie zmniejsza istniejącego rejestru, a po zmianie konfiguracji może go podnieść; przy nieznanym zużyciu domyślne 10 wstrzymuje zapytania do kolejnej doby UTC. Nie należy równolegle odpytywać tego samego konta przez dwa klienty. Brak jednej instalacji lub części horyzontu nie jest zastępowany zerem. Cache ma datę pobrania i identyfikację źródła.
 
 ## Działanie
 
@@ -34,6 +50,8 @@ Latem (IV–IX) normalna kolejność to **PV → dom → bateria wysoko → eksp
 Regulator uwzględnia moc domu i faz, napięcie baterii oraz ograniczenia BMS. Zwiększa nastawę stopniowo o maks. 2 A co 30 s; zwykłe zmniejszanie do 5 A co 30 s. Redukcja wymagana przez bezpieczeństwo lub osiągnięcie celu ma pierwszeństwo. Rejestr próby zapisuje się przed poleceniem; opóźniony odczyt nie uruchamia serii zwiększeń. Utrzymywanie aktywnego ładowania podczas bezpiecznej rampy nie powoduje cyklicznego przełączania GC.
 
 Model ograniczania importu zostawia 500 W łącznie i 250 W na fazie. Przy braku potwierdzonego rozkładu fazowego zachowawczo mieści całą dodatkową moc ładowania w zapasie każdej fazy. To ogranicza dostępną moc bardziej niż założenie podziału po ⅓ i będzie jednym z parametrów do późniejszej kalibracji.
+
+Moc falownika i dopuszczalna moc na fazę są osobnymi polami konfiguracji. Regulator stosuje niższe ograniczenie: mocy falownika albo limitu importu, odpowiednio dla sumy i każdej fazy. Model ładowania i rozładowania również nie przekracza wpisanej łącznej mocy falownika. Zmiana mocy w konfiguracji nie zmienia parametrów sprzętowych urządzenia.
 
 ## Dodatkowe zużycia
 

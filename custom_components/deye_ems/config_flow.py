@@ -8,13 +8,16 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OPTION_RANGES
+from .solcast import validate_config
 
 
 def _schema(values, keys):
     fields = {}
     for key in keys:
         low, high, step, unit = OPTION_RANGES[key]
-        fields[vol.Required(key, default=values.get(key, DEFAULT_OPTIONS[key]))] = selector.NumberSelector(
+        value = values.get(key, DEFAULT_OPTIONS[key])
+        marker = vol.Optional(key) if value is None else vol.Required(key, default=value)
+        fields[marker] = selector.NumberSelector(
             selector.NumberSelectorConfig(min=low, max=high, step=step,
                 mode=selector.NumberSelectorMode.BOX, unit_of_measurement=unit))
     return vol.Schema(fields)
@@ -24,7 +27,29 @@ def _errors(values):
     floor = values.get("min_soc_percent", 40)
     ceiling = values.get("grid_max_soc_percent", 95)
     margin = values.get("reserve_margin_soc_percent", 5)
-    return {"base": "invalid_soc_limits"} if floor + margin > ceiling else {}
+    if floor + margin > ceiling:
+        return {"base": "invalid_soc_limits"}
+    if values.get("pv_forecast_mode") == "specific_profile" and not values.get("pv_forecast_reference_kwp"):
+        return {"base": "pv_reference_required"}
+    return {}
+
+
+def _solcast_input(user_input, previous):
+    """Normalize private config without putting a saved key back in a form."""
+    key = user_input.get("api_key", "").strip() or previous.get("api_key", "")
+    ids = user_input.get("resource_ids", "")
+    ids = ids.replace("\n", ",").replace(";", ",")
+    hourly = user_input.get("hourly_factors", "").strip()
+    factors = [float(v) for v in hourly.replace(";", " ").replace(",", " ").split()] if hourly else [1.] * 24
+    result = {"api_key": key, "enabled": True,
+        "resource_ids": [v.strip() for v in ids.split(",") if v.strip()],
+        "poll_interval_minutes": user_input.get("poll_interval_minutes", 360),
+        "max_requests_per_day": user_input.get("max_requests_per_day", 10),
+        "initial_requests_used": user_input.get("initial_requests_used", 10),
+        "dampening_factor": user_input.get("dampening_factor", 1.),
+        "hourly_factors": factors, "config_generation": uuid4().hex}
+    validate_config(result)
+    return result
 
 
 class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -40,8 +65,8 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title="Deye EMS", data={
                     **DEFAULT_OPTIONS, **user_input, "sources": dict(DEFAULT_SOURCES)})
         return self.async_show_form(step_id="user", errors=errors, data_schema=_schema(
-            user_input or DEFAULT_OPTIONS, ["min_soc_percent", "capacity_kwh",
-                "grid_import_limit_kw", "grid_phase_limit_kw"]),
+            user_input or DEFAULT_OPTIONS, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
+                "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]),
             description_placeholders={"mode": "shadow"})
 
     @staticmethod
@@ -56,7 +81,81 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return runtime is not None and runtime.mode == "active"
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["parameters", "sources", "add_load", "remove_load"])
+        return self.async_show_menu(step_id="init", menu_options=["parameters", "solcast", "sources", "add_load", "remove_load"])
+
+    def _solcast_values(self):
+        return dict(getattr(self, "_solcast_draft", None) or self.config_entry.options.get(
+            "solcast", self.config_entry.data.get("solcast", {})))
+
+    async def async_step_solcast(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        return self.async_show_menu(step_id="solcast", menu_options=[
+            "solcast_manual", "solcast_import", "solcast_disable"])
+
+    async def async_step_solcast_manual(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        values, errors = self._solcast_values(), {}
+        adaptive = getattr(self, "_import_adaptive", False)
+        if user_input is not None:
+            try:
+                if adaptive and not user_input.get("accept_manual_calibration"):
+                    raise ValueError("import_calibration_required")
+                config = _solcast_input(user_input, values)
+                return self.async_create_entry(title="", data={
+                    **dict(self.config_entry.options), "solcast": config})
+            except (ValueError, TypeError):
+                errors["base"] = "import_calibration_required" if adaptive and not user_input.get(
+                    "accept_manual_calibration") else "invalid_solcast"
+        display = {**values, **(user_input or {})}
+        fields = {
+            vol.Optional(vol.Secret("api_key")): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
+            vol.Optional("resource_ids", default=display.get("resource_ids", "") if isinstance(display.get("resource_ids"), str)
+                else ", ".join(display.get("resource_ids", []))): selector.TextSelector(),
+        }
+        for key, default, low, high, step in (
+            ("poll_interval_minutes", 360, 15, 1440, 1),
+            ("max_requests_per_day", 10, 1, 1000, 1),
+            ("initial_requests_used", 10, 0, 1000, 1),
+            ("dampening_factor", 1., 0, 2, .01)):
+            fields[vol.Required(key, default=display.get(key, default))] = selector.NumberSelector(
+                selector.NumberSelectorConfig(min=low,max=high,step=step,mode=selector.NumberSelectorMode.BOX))
+        hourly = display.get("hourly_factors", "")
+        fields[vol.Optional("hourly_factors", default=hourly if isinstance(hourly, str) else " ".join(map(str, hourly)))] = selector.TextSelector()
+        if adaptive:
+            fields[vol.Required("accept_manual_calibration", default=False)] = selector.BooleanSelector()
+        return self.async_show_form(step_id="solcast_manual", errors=errors,
+            data_schema=vol.Schema(fields), description_placeholders={"import_note":
+                "Poprzedni Solcast używa automatycznej lub osobnej kalibracji dla instalacji. Te korekty nie zostały skopiowane; wprowadź je ręcznie i potwierdź." if adaptive else
+                "Zapisany klucz pozostaje ukryty. Puste pole zachowuje dotychczasowy klucz."})
+
+    async def async_step_solcast_import(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        entries = self.hass.config_entries.async_entries("solcast_solar")
+        if not entries:
+            return self.async_abort(reason="no_solcast_to_import")
+        if user_input is not None:
+            entry = next((e for e in entries if e.entry_id == user_input.get("source_entry")), None)
+            if entry is None:
+                return self.async_abort(reason="no_solcast_to_import")
+            source = {**entry.data, **entry.options}
+            self._import_adaptive = bool(source.get("auto_dampen") or source.get("site_damp"))
+            self._solcast_draft = {**self._solcast_values(), "api_key": source.get("api_key", ""),
+                "resource_ids": [], "dampening_factor": 1.,
+                "hourly_factors": [1.] * 24 if self._import_adaptive else [source.get(f"damp{h:02}", 1.) for h in range(24)],
+                "initial_requests_used": 10}
+            return await self.async_step_solcast_manual()
+        return self.async_show_form(step_id="solcast_import", data_schema=vol.Schema({
+            vol.Required("source_entry"): selector.SelectSelector(selector.SelectSelectorConfig(
+                options=[{"value": e.entry_id, "label": e.title} for e in entries]))}))
+
+    async def async_step_solcast_disable(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        config = {**self._solcast_values(), "enabled": False, "config_generation": uuid4().hex}
+        return self.async_create_entry(title="", data={**dict(self.config_entry.options), "solcast": config})
 
     def _loads(self):
         return list(self.config_entry.options.get("extra_loads", self.config_entry.data.get("extra_loads", [])))
@@ -101,7 +200,11 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
             if not errors:
                 return self.async_create_entry(title="", data={**dict(self.config_entry.options), **user_input})
         return self.async_show_form(step_id="parameters", errors=errors,
-            data_schema=_schema({**values, **(user_input or {})}, OPTION_RANGES))
+            data_schema=_schema({**values, **(user_input or {})}, OPTION_RANGES).extend({
+                vol.Required("pv_forecast_mode", default=(user_input or {}).get("pv_forecast_mode", values["pv_forecast_mode"])):
+                    selector.SelectSelector(selector.SelectSelectorConfig(options=[
+                        {"value": "whole_system", "label": "Solcast / prognoza całej instalacji (bez skalowania)"},
+                        {"value": "specific_profile", "label": "Profil referencyjny (skalowanie według mocy kWp)"}]))}))
 
     async def async_step_sources(self, user_input=None):
         if self._mapping_locked():

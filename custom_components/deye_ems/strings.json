@@ -7,7 +7,10 @@
         "description": "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
         "data": {
           "min_soc_percent": "Minimalny bezpieczny SoC",
-          "capacity_kwh": "Pojemność akumulatora",
+          "capacity_kwh": "Pojemność magazynu",
+          "pv_peak_kwp": "Zainstalowana moc PV",
+          "inverter_max_power_kw": "Moc falownika — łącznie",
+          "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "grid_import_limit_kw": "Maksymalny import łącznie",
           "grid_phase_limit_kw": "Maksymalny import na fazę"
         }
@@ -27,15 +30,20 @@
         "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.",
         "data": {
           "min_soc_percent": "Minimalny bezpieczny SoC",
-          "capacity_kwh": "Pojemność akumulatora",
+          "capacity_kwh": "Pojemność magazynu",
+          "pv_peak_kwp": "Zainstalowana moc PV",
+          "pv_forecast_reference_kwp": "Moc instalacji referencyjnej prognozy",
           "grid_import_limit_kw": "Maksymalny import łącznie",
           "grid_phase_limit_kw": "Maksymalny import na fazę",
+          "inverter_max_power_kw": "Moc falownika — łącznie",
+          "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "reserve_margin_soc_percent": "Dodatkowy bufor prognozy",
           "winter_weather_soc_percent": "Zimowy cel przy słabej prognozie PV",
           "grid_current_max_a": "Maksymalny prąd ładowania z sieci",
           "charge_max_kw": "Modelowy limit ładowania baterii",
           "discharge_max_kw": "Modelowy limit rozładowania baterii",
-          "grid_max_soc_percent": "Maksymalny cel doładowania z sieci"
+          "grid_max_soc_percent": "Maksymalny cel doładowania z sieci",
+          "pv_forecast_mode": "Sposób interpretacji prognozy PV"
         }
       },
       "sources": {
@@ -104,23 +112,57 @@
           "load_id": "Odbiornik do usunięcia"
         }
       },
+      "solcast_manual": {
+        "title": "Solcast wewnątrz EMS",
+        "description": "Wbudowany klient nie wymaga osobnej integracji Solcast. Klucz i identyfikatory znajdziesz w toolkit.solcast.com.au. Moc AC/DC, kierunek i nachylenie paneli ustaw w portalu Solcast; EMS pobiera prognozę dla zapisanej tam instalacji. Zwykły limit Hobbyist: 10 zapytań na dobę UTC, każde pobranie dla każdej instalacji zużywa osobne zapytanie. Nie odpytuj równocześnie tego konta innym klientem. Przy nieznanym zużyciu pozostaw 10; klient zaczeka na nową dobę UTC. Wpisane zużycie nie zmniejsza rejestru; po zmianie konfiguracji może go podnieść. {import_note}",
+        "data": {
+          "api_key": "Klucz API Solcast (puste pole zachowuje zapisany)",
+          "resource_ids": "Identyfikatory instalacji Solcast (oddzielone przecinkami; puste = wykrywanie)",
+          "poll_interval_minutes": "Odstęp pobierania (minuty)",
+          "max_requests_per_day": "Limit zapytań konta na dobę UTC",
+          "initial_requests_used": "Zapytania już wykorzystane dziś na koncie (UTC)",
+          "dampening_factor": "Stały mnożnik korekty prognozy",
+          "hourly_factors": "24 mnożniki godzinowe 00–23 (oddzielone spacjami; puste = 1)",
+          "accept_manual_calibration": "Rozumiem, że automatyczna kalibracja poprzedniej integracji nie została przeniesiona"
+        }
+      },
+      "solcast_import": {
+        "title": "Import dostępnych ustawień Solcast",
+        "description": "Klucz jest kopiowany lokalnie w HA. Można przenieść stałe mnożniki godzinowe. Automatyczna kalibracja i osobne korekty poszczególnych instalacji wymagają ręcznego sprawdzenia; kreator je zgłosi. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta.",
+        "data": {
+          "source_entry": "Obecna integracja Solcast"
+        }
+      },
       "init": {
         "title": "Deye EMS",
         "menu_options": {
           "parameters": "Parametry i bezpieczny SoC",
           "sources": "Encje pomiarowe i sterujące",
+          "solcast": "Solcast — połączenie i ustawienia",
           "add_load": "Dodaj dodatkowe zużycie",
           "remove_load": "Usuń dodatkowe zużycie"
+        }
+      },
+      "solcast": {
+        "title": "Solcast wewnątrz EMS",
+        "menu_options": {
+          "solcast_manual": "Połącz / zmień ustawienia",
+          "solcast_import": "Importuj dostępne ustawienia z HA",
+          "solcast_disable": "Wyłącz pobieranie przez EMS"
         }
       }
     },
     "error": {
       "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
-      "duplicate_load": "Ten licznik energii jest już dodany."
+      "duplicate_load": "Ten licznik energii jest już dodany.",
+      "pv_reference_required": "Wpisz moc referencyjną profilu przed włączeniem skalowania.",
+      "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
+      "import_calibration_required": "Sprawdź korekty prognozy i potwierdź, że automatyczna kalibracja nie została przeniesiona."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
-      "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki."
+      "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki.",
+      "no_solcast_to_import": "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie."
     }
   }
 }

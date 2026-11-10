@@ -7,6 +7,7 @@ import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import importlib.util
+import json
 from pathlib import Path
 import sys
 from types import ModuleType, SimpleNamespace
@@ -85,7 +86,8 @@ class Harness:
         self.hass = SimpleNamespace(states=SimpleNamespace(get=self.states.get),
                                     services=SimpleNamespace(async_call=self.call),
                                     config_entries=SimpleNamespace(async_update_entry=self.update_entry))
-        self.entry = SimpleNamespace(entry_id="offline", data=initial or {}, options=options or {})
+        defaults = {"pv_peak_kwp": 20., "pv_forecast_reference_kwp": None, "pv_forecast_mode": "whole_system"}
+        self.entry = SimpleNamespace(entry_id="offline", data={**defaults, **(initial or {})}, options=options or {})
         self.co = Coordinator(self.hass, self.entry, store=self.store, clock=lambda: self.now,
                               statistics_provider=self.statistics)
         for entity in OWNERS:
@@ -159,6 +161,9 @@ class Harness:
 
     async def tick(self):
         self.co.data = await self.co._async_update_data()
+        if self.co._plan_task is not None:
+            await self.co._plan_task
+            self.co.data = await self.co._async_update_data()
         return self.co.data
 
     def current_calls(self):
@@ -382,6 +387,25 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         await h.tick()
         self.assertEqual(h.calls, [])
 
+    async def test_lower_inverter_total_and_phase_ratings_limit_current_and_planner(self):
+        h = Harness(options={"inverter_max_power_kw": 4, "inverter_phase_max_power_kw": 1.5})
+        inputs = h.co._read_inputs(h.now)
+        g = h.co._grid_input(inputs, h.now, 75, False)
+        self.assertEqual(g["total_limit_w"], 4000)
+        self.assertEqual(g["phase_limit_w"], 1500)
+        self.assertEqual(runtime.calculate_grid_charge_cap(g)["cap_a"], 10)
+        captured = []
+        planner = h.co._planner
+        def calculate(value):
+            captured.append(deepcopy(value["config"]))
+            return planner(value)
+        h.co._planner = calculate
+        await h.co._make_plan(h.now, inputs)
+        self.assertEqual(captured[0]["inverter_max_kw"], 4)
+        self.assertEqual(captured[0]["grid_import_max_kw"], 4)
+        self.assertEqual(captured[0]["charge_max_kw"], 4)
+        self.assertEqual(captured[0]["discharge_max_kw"], 4)
+
 
 class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
     def rows(self, now, value):
@@ -466,7 +490,7 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         at = int(h.now.timestamp()//1800)*1800
         h.co._memory["forecast_cache"] = {str(at): {"p10": 1, "p50": 2}}
         h.set("pv_today", 0, attributes={"detailedForecast": [{"period_start": h.now.isoformat(), "pv_estimate10": 3, "pv_estimate": 1}]})
-        self.assertEqual(h.co._solar_points(h.now)[str(at)], {"p10": 1, "p50": 2})
+        self.assertEqual((await h.co._solar_points(h.now))[str(at)], {"p10": 1, "p50": 2})
 
     async def test_unreachable_and_foreign_plans_are_not_cached(self):
         h = Harness()
@@ -492,6 +516,9 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
                         "source": "own_deterministic_planner", "season": "winter" if winter else "summer",
                         "emergency": not winter and target > h.co.options["min_soc_percent"],
                         "grid_charge_allowed": winter or target > h.co.options["min_soc_percent"],
+                        "pv_peak_kwp": h.co.options["pv_peak_kwp"],
+                        "pv_forecast_reference_kwp": h.co.options["pv_forecast_reference_kwp"],
+                        "pv_forecast_mode": h.co.options["pv_forecast_mode"],
                         "unreachable": status == "unreachable"}
                    for key, deadline in h.co._deadlines(h.now).items()}
         return {"status": status, "quality": "valid", "source": "own_deterministic_planner",
@@ -561,6 +588,309 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["control"]["target_soc"], 95)
         self.assertEqual(result["control"]["next_a"], 0)
         self.assertEqual(h.states[SOURCES["tou_gc_3"]].state, "off")
+
+
+class DirectSolcastBridge(unittest.IsolatedAsyncioTestCase):
+    secret = "synthetic-solcast-private-api-key"
+
+    def harness(self, **changes):
+        config = {"api_key": self.secret, "resource_ids": ["site-1"], "enabled": True,
+                  "poll_interval_minutes": 360, "max_requests_per_day": 10,
+                  "dampening_factor": 1, "initial_requests_used": 0, "config_generation": "one"}
+        config.update(changes)
+        h = Harness(options={"solcast": config})
+        self.requests = []
+        self.configs = []
+        outer = self
+
+        async def fetch(url, *, headers, params):
+            outer.requests.append((url, headers, params))
+            # A durable quota reservation already exists when HTTP begins.
+            assert h.store.saved["solcast_cache"]["quota"]["used"] >= 1
+            return {"status": 200, "data": {"periods": [
+                {"period_start": h.now.isoformat(), "pv_estimate": 1., "pv_estimate10": .5}]}, "headers": {}}
+
+        class Client:
+            def __init__(self, fetch_json, persist, state=None):
+                self.fetch = fetch_json
+                self.persist = persist
+                self.state = deepcopy(state or {})
+
+            async def async_forecast(self, cfg, now):
+                outer.configs.append(deepcopy(cfg))
+                if self.state.get("periods") and now.timestamp()-self.state["at"] < 360*60:
+                    return {"status": "cached", "periods": self.state["periods"], "source": "solcast_cache"}
+                self.state["quota"] = {"used": self.state.get("quota", {}).get("used", 0)+1}
+                await self.persist(self.state)
+                result = await self.fetch("https://api.solcast.com.au/rooftop_sites/site-1/forecasts",
+                                          headers={"Authorization": f"Bearer {cfg['api_key']}"}, params={"format": "json"})
+                self.state.update(periods=result["data"]["periods"], at=now.timestamp())
+                await self.persist(self.state)
+                return {"status": "ok", "periods": self.state["periods"], "source": "solcast_api",
+                        "sites": [{"resource_id": "site-1", "api_key": cfg["api_key"]}],
+                        "reason": f"synthetic response {cfg['api_key']}"}
+
+        h.co._solcast_factory = Client
+        h.co._solcast_fetcher = fetch
+        return h
+
+    async def test_direct_provider_reserves_quota_and_never_reads_legacy_solcast_entities(self):
+        h = self.harness()
+        legacy = {SOURCES[key] for key in ("pv_today", "pv_tomorrow", "pv_day3")}
+        def get_state(entity):
+            if entity in legacy:
+                raise AssertionError("Configured direct provider read a legacy Solcast entity")
+            return h.states.get(entity)
+        h.hass.states.get = get_state
+        points = await h.co._solar_points(h.now)
+        self.assertEqual(points[str(int(h.now.timestamp()))], {"p10": .5, "p50": 1.})
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.requests[0][1]["Authorization"], f"Bearer {self.secret}")
+        self.assertNotIn("api_key", self.requests[0][2])
+        self.assertEqual(h.calls, [])
+
+    async def test_api_key_absent_from_public_options_data_cache_and_planner_inputs(self):
+        h = self.harness()
+        captured = []
+        planner = h.co._planner
+        def calculate(inputs):
+            captured.append(deepcopy(inputs))
+            return planner(inputs)
+        h.co._planner = calculate
+        h.co._plan_due = 0
+        await h.tick()
+        for value in (h.co.options, h.co.data, h.co._memory, h.store.saved):
+            self.assertNotIn(self.secret, json.dumps(value))
+        self.assertNotIn(self.secret, json.dumps(captured, default=str))
+        self.assertNotIn("solcast", h.co.options)
+        self.assertTrue(h.co.options["solcast_configured"])
+        self.assertEqual(h.co.options["solcast_site_count"], 1)
+        self.assertNotIn("solcast", captured[0]["config"])
+
+    async def test_failed_durable_quota_reservation_prevents_http(self):
+        h = self.harness()
+        h.store.fail = True
+        self.assertEqual(await h.co._solar_points(h.now), {})
+        self.assertEqual(self.requests, [])
+        self.assertEqual(h.co._solcast_status["status"], "unavailable")
+
+    async def test_five_minute_planning_does_not_force_provider_polling(self):
+        h = self.harness()
+        await h.co._solar_points(h.now)
+        h.advance(300)
+        await h.co._solar_points(h.now)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(h.co._solcast_status["status"], "cached")
+
+    async def test_new_configuration_clears_site_forecasts_but_preserves_consumed_quota(self):
+        h = self.harness()
+        h.co._ensure_forecast_context()
+        h.co._memory["solcast_cache"] = {"quota": {"used": 8}, "per_site": {"old": {}}, "sites": {"old": {}}}
+        h.co._memory["forecast_cache"] = {"old": {"p10": 1, "p50": 2}}
+        h.co._memory["target_cache"] = {"night": {"soc_percent": 45}}
+        h.co._options["solcast"]["config_generation"] = "two"
+        h.co._ensure_forecast_context()
+        self.assertEqual(h.co._memory["solcast_cache"], {"quota": {"used": 8}})
+        self.assertEqual(h.co._memory["forecast_cache"], {})
+        self.assertEqual(h.co._memory["target_cache"], {})
+
+    async def test_capacity_change_does_not_rescale_raw_provider_points(self):
+        h = self.harness()
+        h.co._options.update(pv_peak_kwp=40, pv_forecast_reference_kwp=20, pv_forecast_mode="whole_system")
+        points = await h.co._solar_points(h.now)
+        self.assertEqual(points[str(int(h.now.timestamp()))]["p50"], 1.)
+
+    async def test_reimport_quota_seed_raises_existing_usage_without_resetting_cooldown(self):
+        h = self.harness(initial_requests_used=10)
+        h.co._ensure_forecast_context()
+        day = h.now.date().isoformat()
+        utc_day = h.now.astimezone(timezone.utc).date().isoformat()
+        previous_request = h.now.timestamp()-60
+        retry = h.now.timestamp()+600
+        h.co._memory["solcast_cache"] = {"quota": {
+            "utc": {"day": utc_day, "used": 2}, "warsaw": {"day": day, "used": 4}},
+            "last_request_ts": previous_request, "retry_after": retry}
+        h.co._options["solcast"]["config_generation"] = "new-import"
+        h.co._ensure_forecast_context()
+        saved = h.co._memory["solcast_cache"]
+        self.assertEqual(saved["quota"]["utc"]["used"], 10)
+        self.assertEqual(saved["quota"]["warsaw"]["used"], 10)
+        self.assertEqual(saved["last_request_ts"], previous_request)
+        self.assertEqual(saved["retry_after"], retry)
+        h.co._options["solcast"].update(initial_requests_used=1, config_generation="third-import")
+        h.co._ensure_forecast_context()
+        self.assertEqual(saved["quota"]["utc"]["used"], 10)
+
+    async def test_reimport_does_not_reapply_seed_each_new_calendar_day_or_repair_future_ledger(self):
+        h = self.harness(initial_requests_used=10)
+        h.co._ensure_forecast_context()
+        h.co._memory["solcast_cache"] = {"quota": {"utc": {"day": "2026-11-11", "used": 12},
+                                                                  "warsaw": {"day": "2026-11-10", "used": 10}}}
+        h.co._options["solcast"]["config_generation"] = "new-import"
+        h.co._ensure_forecast_context()
+        self.assertEqual(h.co._memory["solcast_cache"]["quota"]["utc"], {"day": "2026-11-11", "used": 12})
+        h.advance(86400)
+        h.co._memory["solcast_cache"]["quota"]["utc"]["used"] = 1
+        h.co._ensure_forecast_context()
+        self.assertEqual(h.co._memory["solcast_cache"]["quota"]["utc"]["used"], 1)
+
+    async def test_enabled_false_uses_selected_ha_forecast_without_direct_http(self):
+        h = self.harness(enabled=False)
+        h.set("pv_today", 0, attributes={"detailedForecast": [
+            {"period_start": h.now.isoformat(), "pv_estimate": 2., "pv_estimate10": 1.}]})
+        points = await h.co._solar_points(h.now)
+        self.assertEqual(points[str(int(h.now.timestamp()))]["p50"], 2.)
+        self.assertEqual(self.requests, [])
+        self.assertFalse(h.co.options["solcast_configured"])
+        self.assertEqual(h.co._solcast_status["status"], "ha_entities")
+
+    async def test_quota_seed_is_once_per_explicit_generation_not_context_or_restart(self):
+        h = self.harness(initial_requests_used=10)
+        h.co._ensure_forecast_context()
+        day = h.now.astimezone(timezone.utc).date().isoformat()
+        h.co._memory["solcast_cache"] = {"quota": {
+            "utc": {"day": day, "used": 2}, "warsaw": {"day": h.now.date().isoformat(), "used": 2}}}
+        h.co._options["solcast"]["dampening_factor"] = .9
+        h.co._ensure_forecast_context()  # Context changed; generation did not.
+        self.assertEqual(h.co._memory["solcast_cache"]["quota"]["utc"]["used"], 2)
+        await h.co._save()
+        h.advance(86400)
+        await h.co.async_initialize()  # Same generation on the next day.
+        h.co._options["solcast"]["dampening_factor"] = .8
+        h.co._ensure_forecast_context()
+        self.assertEqual(h.co._memory["solcast_cache"]["quota"]["utc"], {"day": day, "used": 2})
+        self.assertEqual(h.co._memory["solcast_seed"]["generation"], "one")
+
+    async def test_activation_requires_explicit_installed_capacity(self):
+        h = Harness(initial={"pv_peak_kwp": None})
+        with self.assertRaises(ValueError):
+            await h.co.async_set_mode("active")
+        self.assertEqual(h.calls, [])
+
+    async def test_http_adapter_rejects_nonofficial_hosts_redirect_targets_and_query_keys(self):
+        h = self.harness()
+        for url in ("http://api.solcast.com.au/rooftop_sites", "https://evil.example/rooftop_sites",
+                    "https://api.solcast.com.au/rooftop_sites?api_key=forbidden",
+                    "https://api.solcast.com.au:8443/rooftop_sites"):
+            with self.assertRaises(ValueError):
+                await h.co._solcast_fetch_json(url, headers={}, params={})
+        with self.assertRaises(ValueError):
+            await h.co._solcast_fetch_json("https://api.solcast.com.au/rooftop_sites", headers={}, params={"api_key": "forbidden"})
+
+    async def test_cache_generated_for_other_pv_capacity_is_rejected(self):
+        h = Harness()
+        plan = ProfilesAndCache().plan(h, 45)
+        h.co._accept_targets(plan, h.now)
+        self.assertEqual(h.co._target(h.now)[0], 45)
+        h.co._options["pv_peak_kwp"] = 30
+        self.assertEqual(h.co._target(h.now)[2], "winter_fallback")
+
+    async def test_real_solcast_client_bridge_with_http_stub_and_durable_actual_quota_schema(self):
+        path = folder/"solcast.py"
+        spec = importlib.util.spec_from_file_location("runtime_real_solcast", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        h = self.harness()
+        calls = []
+        async def http(url, *, headers, params):
+            quota = h.store.saved["solcast_cache"]["quota"]
+            self.assertEqual(quota["utc"]["used"], 1)
+            self.assertEqual(quota["warsaw"]["used"], 1)
+            calls.append(url)
+            rows = [{"period_end": (h.now+timedelta(minutes=30*(i+1))).isoformat(),
+                     "period": "PT30M", "pv_estimate": 1., "pv_estimate10": .5}
+                    for i in range(144)]
+            return {"status": 200, "data": {"forecasts": rows}, "headers": {}}
+        h.co._solcast_factory = module.SolcastClient
+        h.co._solcast_fetcher = http
+        points = await h.co._solar_points(h.now)
+        self.assertGreaterEqual(len(points), 96)
+        self.assertEqual(h.co._solcast_status["status"], "ok")
+        h.advance(300)
+        await h.co._solar_points(h.now)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(h.co._solcast_status["status"], "cached")
+        self.assertNotIn(self.secret, json.dumps(h.co._memory))
+        self.assertNotIn(self.secret, json.dumps(h.store.saved))
+
+    async def test_blocked_forecast_http_does_not_block_overload_safety_and_shutdown_cancels_it(self):
+        h = self.harness()
+        entered, released, cancelled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        async def blocked(url, *, headers, params):
+            entered.set()
+            try:
+                await released.wait()
+            finally:
+                cancelled.set()
+            return {"status": 200, "data": {"periods": []}, "headers": {}}
+        h.co._solcast_fetcher = blocked
+        h.co._plan_due = 0
+        h.active()
+        await asyncio.wait_for(h.co._async_update_data(), .5)
+        await asyncio.wait_for(entered.wait(), .5)
+        task = h.co._plan_task
+        self.assertFalse(task.done())
+        h.advance(10)
+        h.set("grid_power", 13000, "W")
+        h.set("grid_l1_power", 5500, "W")
+        h.set("grid_l2_power", 4000, "W")
+        h.set("grid_l3_power", 3500, "W")
+        await asyncio.wait_for(h.co._async_update_data(), .5)
+        self.assertEqual(h.current_calls()[-1], 0)
+        self.assertFalse(task.done())
+        await asyncio.wait_for(h.co.async_shutdown(), .5)
+        self.assertTrue(task.cancelled())
+        self.assertTrue(cancelled.is_set())
+        self.assertIsNone(h.co._plan_task)
+
+    async def test_old_inflight_configuration_cannot_publish_new_plan_or_forecast(self):
+        h = self.harness()
+        entered, released = asyncio.Event(), asyncio.Event()
+        async def blocked(url, *, headers, params):
+            entered.set()
+            await released.wait()
+            return {"status": 200, "data": {"periods": [
+                {"period_start": h.now.isoformat(), "pv_estimate": 1., "pv_estimate10": .5}]}, "headers": {}}
+        h.co._solcast_fetcher = blocked
+        h.co._planner = lambda inputs: ProfilesAndCache().plan(h, 95)
+        h.co._plan_due = 0
+        await asyncio.wait_for(h.co._async_update_data(), .5)
+        await asyncio.wait_for(entered.wait(), .5)
+        task = h.co._plan_task
+        h.co._options["solcast"]["config_generation"] = "changed-inflight"
+        released.set()
+        await asyncio.wait_for(task, .5)
+        self.assertEqual(h.co._memory["target_cache"], {})
+        self.assertEqual(h.co._memory["forecast_cache"], {})
+        self.assertEqual(h.co._memory["plan"], {})
+        self.assertEqual(h.co._last_error, "stale_planning_snapshot")
+        await h.co.async_shutdown()
+
+    async def test_serial_store_snapshot_keeps_newer_attempt_ledger_and_quota(self):
+        h = Harness()
+        entered, released = asyncio.Event(), asyncio.Event()
+        calls = []
+        async def save(value):
+            calls.append(deepcopy(value))
+            if len(calls) == 1:
+                entered.set()
+                await released.wait()
+            h.store.saved = deepcopy(value)
+        h.store.async_save = save
+        entity = SOURCES["grid_current_number"]
+        h.co._memory["ledger"][entity] = {"at": h.now.timestamp(), "a": 2}
+        first = asyncio.create_task(h.co._save())
+        await asyncio.wait_for(entered.wait(), .5)
+        h.co._memory["ledger"][entity]["a"] = 4
+        h.co._memory["solcast_cache"] = {"quota": {"utc": {"used": 8}}}
+        second = asyncio.create_task(h.co._save())
+        await asyncio.sleep(0)
+        released.set()
+        await asyncio.wait_for(asyncio.gather(first, second), .5)
+        self.assertEqual(h.store.saved["ledger"][entity]["a"], 4)
+        self.assertEqual(h.store.saved["solcast_cache"]["quota"]["utc"]["used"], 8)
+        self.assertEqual(calls[0]["ledger"][entity]["a"], 2)
+        self.assertEqual(calls[1]["ledger"][entity]["a"], 4)
 
 
 if __name__ == "__main__":

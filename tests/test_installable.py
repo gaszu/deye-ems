@@ -2,14 +2,19 @@
 import ast
 from copy import deepcopy
 import json
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1] / "custom_components/deye_ems"
 C = {}
 exec((ROOT/"const.py").read_text(encoding="utf-8"), C)
+spec = importlib.util.spec_from_file_location("offline_solcast", ROOT/"solcast.py")
+SOLCAST = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(SOLCAST)
 
 def load(filename, values):
     tree = ast.parse((ROOT/filename).read_text(encoding="utf-8"))
@@ -23,6 +28,19 @@ class Flow:
     def _abort_if_unique_id_configured(self): pass
     def async_create_entry(self, **kw): return {"type":"create_entry", **kw}
     def async_abort(self, **kw): return {"type":"abort", **kw}
+    def async_show_form(self, **kw): return {"type":"form", **kw}
+
+class Marker:
+    def __init__(self, key, **kw): self.key, self.kw = key, kw
+
+class Schema(dict):
+    def extend(self, fields): return Schema({**self, **fields})
+
+class Selectors:
+    NumberSelectorMode = SimpleNamespace(BOX="box")
+    TextSelectorType = SimpleNamespace(PASSWORD="password")
+    def __getattr__(self, name):
+        return lambda *args, **kw: {"kind": name, "args": args, **kw}
 
 class Coordinator:
     def __init__(self, hass, entry): self.mode, self.data = "shadow", {}
@@ -33,12 +51,16 @@ class Coordinator:
 class Installation(unittest.IsolatedAsyncioTestCase):
     def flow(self):
         return load("config_flow.py", {**C, "__name__":"offline_flow",
+            "uuid4": uuid4, "validate_config": SOLCAST.validate_config,
+            "vol": SimpleNamespace(Required=Marker,Optional=Marker,Secret=lambda k:k,Schema=Schema),
+            "selector": Selectors(),
             "callback": lambda f:f, "config_entries": SimpleNamespace(ConfigFlow=Flow,OptionsFlow=Flow)})
 
     async def test_setup_keeps_entered_minimum_without_helper_or_active_mode(self):
         result = await self.flow()["DeyeEMSConfigFlow"]().async_step_user(
-            dict(min_soc_percent=60,capacity_kwh=66,grid_import_limit_kw=12,grid_phase_limit_kw=5))
+            dict(min_soc_percent=60,capacity_kwh=99,grid_import_limit_kw=12,grid_phase_limit_kw=5))
         self.assertEqual(result["data"]["min_soc_percent"],60)
+        self.assertEqual(result["data"]["capacity_kwh"],99)
         self.assertNotIn("active",result["data"])
         self.assertTrue(all(not s.startswith(("input_","automation.","sensor.ems_"))
             for s in result["data"]["sources"].values()))
@@ -47,10 +69,67 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         flow = self.flow()["DeyeEMSOptionsFlow"]()
         flow.config_entry = SimpleNamespace(runtime_data=SimpleNamespace(mode="active"),options={},data={})
         before = deepcopy(flow.config_entry.options)
-        for method in ("async_step_sources","async_step_add_load","async_step_remove_load"):
+        for method in ("async_step_sources","async_step_add_load","async_step_remove_load",
+                "async_step_solcast", "async_step_solcast_manual", "async_step_solcast_import", "async_step_solcast_disable"):
             r = await getattr(flow,method)({"ignored":"unsafe mapping"})
             self.assertEqual(r,dict(type="abort",reason="stop_before_mapping"))
         self.assertEqual(flow.config_entry.options,before)
+
+    async def test_solcast_configuration_keeps_private_key_and_changes_generation(self):
+        normalize = self.flow()["_solcast_input"]
+        previous = {"api_key": "synthetic-key-for-test", "config_generation": "old"}
+        values = {"resource_ids": "site-a; site-b\nsite-c", "initial_requests_used": 7}
+        a, b = normalize(values, previous), normalize(values, previous)
+        self.assertEqual(a["resource_ids"], ["site-a", "site-b", "site-c"])
+        self.assertEqual(a["api_key"], previous["api_key"])
+        self.assertEqual(a["initial_requests_used"], 7)
+        self.assertEqual(a["hourly_factors"], [1.] * 24)
+        self.assertNotEqual(a["config_generation"], b["config_generation"])
+        self.assertEqual(previous["config_generation"], "old")
+
+    async def test_solcast_configuration_rejects_bad_corrections_and_missing_key(self):
+        normalize = self.flow()["_solcast_input"]
+        for values in ({}, {"api_key":"synthetic-key-for-test", "hourly_factors":"1 2"},
+                {"api_key":"synthetic-key-for-test", "resource_ids":"../private"},
+                {"api_key":"synthetic-key-for-test", "initial_requests_used":-1}):
+            with self.assertRaises(ValueError):
+                normalize(values, {})
+
+    async def test_solcast_disable_retains_credentials_without_enabling_other_controller(self):
+        flow = self.flow()["DeyeEMSOptionsFlow"]()
+        flow.config_entry = SimpleNamespace(options={"solcast":{"api_key":"synthetic-key-for-test", "enabled":True}}, data={})
+        r = await flow.async_step_solcast_disable()
+        self.assertFalse(r["data"]["solcast"]["enabled"])
+        self.assertEqual(r["data"]["solcast"]["api_key"], "synthetic-key-for-test")
+        self.assertEqual(flow.config_entry.options["solcast"]["enabled"], True)
+
+    async def test_solcast_form_never_prefills_or_echoes_saved_or_submitted_key(self):
+        flow = self.flow()["DeyeEMSOptionsFlow"]()
+        flow.config_entry = SimpleNamespace(options={"solcast":{"api_key":"synthetic-secret-saved", "resource_ids":["site-a"]}}, data={})
+        for values in (None, {"api_key":"synthetic-secret-new", "hourly_factors":"1"}):
+            r = await flow.async_step_solcast_manual(values)
+            fields = {m.key:(m.kw, config) for m,config in r["data_schema"].items()}
+            self.assertEqual(fields["api_key"][0], {})
+            self.assertEqual(fields["api_key"][1]["args"][0]["type"], "password")
+            self.assertNotIn("synthetic-secret", repr(fields))
+        self.assertEqual(flow.config_entry.options["solcast"]["api_key"], "synthetic-secret-saved")
+
+    async def test_import_warns_before_replacing_adaptive_calibration(self):
+        flow = self.flow()["DeyeEMSOptionsFlow"]()
+        flow.config_entry = SimpleNamespace(options={},data={})
+        old = SimpleNamespace(entry_id="old",title="Solcast",data={}, options={
+            "api_key":"synthetic-key-for-test", "auto_dampen":True,"damp12":.7})
+        flow.hass = SimpleNamespace(config_entries=SimpleNamespace(async_entries=lambda _: [old]))
+        r = await flow.async_step_solcast_import({"source_entry":"old"})
+        self.assertIn("nie zostały skopiowane", r["description_placeholders"]["import_note"])
+        self.assertNotIn("synthetic-key-for-test", repr(r))
+        r = await flow.async_step_solcast_manual({"resource_ids":"site-a"})
+        self.assertEqual(r["errors"]["base"], "import_calibration_required")
+        r = await flow.async_step_solcast_manual({"resource_ids":"site-a", "accept_manual_calibration":True})
+        self.assertEqual(r["type"], "create_entry")
+        self.assertEqual(r["data"]["solcast"]["api_key"], "synthetic-key-for-test")
+        self.assertEqual(r["data"]["solcast"]["hourly_factors"], [1.] * 24)
+        self.assertTrue(old.options["auto_dampen"])
 
     async def test_inconsistent_soc_settings_are_rejected(self):
         errors = self.flow()["_errors"]

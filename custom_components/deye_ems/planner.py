@@ -8,6 +8,12 @@ The first timestamp is the Unix half-hour containing now. Explicit offsets
 disambiguate DST. A dated Solcast cache is acceptable when it covers this axis;
 retrieval age alone never makes a covered forecast stale.
 
+Default ``pv_forecast_mode=whole_system`` preserves site-specific source kW
+exactly. Only explicit ``specific_profile`` mode normalizes by the source's
+``pv_forecast_reference_kwp`` and multiplies by installed ``pv_peak_kwp``.
+The runtime must not scale source powers a second time. Installed capacity is
+required; a reference capacity is required only for explicit normalization.
+
 Optional inputs: ``soc_valid`` (runtime freshness verdict), ``retained_targets``
 (night/peak numbers or records containing soc_percent), and ``config`` using
 DEFAULTS keys. Runtime owns entity/unit/restored/freshness checks. Optional
@@ -37,6 +43,8 @@ DEFAULTS = {
     "grid_export_max_kw": 9.0, "inverter_max_kw": 12.0,
     "eta_charge": .95, "eta_discharge": .95,
     "eta_ac_dc": .96, "eta_dc_ac": .96,
+    "pv_peak_kwp": None, "pv_forecast_reference_kwp": None,
+    "pv_forecast_mode": "whole_system",
 }
 TOLERANCE_KWH = .005
 
@@ -68,8 +76,14 @@ def _settings(raw):
     except (ValueError, TypeError, KeyError):
         raise ValueError("invalid_timezone") from None
     for key in DEFAULTS:
-        if key != "timezone":
+        if key not in ("timezone", "pv_forecast_mode"):
+            if key in ("pv_peak_kwp", "pv_forecast_reference_kwp"):
+                if cfg[key] is not None:
+                    cfg[key] = _value(cfg[key], key, .1, 1000)
+                continue
             cfg[key] = _value(cfg[key], key)
+    if cfg["pv_forecast_mode"] not in ("whole_system", "specific_profile"):
+        raise ValueError("invalid_pv_forecast_mode")
     if not (1 <= cfg["capacity_kwh"] <= 1000
             and 40 <= cfg["minimum_soc_percent"] <= 90
             and cfg["minimum_soc_percent"] < cfg["grid_max_soc_percent"] <= 95
@@ -114,6 +128,10 @@ def _deadlines(now, zone):
 
 
 def _forecast(inputs, now, cfg):
+    installed, reference = cfg["pv_peak_kwp"], cfg["pv_forecast_reference_kwp"]
+    specific = cfg["pv_forecast_mode"] == "specific_profile"
+    if installed is None or specific and reference is None:
+        raise ValueError("pv_capacity_missing")
     rows = inputs.get("forecast")
     if not isinstance(rows, (list, tuple)) or len(rows) != 96:
         raise ValueError("incomplete_48h_forecast")
@@ -130,6 +148,12 @@ def _forecast(inputs, now, cfg):
         load = _value(row.get("load_kw"), "load_kw", high=1000)
         if p10 > p50 + 1e-7:
             raise ValueError("pv_p10_exceeds_p50")
+        if p50 > (reference if specific else installed) * 1.5 + 1e-7:
+            raise ValueError("forecast_capacity_mismatch")
+        # A correctly configured site-specific source already embeds capacity.
+        # Normalize only when the user explicitly selects specific-profile mode.
+        if specific:
+            p10, p50 = p10 / reference * installed, p50 / reference * installed
         result.append({"timestamp": at.isoformat(), "epoch": at.timestamp(),
                        "pv_p10_kw": p10, "pv_p50_kw": p50, "load_kw": load})
     return result
@@ -260,6 +284,15 @@ def _cached_target(record, item, now, cfg):
             or record.get("unreachable") is not False):
         return None
     try:
+        if record.get("pv_forecast_mode") != cfg["pv_forecast_mode"]:
+            return None
+        for key in ("pv_peak_kwp", "pv_forecast_reference_kwp"):
+            if key == "pv_forecast_reference_kwp" and cfg[key] is None and cfg["pv_forecast_mode"] == "whole_system":
+                if key not in record or record[key] is not None:
+                    return None
+                continue
+            if cfg[key] is None or _value(record.get(key), "cached_" + key, .1, 1000) != cfg[key]:
+                return None
         percent = _value(record.get("soc_percent"), "cached_soc_percent",
                          cfg["minimum_soc_percent"], cfg["grid_max_soc_percent"])
         if (percent != cfg["minimum_soc_percent"] or _winter(now)) and percent < cfg["minimum_soc_percent"] + cfg["margin_soc_percent"]:
@@ -314,6 +347,9 @@ def _fallback(now, cfg, inputs, reason):
                             grid_charge_allowed=True, unreachable=True,
                             required_soc_percent=None, reason="unverified_fallback",
                             source="own_conservative_fallback", generated_at=now.isoformat(),
+                            pv_peak_kwp=cfg["pv_peak_kwp"],
+                            pv_forecast_reference_kwp=cfg["pv_forecast_reference_kwp"],
+                            pv_forecast_mode=cfg["pv_forecast_mode"],
                             season="winter" if winter else "summer",
                             selection_source="conservative_fallback")
         if len(targets) == 2:
@@ -348,7 +384,9 @@ def plan_energy(inputs: dict) -> dict:
             if isinstance(raw_config, dict):
                 for name, lo, hi in (("minimum_soc_percent", 40, 90),
                                      ("winter_weather_soc_percent", 45, 95),
-                                     ("margin_soc_percent", 0, 20)):
+                                     ("margin_soc_percent", 0, 20),
+                                     ("pv_peak_kwp", .1, 1000),
+                                     ("pv_forecast_reference_kwp", .1, 1000)):
                     value = raw_config.get(name)
                     if (not isinstance(value, bool) and isinstance(value, (float, int))
                             and math.isfinite(value) and lo <= value <= hi):
@@ -409,6 +447,9 @@ def plan_energy(inputs: dict) -> dict:
                           grid_charge_allowed=allowed, unreachable=required > cfg["grid_max_soc_percent"],
                           reason=reason, weather_target_percent=weather, pv_coverage=coverage,
                           maximum_prefix_deficit_kwh=need, generated_at=now.isoformat(),
+                          pv_peak_kwp=cfg["pv_peak_kwp"],
+                          pv_forecast_reference_kwp=cfg["pv_forecast_reference_kwp"],
+                          pv_forecast_mode=cfg["pv_forecast_mode"],
                           season="winter" if _winter(now) else "summer",
                           source="own_deterministic_planner", selection_source="live_plan")
             targets.append(target)
@@ -439,6 +480,15 @@ def plan_energy(inputs: dict) -> dict:
                     source="own_deterministic_planner", generated_at=now.isoformat(),
                     season="winter" if season_winter else "summer", targets=public,
                     rows=projection, p10=risk, p50=central,
+                    forecast_normalization=dict(installed_kwp=cfg["pv_peak_kwp"],
+                        reference_kwp=cfg["pv_forecast_reference_kwp"],
+                        mode=cfg["pv_forecast_mode"],
+                        factor=(cfg["pv_peak_kwp"] / cfg["pv_forecast_reference_kwp"]
+                                if cfg["pv_forecast_mode"] == "specific_profile" else 1.),
+                        input_unit="whole_system_kw"),
+                    warnings=(["pv_reference_differs_whole_system_not_scaled"]
+                              if cfg["pv_forecast_mode"] == "whole_system" and cfg["pv_forecast_reference_kwp"] is not None
+                              and cfg["pv_forecast_reference_kwp"] != cfg["pv_peak_kwp"] else []),
                     baseline_p10=base10, baseline_p50=base50,
                     unreachable=unreachable, summer_emergency_window=None if season_winter else dict(
                         active=not _protected(now) and nearest["emergency"],
@@ -449,6 +499,7 @@ def plan_energy(inputs: dict) -> dict:
                                  "Grid charge only in cheap windows; no grid charging for export",
                                  "Phase LOAD is not forecast; live AC/phase/BMS limits and device ACK belong to the controller",
                                  "Grid charging uses the assumed5.3kW/108A model and the configured current cap",
+                                 "Whole-system PV is unchanged; only explicit specific-profile mode normalizes by reference then multiplies by installed kWp; raw peak1.5x nominal is a sanity assumption",
                                  "Beyond complete24h weather coverage, winter tail uses the configured weak-PV target conservatively"])
     except (ValueError, TypeError, KeyError, OverflowError) as exc:
         return _fallback(now, cfg, inputs, str(exc))

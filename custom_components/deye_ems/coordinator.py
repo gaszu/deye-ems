@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from functools import partial
 import logging
 import math
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from homeassistant.helpers.storage import Store
@@ -54,24 +55,35 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     """One durable runtime per config entry; service writes are always guarded."""
 
     def __init__(self, hass, entry, *, store=None, clock=None,
-                 planner=None, controller=None, statistics_provider=None):
+                 planner=None, controller=None, statistics_provider=None,
+                 solcast_factory=None, solcast_fetcher=None):
         self.entry = entry
         initial = dict(getattr(entry, "data", {}))
         self._options = {**DEFAULT_OPTIONS, **initial, **dict(entry.options)}
         self._sources = {**DEFAULT_SOURCES, **initial.get("sources", {}),
                          **dict(entry.options).get("sources", {})}
         self._options["sources"] = dict(self._sources)
+        self._options["solcast"] = {**initial.get("solcast", {}),
+                                   **dict(entry.options).get("solcast", {})}
+        self._solcast_factory = solcast_factory
+        self._solcast_fetcher = solcast_fetcher or self._solcast_fetch_json
+        self._solcast_client = None
+        self._solcast_status = {"status": "not_configured"}
         self._clock = clock or (lambda: datetime.now(_UTC))
         self._store = store or Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.runtime")
         self._planner = planner or plan_energy
         self._controller = controller or calculate_grid_charge
         self._statistics_provider = statistics_provider or self._recorder_statistics
         self._lock = asyncio.Lock()
+        self._store_lock = asyncio.Lock()
+        self._plan_task = None
+        self._planning_revision = 0
         self._stopped = False
         self._plan_due = 0.0
         self._memory = {"mode": "shadow", "target_cache": {}, "forecast_cache": {},
                         "load_profiles": {}, "ledger": {}, "plan": {}, "observed_owners": {},
-                        "slot_measurements": {}, "safety_raise": {}}
+                        "slot_measurements": {}, "safety_raise": {},
+                        "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {}}
         self._last_save_ts = 0
         self._last_error = None
         super().__init__(hass, _LOGGER, name="Deye EMS", config_entry=entry,
@@ -90,7 +102,32 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     @property
     def options(self):
-        return deepcopy(self._options)
+        public = {key: self._options[key] for key in {*DEFAULT_OPTIONS, "sources", "extra_loads"}
+                  if key != "solcast" and key in self._options}
+        config = self._options.get("solcast", {})
+        public["solcast_configured"] = self._solcast_configured()
+        public["solcast_site_count"] = len(config.get("resource_ids", []))
+        return self._redact(public)
+
+    def _redact(self, value):
+        """Secrets stay exclusively in the private ConfigEntry options."""
+        if isinstance(value, dict):
+            return {k: self._redact(v) for k, v in value.items()
+                    if str(k).lower() not in ("api_key", "apikey", "authorization", "access_token", "password", "token")}
+        if isinstance(value, (list, tuple)):
+            return [self._redact(item) for item in value]
+        if isinstance(value, str):
+            secret = self._options.get("solcast", {}).get("api_key")
+            if isinstance(secret, str):
+                for candidate in (secret, secret.strip()):
+                    if candidate:
+                        value = value.replace(candidate, "[redacted]")
+            return value
+        return deepcopy(value)
+
+    def _solcast_configured(self):
+        config = self._options.get("solcast", {})
+        return bool(config.get("api_key")) and config.get("enabled", True) is not False
 
     @property
     def mode(self):
@@ -106,6 +143,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         self._memory[key] = saved[key]
                 elif isinstance(saved.get(key), dict):
                     self._memory[key] = saved[key]
+        self._memory = self._redact(self._memory)
         # A restart does not grant authority over another controller, nor does
         # a restored active mode allow writes with unavailable telemetry.
         if self.mode == "active":
@@ -119,6 +157,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     async def async_shutdown(self):
         """Cancel future work, without emitting hardware commands on unload."""
         self._stopped = True
+        await self._cancel_planning()
         shutdown = getattr(super(), "async_shutdown", None)
         if shutdown is not None:
             await shutdown()
@@ -145,6 +184,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         or not isinstance(power, str) or (power and not power.startswith("sensor."))):
                     raise ValueError("Extra loads require unique energy sensors and valid power sensors")
                 seen.add(entity)
+        elif key == "solcast":
+            raise ValueError("Configure credentials in the integration setup")
+        elif key == "pv_forecast_mode":
+            if value not in ("whole_system", "specific_profile"):
+                raise ValueError("Invalid PV forecast mode")
+        elif key in ("pv_peak_kwp", "pv_forecast_reference_kwp") and value is None:
+            if key == "pv_peak_kwp" and self.mode == "active":
+                raise ValueError("Switch to shadow before clearing PV capacity")
         else:
             number = _number(value)
             low, high = OPTION_RANGES.get(key, (5, 300))[:2]
@@ -159,9 +206,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             candidate = {**self._options, key: value}
             if candidate["min_soc_percent"] + candidate["reserve_margin_soc_percent"] > candidate["grid_max_soc_percent"]:
                 raise ValueError("Minimum SoC plus reserve must not exceed the grid target ceiling")
+            await self._cancel_planning()
+            self._planning_revision += 1
             self._options[key] = value
+            if key != "update_seconds":
+                self._memory["plan"] = {}
             self._sources = {**DEFAULT_SOURCES, **self._options.get("sources", {})}
-            if key in ("min_soc_percent", "reserve_margin_soc_percent", "sources", "extra_loads"):
+            if key in ("min_soc_percent", "reserve_margin_soc_percent", "sources", "extra_loads",
+                       "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode"):
                 self._memory["target_cache"] = {}
                 self._memory["safety_raise"] = {}
                 self._memory["load_profiles"] = {}
@@ -193,8 +245,49 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
 
     async def _save(self):
-        await self._store.async_save(deepcopy(self._memory))
-        self._last_save_ts = self._now().timestamp()
+        async with self._store_lock:
+            # Snapshot only after acquiring the lock. A queued forecast save
+            # must include every newer quota reservation and hardware ledger.
+            writing = asyncio.create_task(self._store.async_save(self._redact(self._memory)))
+            try:
+                await asyncio.shield(writing)
+            except asyncio.CancelledError:
+                # Do not release the writer lock while the actual disk write
+                # is still running; a newer ledger must be written after it.
+                await writing
+                raise
+            self._last_save_ts = self._now().timestamp()
+
+    async def _cancel_planning(self):
+        task = self._plan_task
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._plan_task = None
+
+    def _start_planning(self, now, inputs):
+        if self._stopped or self._plan_task is not None and not self._plan_task.done():
+            return
+        self._plan_due = now.timestamp()+300
+        coroutine = self._background_plan(now, deepcopy(inputs))
+        if hasattr(self.hass, "async_create_background_task"):
+            self._plan_task = self.hass.async_create_background_task(coroutine, "Deye EMS forecast and plan")
+        elif hasattr(self.hass, "async_create_task"):
+            self._plan_task = self.hass.async_create_task(coroutine, "Deye EMS forecast and plan")
+        else:  # Offline framework stub.
+            self._plan_task = asyncio.create_task(coroutine, name="Deye EMS forecast and plan")
+
+    async def _background_plan(self, now, inputs):
+        try:
+            await self._make_plan(now, inputs)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self._last_error = f"background_plan_failed:{type(error).__name__}"
+            self._plan_due = self._now().timestamp()+60
 
     def _state(self, key):
         entity_id = self._sources.get(key)
@@ -302,6 +395,13 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if self._owner_conflicts(ignore_missing=retake):
             raise ValueError("Existing previous controllers must be OFF and observed controllers available")
         now = self._now()
+        installed = _number(self._options.get("pv_peak_kwp"))
+        if installed is None or not .1 <= installed <= 1000:
+            raise ValueError("Enter the installed PV capacity before activating control")
+        if self._options.get("pv_forecast_mode", "whole_system") == "specific_profile":
+            reference = _number(self._options.get("pv_forecast_reference_kwp"))
+            if reference is None or not .1 <= reference <= 1000:
+                raise ValueError("A specific PV profile requires its reference capacity")
         inputs = self._read_inputs(now)
         if not inputs["telemetry_valid"] or not inputs["soc_valid"]:
             raise ValueError("Activation requires fresh, valid power and battery measurements")
@@ -465,8 +565,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "grid_phases_w": [inputs[f"grid_l{i}_power"] for i in (1, 2, 3)],
                 "battery_voltage_v": inputs["voltage"], "current_a": inputs["current_a"],
                 "last_attempt_ts": ledger.get("at", 0), "last_attempt_a": ledger.get("a", 0),
-                "total_limit_w": self._options["grid_import_limit_kw"] * 1000,
-                "phase_limit_w": self._options["grid_phase_limit_kw"] * 1000,
+                "total_limit_w": min(self._options["grid_import_limit_kw"],
+                                     self._options.get("inverter_max_power_kw", 12)) * 1000,
+                "phase_limit_w": min(self._options["grid_phase_limit_kw"],
+                                     self._options.get("inverter_phase_max_power_kw", 5)) * 1000,
                 "headroom_w": 500, "phase_headroom_w": 250, "charge_efficiency": .9}
 
     def _settled_grid(self, inputs, now, requested):
@@ -547,6 +649,95 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._memory["slot_measurements"], {"at": now,
                 "battery_w": inputs["battery_power"], "grid_w": inputs["grid_power"],
                 "telemetry_valid": inputs["battery_power"] is not None and inputs["grid_power"] is not None})
+
+    async def _solcast_fetch_json(self, url, *, headers, params):
+        """HA HTTP boundary: fixed official host, TLS, no redirects or key URL."""
+        parsed = urlsplit(url)
+        if (parsed.scheme != "https" or parsed.hostname != "api.solcast.com.au" or
+                parsed.port not in (None, 443) or parsed.username or parsed.password or
+                parsed.query or parsed.fragment or not parsed.path.startswith("/rooftop_sites") or
+                any(str(key).lower() in ("api_key", "apikey", "token") for key in params)):
+            raise ValueError("Invalid Solcast request destination")
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+        session = async_get_clientsession(self.hass)
+        async with session.get(url, headers=headers, params=params, ssl=True,
+                               allow_redirects=False, timeout=20) as response:
+            data = await response.json(content_type=None)
+            return {"status": response.status, "data": data,
+                    "headers": {"Retry-After": response.headers.get("Retry-After", "")}}
+
+    async def _persist_solcast(self, state):
+        if not isinstance(state, dict):
+            raise ValueError("Invalid Solcast cache")
+        self._memory["solcast_cache"] = self._redact(state)
+        await self._save()  # Client must await this BEFORE making its request.
+
+    def _forecast_context(self):
+        config = self._options.get("solcast", {})
+        return {"provider": "solcast_api" if self._solcast_configured() else "ha_entities",
+                "configuration_generation": config.get("config_generation"),
+                "resource_ids": sorted(config.get("resource_ids", [])),
+                "dampening_factor": config.get("dampening_factor", 1),
+                "hourly_factors": config.get("hourly_factors")}
+
+    def _ensure_forecast_context(self):
+        context = self._redact(self._forecast_context())
+        previous = self._memory["solcast_context"]
+        if previous != context and (previous or self._solcast_configured()):
+            self._memory["forecast_cache"] = {}
+            self._memory["target_cache"] = {}
+            self._memory["safety_raise"] = {}
+            self._memory["plan"] = {}
+            # Ownership of a credential budget is conservative: changing site
+            # config never grants a new daily request quota.
+            self._memory["solcast_cache"].pop("per_site", None)
+            self._memory["solcast_cache"].pop("sites", None)
+            self._solcast_client = None
+            generation = context.get("configuration_generation")
+            if (self._solcast_configured() and generation and
+                    generation != previous.get("configuration_generation") and
+                    generation != self._memory["solcast_seed"].get("generation")):
+                self._seed_imported_quota()
+                self._memory["solcast_seed"] = {"generation": generation,
+                    "utc_day": self._now().astimezone(_UTC).date().isoformat()}
+        self._memory["solcast_context"] = context
+
+    def _seed_imported_quota(self):
+        """A re-import may raise today's known usage, never grant new calls."""
+        initial = _number(self._options["solcast"].get("initial_requests_used"))
+        quota = self._memory["solcast_cache"].get("quota")
+        if initial is None or int(initial) != initial or not 0 <= initial <= 1000 or not isinstance(quota, dict):
+            return
+        now = self._now()
+        for label, zone in (("utc", _UTC), ("warsaw", _TZ)):
+            old = quota.get(label)
+            if not isinstance(old, dict) or not isinstance(old.get("day"), str):
+                continue
+            used = _number(old.get("used"))
+            day = now.astimezone(zone).date().isoformat()
+            if used is None or used < 0 or int(used) != used or old["day"] > day:
+                continue  # The client rejects future/corrupt records unchanged.
+            quota[label] = {"day": day, "used": max(int(used), int(initial)) if old["day"] == day else int(initial)}
+
+    async def _direct_solar_periods(self, now):
+        if self._solcast_client is None:
+            factory = self._solcast_factory
+            if factory is None:
+                from .solcast import SolcastClient
+                factory = SolcastClient
+            self._solcast_client = factory(self._solcast_fetcher, self._persist_solcast,
+                                          state=deepcopy(self._memory["solcast_cache"]))
+        try:
+            result = await self._solcast_client.async_forecast(self._options["solcast"], now)
+        except Exception as error:
+            self._solcast_status = {"status": "unavailable", "reason": f"client_{type(error).__name__}"}
+            return []
+        if not isinstance(result, dict):
+            self._solcast_status = {"status": "unavailable", "reason": "invalid_client_result"}
+            return []
+        self._solcast_status = self._redact({key: result[key] for key in
+            ("status", "reason", "quota", "sites", "source") if key in result})
+        return result.get("periods", [])
 
     async def _load_profile(self, now):
         signature = {"load": self._sources["load_power"], "channels": self._channels()}
@@ -656,13 +847,23 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._last_error = f"load_profile_unavailable:{type(error).__name__}"
             return {}
 
-    def _solar_points(self, now):
+    async def _solar_points(self, now):
+        self._ensure_forecast_context()
+        requested_context = self._forecast_context()
         live, bad = {}, False
-        for key in ("pv_today", "pv_tomorrow", "pv_day3"):
-            state = self._state(key)
-            if state is None:
-                continue
-            periods = state.attributes.get("detailedForecast", [])
+        groups = []
+        if self._solcast_configured():
+            groups.append(await self._direct_solar_periods(now))
+            if requested_context != self._forecast_context() or self._stopped:
+                self._solcast_status = {"status": "unavailable", "reason": "configuration_changed"}
+                return {}
+        else:
+            self._solcast_status = {"status": "ha_entities", "configured": False}
+            for key in ("pv_today", "pv_tomorrow", "pv_day3"):
+                state = self._state(key)
+                if state is not None:
+                    groups.append(state.attributes.get("detailedForecast", []))
+        for periods in groups:
             if not isinstance(periods, list):
                 bad = True
                 continue
@@ -688,8 +889,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return saved
 
     async def _make_plan(self, now, inputs):
+        revision = self._planning_revision
+        options = deepcopy(self._options)
+        sources = dict(self._sources)
         profiles = await self._load_profile(now)
-        points = self._solar_points(now)
+        points = await self._solar_points(now)
         rows = []
         start = int(now.timestamp() // 1800) * 1800
         for index in range(96):
@@ -702,37 +906,50 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 break
             rows.append({"timestamp": when.isoformat(), "pv_p10_kw": point.get("p10"),
                          "pv_p50_kw": point.get("p50"), "load_kw": profile[when.hour]})
-        config = {**self._options, "minimum_soc_percent": self._options["min_soc_percent"],
+        config = {key: self._options.get(key) for key in (
+                    "capacity_kwh", "winter_weather_soc_percent", "grid_current_max_a",
+                    "charge_max_kw", "discharge_max_kw", "grid_max_soc_percent",
+                    "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode")}
+        rated = self._options.get("inverter_max_power_kw", 12)
+        config["charge_max_kw"] = min(config["charge_max_kw"], rated)
+        config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
+        config.update({"minimum_soc_percent": self._options["min_soc_percent"],
                   "margin_soc_percent": self._options["reserve_margin_soc_percent"],
-                  "grid_import_max_kw": self._options["grid_import_limit_kw"],
-                  "inverter_max_kw": 12, "grid_export_max_kw": 9}
+                  "grid_import_max_kw": min(self._options["grid_import_limit_kw"], rated),
+                  "inverter_max_kw": rated, "grid_export_max_kw": min(9, rated)})
         plan = self._planner({"now": now, "soc_percent": inputs["soc"], "soc_valid": inputs["soc_valid"],
                               "forecast": rows, "config": config,
                               "retained_targets": self._memory["target_cache"]})
-        old_plan = self._memory["plan"]
-        old_cache = deepcopy(self._memory["target_cache"])
-        old_raise = deepcopy(self._memory["safety_raise"])
-        self._memory["plan"] = plan
-        self._accept_targets(plan, now)
-        if plan.get("quality") == "valid" and plan.get("source") == "own_deterministic_planner":
-            for key, record in plan.get("targets", {}).items():
-                if not isinstance(record, dict) or key not in self._deadlines(now):
-                    continue
-                if self._live_record(plan, key, now):
-                    if plan.get("status") == "ok":
-                        self._memory["safety_raise"].pop(key, None)
-                    elif plan.get("status") == "unreachable":
-                        self._memory["safety_raise"][key] = {**record,
-                            "generated_at": plan["generated_at"], "deadline": record["deadline"]}
-        try:
-            await self._save()
-        except Exception:
-            self._memory["plan"] = old_plan
-            self._memory["target_cache"] = old_cache
-            self._memory["safety_raise"] = old_raise
-            self._last_error = "plan_store_failed"
-            raise
-        self._plan_due = now.timestamp() + 300
+        async with self._lock:
+            if (self._stopped or revision != self._planning_revision or options != self._options or sources != self._sources):
+                self._last_error = "stale_planning_snapshot"
+                return plan
+            old_plan = self._memory["plan"]
+            old_cache = deepcopy(self._memory["target_cache"])
+            old_raise = deepcopy(self._memory["safety_raise"])
+            self._memory["plan"] = plan
+            accepted_now = self._now()
+            self._accept_targets(plan, accepted_now)
+            if plan.get("quality") == "valid" and plan.get("source") == "own_deterministic_planner":
+                for key, record in plan.get("targets", {}).items():
+                    if not isinstance(record, dict) or key not in self._deadlines(accepted_now):
+                        continue
+                    if self._live_record(plan, key, accepted_now):
+                        if plan.get("status") == "ok":
+                            self._memory["safety_raise"].pop(key, None)
+                        elif plan.get("status") == "unreachable":
+                            self._memory["safety_raise"][key] = {**record,
+                                "generated_at": plan["generated_at"], "deadline": record["deadline"]}
+            try:
+                await self._save()
+            except BaseException as error:
+                self._memory["plan"] = old_plan
+                self._memory["target_cache"] = old_cache
+                self._memory["safety_raise"] = old_raise
+                if not isinstance(error, asyncio.CancelledError):
+                    self._last_error = "plan_store_failed"
+                raise
+            self._plan_due = now.timestamp() + 300
         return plan
 
     def _deadlines(self, now):
@@ -755,7 +972,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             value, deadline = _number(record.get("soc_percent")), _stamp(record.get("deadline"))
             if (key in deadlines and value is not None and self._options["min_soc_percent"] <= value <= 95
                     and deadline == deadlines[key] and record.get("unreachable") is False
-                    and record.get("source") == "own_deterministic_planner"):
+                    and record.get("source") == "own_deterministic_planner" and self._pv_metadata_matches(record)):
                 self._memory["target_cache"][key] = {**record, "soc_percent": value,
                     "deadline": datetime.fromtimestamp(deadline, _TZ).isoformat(),
                     "accepted_at": generated, "season": plan.get("season"),
@@ -780,6 +997,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 and (generated.month in (10, 11, 12, 1, 2, 3)) == winter
                 and saved.get("season") == ("winter" if winter else "summer")
                 and saved.get("source") == "own_deterministic_planner" and saved.get("unreachable") is False
+                and self._pv_metadata_matches(saved)
                 and isinstance(saved.get("emergency"), bool) and isinstance(saved.get("grid_charge_allowed"), bool)
                 and (winter or saved["emergency"] is (not summer_normal)))
         retained = [self._measurement(f"tou_soc_{slot}", now, unit="%", low=floor, high=95)
@@ -803,7 +1021,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if (raised_value is not None and selected < raised_value <= 95 and
                     raised_deadline == self._deadlines(now)[key] and generated is not None and
                     0 <= now.timestamp()-generated <= 86400 and
-                    raised.get("source") == "own_deterministic_planner"):
+                    raised.get("source") == "own_deterministic_planner" and self._pv_metadata_matches(raised)):
                 return raised_value, not winter, "unreachable_plan_raise"
         return selected, emergency, source
 
@@ -820,15 +1038,28 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         value = _number(record.get("soc_percent"))
         if (value is None or not self._options["min_soc_percent"] <= value <= 95 or
                 _stamp(record.get("deadline")) != self._deadlines(now)[key] or
-                record.get("source") != "own_deterministic_planner"):
+                record.get("source") != "own_deterministic_planner" or not self._pv_metadata_matches(record)):
             return None
         return record
+
+    def _pv_metadata_matches(self, record):
+        mode = self._options.get("pv_forecast_mode", "whole_system")
+        if record.get("pv_forecast_mode") != mode:
+            return False
+        installed = _number(self._options.get("pv_peak_kwp"))
+        if installed is None or installed != _number(record.get("pv_peak_kwp")):
+            return False
+        reference = self._options.get("pv_forecast_reference_kwp")
+        if mode == "whole_system" and reference is None:
+            return "pv_forecast_reference_kwp" in record and record["pv_forecast_reference_kwp"] is None
+        return _number(reference) is not None and _number(reference) == _number(record.get("pv_forecast_reference_kwp"))
 
     async def _async_update_data(self):
         async with self._lock:
             if self._stopped:
                 return self.data
             now = self._now()
+            self._ensure_forecast_context()
             inputs = self._read_inputs(now)
             self._record_slot_measurements(now, inputs)
             conflicts = self._owner_conflicts()
@@ -851,27 +1082,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     await self._disable_gc()
                 await self._repair_floor(now)
             plan = self._memory.get("plan", {})
-            plan_saved = True
             if now.timestamp() >= self._plan_due:
-                try:
-                    plan = await self._make_plan(now, inputs)
-                except Exception:
-                    plan_saved = False
-                    if self.mode == "active":
-                        await self._disable_gc()
-                        await self._grid_attempt(0, self._now().timestamp(), force=True)
-            # Recorder may take time. Re-read all control measurements before
-            # evaluating any normal command or readback gate.
+                self._start_planning(now, inputs)
+            # Forecast network/database IO runs in a separate task. Safety and
+            # the actuator always use a new local state snapshot every tick.
             now = self._now()
             inputs = self._read_inputs(now)
             target, emergency, target_source = self._target(now)
             control = self._controller(self._grid_input(inputs, now, target, emergency))
             modes_ok = self._hardware_modes_ok()
             active = self.mode == "active"
-            if active and (not modes_ok or not plan_saved):
+            if active and not modes_ok:
                 await self._disable_gc()
                 await self._grid_attempt(0, now.timestamp(), force=True)
-                control["runtime_reason"] = "hardware_mode_mismatch" if not modes_ok else "plan_store_failed"
+                control["runtime_reason"] = "hardware_mode_mismatch"
             elif active:
                 await self._run_driver(inputs, control, target, emergency, now)
             active = self.mode == "active"
@@ -892,5 +1116,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "actual_battery_w": inputs["battery_power"]},
                     "slot_measurements": deepcopy(self._memory["slot_measurements"]),
                     "profiles": deepcopy(self._memory["load_profiles"]),
-                    "settings": deepcopy(self._options), "sources": dict(self._sources),
+                    "planning": self._plan_task is not None and not self._plan_task.done(),
+                    "solcast": self._redact(self._solcast_status),
+                    "settings": self.options, "sources": dict(self._sources),
                     "updated_at": now.isoformat(), "physical_confirmation": False}

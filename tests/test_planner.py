@@ -18,7 +18,8 @@ def fixture(now="2026-11-10T01:00:00+01:00", soc=75, load=.5, pv=0):
     for i in range(96):
         t = datetime.fromtimestamp(base + i * 1800, timezone.utc)
         rows.append(dict(timestamp=t.isoformat(), pv_p10_kw=pv, pv_p50_kw=pv, load_kw=load))
-    return dict(now=now, soc_percent=soc, forecast=rows)
+    return dict(now=now, soc_percent=soc, forecast=rows,
+                config={"pv_peak_kwp": 20, "pv_forecast_reference_kwp": 20})
 
 
 class PlannerTests(unittest.TestCase):
@@ -137,7 +138,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_configured90percent_floor_is_respected_in_winter(self):
         inputs = fixture(soc=95, load=.1, pv=1)
-        inputs["config"] = {"minimum_soc_percent": 90}
+        inputs["config"].update({"minimum_soc_percent": 90})
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
         self.assertEqual(result["targets"]["night"]["soc_percent"], 95)
@@ -145,7 +146,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_summer_normal_target_uses_configured_floor(self):
         inputs = fixture(now="2026-07-10T01:00:00+02:00", soc=100, load=.1, pv=1)
-        inputs["config"] = {"minimum_soc_percent": 90}
+        inputs["config"].update({"minimum_soc_percent": 90})
         result = plan_energy(inputs)
         self.assertEqual(result["targets"]["night"]["soc_percent"], 90)
         self.assertFalse(result["targets"]["night"]["emergency"])
@@ -153,7 +154,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_fallback_winter_target_cannot_undercut_configured_floor(self):
         inputs = fixture(soc=95)
-        inputs["config"] = {"minimum_soc_percent": 90}
+        inputs["config"].update({"minimum_soc_percent": 90})
         inputs["forecast"] = []
         result = plan_energy(inputs)
         self.assertEqual(result["targets"]["night"]["soc_percent"], 95)
@@ -183,68 +184,68 @@ class PlannerTests(unittest.TestCase):
 
     def test_invalid_unrelated_config_does_not_erase90percent_floor(self):
         inputs = fixture(soc=95)
-        inputs["config"] = {"minimum_soc_percent": 90, "eta_charge": 0}
+        inputs["config"].update({"minimum_soc_percent": 90, "eta_charge": 0})
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "invalid")
         self.assertEqual(result["targets"]["night"]["soc_percent"], 95)
 
     def test_fallback_respects_configured_grid_charge_ceiling(self):
         inputs = fixture()
-        inputs["config"] = {"grid_max_soc_percent": 80}
+        inputs["config"].update({"grid_max_soc_percent": 80})
         inputs["forecast"] = []
         inputs["retained_targets"] = {"night": 90}
         self.assertEqual(plan_energy(inputs)["targets"]["night"]["soc_percent"], 80)
 
     def test_configurable_winter_weak_weather_target85(self):
         inputs = fixture(soc=95)
-        inputs["config"] = {"winter_weather_soc_percent": 85}
+        inputs["config"].update({"winter_weather_soc_percent": 85})
         result = plan_energy(inputs)
         self.assertEqual(result["targets"]["night"]["soc_percent"], 85)
         self.assertEqual(result["targets"]["night"]["weather_target_percent"], 85)
 
     def test_bright_weather_target_is_selected_floor_plus_margin(self):
         inputs = fixture(soc=95, load=.2, pv=1)
-        inputs["config"] = {"winter_weather_soc_percent": 85,
-                            "minimum_soc_percent": 60, "margin_soc_percent": 5}
+        inputs["config"].update({"winter_weather_soc_percent": 85,
+                                "minimum_soc_percent": 60, "margin_soc_percent": 5})
         result = plan_energy(inputs)
         self.assertEqual(result["targets"]["night"]["soc_percent"], 65)
 
     def test_weather_interpolates_between85_and45(self):
         inputs = fixture(soc=95, load=.5, pv=.390625)
-        inputs["config"] = {"winter_weather_soc_percent": 85}
+        inputs["config"].update({"winter_weather_soc_percent": 85})
         result = plan_energy(inputs)
         self.assertAlmostEqual(result["targets"]["night"]["weather_target_percent"], 65)
         self.assertEqual(result["targets"]["night"]["soc_percent"], 65)
 
     def test_fallback_keeps_configured_weak_weather_target(self):
         inputs = fixture()
-        inputs["config"] = {"winter_weather_soc_percent": 85}
+        inputs["config"].update({"winter_weather_soc_percent": 85})
         inputs["forecast"] = []
         self.assertEqual(plan_energy(inputs)["targets"]["night"]["soc_percent"], 85)
 
     def test_pv_charge_setting12kw_cannot_make_grid_charger12kw(self):
         inputs = fixture(soc=40, load=.1)
-        inputs["config"] = {"charge_max_kw": 12, "grid_import_max_kw": 20}
+        inputs["config"].update({"charge_max_kw": 12, "grid_import_max_kw": 20})
         result = plan_energy(inputs)
         self.assertTrue(all(row["grid_charge_kw"] <= 5.3 + 1e-9 for row in result["rows"]))
 
     def test_grid_current54amps_halves_grid_charger_budget(self):
         inputs = fixture(soc=40, load=.1)
-        inputs["config"] = {"charge_max_kw": 12, "grid_import_max_kw": 20,
-                            "grid_current_max_a": 54}
+        inputs["config"].update({"charge_max_kw": 12, "grid_import_max_kw": 20,
+                                "grid_current_max_a": 54})
         result = plan_energy(inputs)
         self.assertTrue(all(row["grid_charge_kw"] <= 2.65 + 1e-9 for row in result["rows"]))
 
     def test_grid_current_zero_never_predicts_grid_charging(self):
         inputs = fixture(soc=40, load=1)
-        inputs["config"] = {"grid_current_max_a": 0}
+        inputs["config"].update({"grid_current_max_a": 0})
         result = plan_energy(inputs)
         self.assertEqual(result["p10"]["grid_charge_kwh"], 0)
         self.assertTrue(result["targets"]["night"]["unreachable"])
 
     def test_high_pv_charging_can_use_its_own12kw_budget(self):
         inputs = fixture(now="2026-07-10T01:00:00+02:00", soc=40, load=.1, pv=15)
-        inputs["config"] = {"charge_max_kw": 12, "grid_current_max_a": 0}
+        inputs["config"].update({"charge_max_kw": 12, "grid_current_max_a": 0})
         result = plan_energy(inputs)
         self.assertEqual(result["p50"]["grid_charge_kwh"], 0)
         self.assertGreater(result["rows"][0]["pv_charge_kw"], 5.3)
@@ -293,7 +294,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_changed_floor_invalidates_previous_normal_cache(self):
         inputs, _ = self._summer_cache()
-        inputs["config"] = {"minimum_soc_percent": 80}
+        inputs["config"].update({"minimum_soc_percent": 80})
         result = plan_energy(inputs)
         self.assertEqual(result["targets"]["night"]["soc_percent"], 95)
 
@@ -308,7 +309,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_valid_winter_cache_must_respect_selected_floor_and_buffer(self):
         inputs = fixture(soc=95, load=.1, pv=1)
-        inputs["config"] = {"minimum_soc_percent": 80}
+        inputs["config"].update({"minimum_soc_percent": 80})
         valid = plan_energy(inputs)
         self.assertEqual(valid["targets"]["night"]["soc_percent"], 85)
         inputs["forecast"] = []
@@ -328,6 +329,87 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(result["targets"]["night"]["soc_percent"], 40)
         self.assertEqual(result["targets"]["night"]["generated_at"], record["generated_at"])
         self.assertFalse(result["summer_emergency_window"]["active"])
+
+    def test_whole_system_preserves_raw_pv_even_when_reference_differs(self):
+        inputs = fixture(pv=1)
+        inputs["config"].update(pv_peak_kwp=20, pv_forecast_reference_kwp=10)
+        result = plan_energy(inputs)
+        self.assertEqual(result["quality"], "valid")
+        self.assertTrue(all(row["pv_kw"] == 1 for row in result["rows"]))
+        self.assertEqual(result["forecast_normalization"]["factor"], 1)
+        self.assertIn("pv_reference_differs_whole_system_not_scaled", result["warnings"])
+
+    def test_whole_system_reference_capacity_is_optional(self):
+        inputs = fixture(pv=1)
+        inputs["config"]["pv_forecast_reference_kwp"] = None
+        result = plan_energy(inputs)
+        self.assertEqual(result["quality"], "valid")
+        self.assertEqual(result["rows"][0]["pv_kw"], 1)
+
+    def test_specific_profile_scales_each_power_point_once(self):
+        inputs = fixture(pv=.4, load=.5, soc=95)
+        inputs["config"].update(pv_forecast_mode="specific_profile",
+                                pv_peak_kwp=20, pv_forecast_reference_kwp=10)
+        result = plan_energy(inputs)
+        self.assertTrue(all(abs(row["pv_kw"] - .8) < 1e-12 for row in result["rows"]))
+        self.assertEqual(result["forecast_normalization"]["factor"], 2)
+        self.assertEqual(result["targets"]["night"]["soc_percent"], 45)
+        inputs["config"]["pv_peak_kwp"] = 5
+        reduced = plan_energy(inputs)
+        self.assertTrue(all(abs(row["pv_kw"] - .2) < 1e-12 for row in reduced["rows"]))
+        self.assertGreater(reduced["targets"]["night"]["soc_percent"],
+                           result["targets"]["night"]["soc_percent"])
+        self.assertLess(reduced["p10"]["final_soc_percent"], result["p10"]["final_soc_percent"])
+
+    def test_specific_profile_equal_capacities_never_double_pv(self):
+        inputs = fixture(pv=1)
+        inputs["config"].update(pv_forecast_mode="specific_profile",
+                                pv_peak_kwp=10, pv_forecast_reference_kwp=10)
+        result = plan_energy(inputs)
+        self.assertEqual(result["quality"], "valid")
+        self.assertTrue(all(row["pv_kw"] == 1 for row in result["rows"]))
+
+    def test_specific_profile_requires_reference_and_all_modes_require_installed(self):
+        inputs = fixture(pv=1)
+        inputs["config"]["pv_peak_kwp"] = None
+        self.assertEqual(plan_energy(inputs)["reason"], "pv_capacity_missing")
+        inputs["config"].update(pv_peak_kwp=20, pv_forecast_mode="specific_profile",
+                                pv_forecast_reference_kwp=None)
+        result = plan_energy(inputs)
+        self.assertEqual(result["reason"], "pv_capacity_missing")
+        self.assertEqual(result["rows"], [])
+
+    def test_bad_capacity_or_excessive_raw_peak_returns_explicit_fallback(self):
+        for value in (0, -.1, True, float("nan"), 1001):
+            with self.subTest(value=value):
+                inputs = fixture(pv=1)
+                inputs["config"]["pv_peak_kwp"] = value
+                self.assertEqual(plan_energy(inputs)["quality"], "invalid")
+                self.assertEqual(plan_energy(inputs)["rows"], [])
+        inputs = fixture(pv=16)
+        inputs["config"].update(pv_forecast_mode="specific_profile",
+                                pv_peak_kwp=20, pv_forecast_reference_kwp=10)
+        self.assertEqual(plan_energy(inputs)["reason"], "forecast_capacity_mismatch")
+
+    def test_pv_parameter_or_mode_change_invalidates_cached_target(self):
+        for change in ({"pv_peak_kwp": 10}, {"pv_forecast_reference_kwp": 10},
+                       {"pv_forecast_mode": "specific_profile"}):
+            with self.subTest(change=change):
+                inputs, _ = self._summer_cache()
+                inputs["config"].update(change)
+                result = plan_energy(inputs)
+                self.assertEqual(result["targets"]["night"]["soc_percent"], 95)
+                self.assertEqual(result["targets"]["night"]["selection_source"], "conservative_fallback")
+
+    def test_whole_system_cache_without_reference_preserves_generation(self):
+        inputs = fixture(now="2026-07-10T01:00:00+02:00", soc=95, load=.1)
+        inputs["config"]["pv_forecast_reference_kwp"] = None
+        valid = plan_energy(inputs)
+        inputs["retained_targets"] = valid["targets"]
+        inputs["forecast"] = []
+        result = plan_energy(inputs)
+        self.assertEqual(result["targets"]["night"]["soc_percent"], 40)
+        self.assertEqual(result["targets"]["night"]["selection_source"], "validated_cache")
 
 
 if __name__ == "__main__":

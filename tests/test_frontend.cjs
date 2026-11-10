@@ -56,8 +56,10 @@ test("renders four simple primary facts and leaves technical settings collapsed"
   assert.match(html,/<details><summary>Ustawienia zaawansowane/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);
   const beforeAdvanced=html.split("<details>")[0];
-  assert.equal((beforeAdvanced.match(/<input /g)||[]).length,1);
+  assert.equal((beforeAdvanced.match(/<input /g)||[]).length,3);
   assert.match(beforeAdvanced,/data-key="min_soc_percent"/);
+  assert.match(beforeAdvanced,/data-key="capacity_kwh"/);
+  assert.match(beforeAdvanced,/data-key="pv_peak_kwp"/);
 });
 
 test("distinguishes selected target, forecast target, request, register and physical power",()=>{
