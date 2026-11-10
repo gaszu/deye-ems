@@ -1,4 +1,12 @@
-# Sprawdzenia wersji 1.0.1
+# Sprawdzenia wersji 1.0.2
+
+Poprawka panelu, 10 listopada 2026:
+
+- Zachowanie aktualnego stanu `details.open` przy przebudowie widoku. Pierwszy widok pozostaje zwinięty; kolejne odświeżenia zachowują ostatni wybór użytkownika.
+- **19/19 testów panelu PASS**. Nowe regresje obejmują wielokrotne odświeżanie otwartej sekcji przy aktualizujących się pomiarach, ręczne zamknięcie, powodzenie i błąd polecenia oraz zamknięcie podczas oczekiwania na jego wynik.
+- W podglądzie przeglądarki na danych syntetycznych potwierdzono utrzymanie rozwiniętej sekcji po kilku automatycznych odświeżeniach. Testy instalacji i zgodności wersji panelu: **10/10 PASS**.
+
+## Weryfikacja poprawki 1.0.1
 
 Poprawka panelu, 10 listopada 2026:
 

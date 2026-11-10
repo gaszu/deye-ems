@@ -10,7 +10,7 @@ const NOW = Date.parse("2026-11-10T22:00:00+01:00");
 const decode = value => value.replaceAll("&quot;", '"').replaceAll("&#39;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 
 class FakeNode {
-  constructor(attrs) {this.attrs=attrs;this.dataset={};this.events={};this.value=decode(attrs.value??"");for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5)]=value;}
+  constructor(attrs) {this.attrs=attrs;this.dataset={};this.events={};this.value=decode(attrs.value??"");this.open=attrs.tag==="details"&&attrs.open===true;for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5)]=value;}
   addEventListener(type,callback) {this.events[type]=callback;}
   reportValidity() {const n=Number(this.value);return this.value!==""&&Number.isFinite(n)&&n>=Number(this.attrs.min)&&n<=Number(this.attrs.max);}
   matches(selector) {return selector==="input[data-key]"&&this.dataset.key!==undefined;}
@@ -18,10 +18,10 @@ class FakeNode {
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|button)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];this.nodes.push(new FakeNode(attrs));}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|button|details)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];if(attrs.tag==="details")attrs.open=/\bopen(?:\s|=|$)/.test(match[2]);this.nodes.push(new FakeNode(attrs));}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
-  querySelector(selector) {const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
+  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
   querySelectorAll(selector) {return this.nodes.filter(n=>selector==="[data-save]"?n.dataset.save!==undefined:selector==="input[data-key]"?n.attrs.tag==="input"&&n.dataset.key!==undefined:false);}
 }
 
@@ -33,7 +33,7 @@ function fixture(previousElements = []) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-1");
+  const Panel = registry.get("deye-ems-panel-1-0-2");
   const panel = new Panel();
   const calls=[];
   panel._hass={states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
@@ -49,10 +49,11 @@ function fixture(previousElements = []) {
 
 test("an existing browser session registers the updated panel alongside the old element",()=>{
   class LegacyPanel {}
-  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel]]);
+  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel]]);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.1/);
+  assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-2"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.2/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
@@ -63,11 +64,72 @@ test("renders four simple primary facts and leaves technical settings collapsed"
   assert.match(stats,/Akumulator/);assert.match(stats,/Sieć \/ dom/);assert.match(stats,/Wybrany cel SoC/);assert.match(stats,/Tryb/);
   assert.match(html,/<details><summary>Ustawienia zaawansowane/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);
+  assert.equal(panel.shadowRoot.querySelector("details").open,false);
   const beforeAdvanced=html.split("<details>")[0];
   assert.equal((beforeAdvanced.match(/<input /g)||[]).length,3);
   assert.match(beforeAdvanced,/data-key="min_soc_percent"/);
   assert.match(beforeAdvanced,/data-key="capacity_kwh"/);
   assert.match(beforeAdvanced,/data-key="pv_peak_kwp"/);
+});
+
+test("an expanded details section survives polling while measurements update",async()=>{
+  const {panel}=fixture();
+  const previous=panel.shadowRoot.querySelector("details");
+  previous.open=true;
+  panel._hass.callWS=async()=>({...panel.payload,data:{...panel.payload.data,
+    inputs:{...panel.payload.data.inputs,soc:63}}});
+  await panel.refresh();
+  const current=panel.shadowRoot.querySelector("details");
+  assert.notEqual(current,previous);
+  assert.equal(current.open,true);
+  assert.equal(panel.measurement("soc"),63);
+  await panel.refresh();
+  assert.equal(panel.shadowRoot.querySelector("details").open,true);
+});
+
+test("polling respects a manually closed details section after it was open",async()=>{
+  const {panel}=fixture();
+  panel.shadowRoot.querySelector("details").open=true;
+  await panel.refresh();
+  panel.shadowRoot.querySelector("details").open=false;
+  await panel.refresh();
+  assert.equal(panel.shadowRoot.querySelector("details").open,false);
+  await panel.refresh();
+  assert.equal(panel.shadowRoot.querySelector("details").open,false);
+});
+
+test("successful and failed commands preserve the current details state",async()=>{
+  for(const open of [true,false])for(const fails of [false,true]){
+    const {panel}=fixture();
+    panel.shadowRoot.querySelector("details").open=open;
+    let finish;
+    panel._hass.callWS=()=>new Promise((resolve,reject)=>{
+      finish=()=>fails?reject(new Error("Synthetic command failure")):resolve(panel.payload);
+    });
+    const pending=panel.command({command:"recalculate"});
+    assert.equal(panel.busy,true);
+    assert.equal(panel.shadowRoot.querySelector("details").open,open);
+    finish();
+    await pending;
+    assert.equal(panel.busy,false);
+    assert.equal(panel.shadowRoot.querySelector("details").open,open);
+    assert.equal(Boolean(panel.error),fails);
+    panel._hass.callWS=async()=>panel.payload;
+    await panel.refresh();
+    assert.equal(panel.shadowRoot.querySelector("details").open,open);
+  }
+});
+
+test("command completion respects closing details while the command is pending",async()=>{
+  const {panel}=fixture();
+  panel.shadowRoot.querySelector("details").open=true;
+  let finish;
+  panel._hass.callWS=()=>new Promise(resolve=>{finish=()=>resolve(panel.payload);});
+  const pending=panel.command({command:"recalculate"});
+  panel.shadowRoot.querySelector("details").open=false;
+  finish();
+  await pending;
+  assert.equal(panel.shadowRoot.querySelector("details").open,false);
 });
 
 test("distinguishes selected target, forecast target, request, register and physical power",()=>{
