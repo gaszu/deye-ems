@@ -326,7 +326,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                   for key in ("grid_power", "load_power", "grid_l1_power", "grid_l2_power",
                               "grid_l3_power", "load_l1_power", "load_l2_power", "load_l3_power")}
         charge = self._measurement("bms_charge_current", now, unit="A", low=0, high=1000)
-        block = self._measurement("bms_blocking_charge", now, age=120, low=0, high=1000)
+        # ESPHome can publish this latched flag only on change. Its available,
+        # non-restored setting is anchored by the same BMS's live voltage.
+        block = self._measurement("bms_blocking_charge", now, low=0, high=1000)
         deye = self._measurement("max_charge_current_number", now, unit="A", low=0, high=1000)
         bms_valid = voltage is not None and None not in (charge, block, deye)
         cap = min(108, self._options["grid_current_max_a"], charge, deye) if bms_valid and block == 0 else 0

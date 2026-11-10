@@ -232,6 +232,48 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await h.co._grid_attempt(2, h.now.timestamp()))
         self.assertEqual(h.calls, [])
 
+    async def test_latched_bms_zero_is_valid_with_live_voltage(self):
+        h = Harness()
+        h.set("bms_blocking_charge", 0, age=12*3600)
+        inputs = h.co._read_inputs(h.now)
+        self.assertTrue(inputs["bms_valid"])
+        self.assertTrue(inputs["telemetry_valid"])
+        self.assertEqual(inputs["bms_cap_a"], 108)
+        h.co._preflight()
+        self.assertEqual(h.calls, [])
+
+    async def test_latched_bms_nonzero_still_blocks_charging(self):
+        h = Harness()
+        h.set("bms_blocking_charge", 1, age=12*3600)
+        inputs = h.co._read_inputs(h.now)
+        self.assertTrue(inputs["bms_valid"])
+        self.assertEqual(inputs["bms_cap_a"], 0)
+
+    async def test_latched_bms_requires_live_voltage_and_nonrestored_numeric_flag(self):
+        for failure in ("voltage_missing", "voltage_stale", "block_missing", "block_restored",
+                        "block_unavailable", "block_nonnumeric", "block_future"):
+            with self.subTest(failure=failure):
+                h = Harness()
+                h.set("bms_blocking_charge", 0, age=12*3600)
+                if failure == "voltage_missing":
+                    del h.states[SOURCES["voltage"]]
+                elif failure == "voltage_stale":
+                    h.set("voltage", 54, "V", age=121)
+                elif failure == "block_missing":
+                    del h.states[SOURCES["bms_blocking_charge"]]
+                elif failure == "block_restored":
+                    h.set("bms_blocking_charge", 0, attributes={"restored": True})
+                elif failure == "block_unavailable":
+                    h.set("bms_blocking_charge", "unavailable")
+                elif failure == "block_nonnumeric":
+                    h.set("bms_blocking_charge", "bad")
+                else:
+                    h.set("bms_blocking_charge", 0, age=-1)
+                inputs = h.co._read_inputs(h.now)
+                self.assertFalse(inputs["bms_valid"])
+                self.assertFalse(inputs["telemetry_valid"])
+                self.assertEqual(inputs["bms_cap_a"], 0)
+
     async def test_soc_reaching_target_during_store_blocks_positive_request(self):
         h = Harness()
         h.active()
