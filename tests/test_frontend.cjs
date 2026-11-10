@@ -13,15 +13,15 @@ class FakeNode {
   constructor(attrs) {this.attrs=attrs;this.dataset={};this.events={};this.value=decode(attrs.value??"");this.open=attrs.tag==="details"&&attrs.open===true;this.checked=attrs.checked===true;this.disabled=attrs.disabled===true;this.required=attrs.required===true;for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
   addEventListener(type,callback) {this.events[type]=callback;}
   reportValidity() {const n=Number(this.value);return this.value!==""&&Number.isFinite(n)&&n>=Number(this.attrs.min)&&n<=Number(this.attrs.max);}
-  matches(selector) {return selector.split(",").some(s=>s==="input[data-key]"&&this.dataset.key!==undefined||s==="input[data-load-field]"&&this.dataset.loadField!==undefined);}
+  matches(selector) {return selector.split(",").some(s=>{const match=/^(input|select)\[data-([a-z-]+)\]$/.exec(s);return match&&this.attrs.tag===match[1]&&this.dataset[match[2].replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]!==undefined;});}
 }
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],node=this.nodes.find(n=>n.dataset.solcastField===name);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
-  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
+  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
   querySelectorAll(selector) {const data=/^\[data-([a-z-]+)\]$/.exec(selector)?.[1];if(data){const key=data.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());return this.nodes.filter(n=>n.dataset[key]!==undefined);}return this.nodes.filter(n=>selector==="input[data-key]"&&n.attrs.tag==="input"&&n.dataset.key!==undefined);}
 }
 
@@ -31,14 +31,14 @@ function fixture(previousElements = []) {
   class ClockDate extends Date {static now(){return NOW;}}
   const context = vm.createContext({HTMLElement,Date:ClockDate,console,
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
-    setInterval:()=>1,clearInterval:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
+    setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-3");
+  const Panel = registry.get("deye-ems-panel-1-0-4");
   const panel = new Panel();
   const calls=[];
   panel._hass={states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -52,8 +52,8 @@ test("an existing browser session registers the updated panel alongside the old 
   const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel]]);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-3"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.3/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-4"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.4/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
@@ -359,4 +359,252 @@ test("mode changes are displayed during editing and cancellation stays available
 test("phase model requires a fresh explicit runtime confirmation",()=>{
   const {panel}=fixture();panel.payload.data.inputs.grid_charge_balanced=true;panel.render();assert.match(panel.shadowRoot.innerHTML,/Bilansowanie poboru GRID potwierdzone/);
   panel.payload.data.updated_at=new Date(NOW-30001).toISOString();panel.render();assert.doesNotMatch(panel.shadowRoot.innerHTML,/Bilansowanie poboru GRID potwierdzone/);assert.match(panel.shadowRoot.innerHTML,/bilansowanie GRID niepotwierdzone/);
+});
+
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+const nativeMenu=(id="native-flow",step="solcast")=>({type:"menu",flow_id:id,step_id:step,
+  menu_options:step==="init"?["parameters","solcast","sources"]:["solcast_manual","solcast_import","solcast_disable"]});
+function manualForm(id="native-flow",imported=false,errors={}){
+  const schema=[
+    {name:"api_key",required:false,default:"saved-key-must-never-appear",description:{suggested_value:"saved-key-suggestion"},selector:{text:{type:"password"}}},
+    {name:"resource_ids",default:"roof-one",selector:{text:{}}},
+    {name:"poll_interval_minutes",required:true,default:360,selector:{number:{min:15,max:1440,step:1,mode:"box"}}},
+    {name:"max_requests_per_day",required:true,default:10,selector:{number:{min:1,max:1000,step:1}}},
+    {name:"initial_requests_used",required:true,default:10,selector:{number:{min:0,max:1000,step:1}}},
+    {name:"dampening_factor",required:true,default:1,selector:{number:{min:0,max:2,step:0.01}}},
+    {name:"hourly_factors",default:"1 ".repeat(23)+"1",selector:{text:{}}}
+  ];
+  if(imported)schema.push({name:"accept_manual_calibration",required:true,default:false,selector:{boolean:{}}});
+  return {type:"form",flow_id:id,step_id:"solcast_manual",data_schema:schema,errors,
+    description_placeholders:{import_note:imported?"Skopiowano stan współczynników, bez dalszego samouczenia.":"Puste pole zachowuje zapisany klucz."}};
+}
+function nativeSolcast(panel,{id="native-flow",manual,finish}={}){
+  const apiCalls=[],effects={writes:0};
+  panel._hass.callApi=async(method,route,data)=>{
+    apiCalls.push({method,route,data});
+    if(method==="DELETE")return {message:"Flow aborted"};
+    if(route==="config/config_entries/options/flow")return nativeMenu(id,"init");
+    if(data.next_step_id==="solcast")return nativeMenu(id);
+    if(data.next_step_id==="solcast_manual")return manualForm(id);
+    if(data.next_step_id==="solcast_import")return {type:"form",flow_id:id,step_id:"solcast_import",errors:{},
+      data_schema:[{name:"source_entry",required:true,selector:{select:{options:[{value:"source-one",label:"Solcast z HA"}]}}}]};
+    if(data.source_entry)return manualForm(id,true);
+    if(data.next_step_id==="solcast_disable"||!data.next_step_id){
+      if(manual&&!data.next_step_id)return manual(data);
+      effects.writes++;
+      return finish?finish(data):{type:"create_entry",flow_id:id,data:{solcast:{api_key:"private-server-result"}}};
+    }
+    throw Error("Unexpected synthetic API request");
+  };
+  return {apiCalls,effects};
+}
+function solcastInput(panel,name,value){
+  const input=panel.shadowRoot.querySelector('[data-solcast-field="'+name+'"]');
+  assert.ok(input,name);
+  if(typeof value==="boolean")input.checked=value;else input.value=value;
+  input.events.input();
+  return input;
+}
+async function openManual(panel){
+  await panel.openSolcast();
+  await panel.advanceSolcast({next_step_id:"solcast_manual"});
+}
+
+test("Solcast opens the native options menu without changing source or mode",async()=>{
+  const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeSolcast(panel);
+  await panel.openSolcast();
+  assert.deepEqual(JSON.parse(JSON.stringify(apiCalls)),[
+    {method:"POST",route:"config/config_entries/options/flow",data:{handler:"test-entry"}},
+    {method:"POST",route:"config/config_entries/options/flow/native-flow",data:{next_step_id:"solcast"}}
+  ]);
+  assert.equal(effects.writes,0);assert.equal(calls.length,0);assert.equal(JSON.stringify(panel.payload),before);
+  assert.equal(panel.solcastFlow.step_id,"solcast");
+  assert.match(panel.solcastHtml(),/Importuj ustawienia z HA/);
+  assert.doesNotMatch(panel.solcastHtml(),/href=/);
+});
+
+test("Solcast renders native text and number fields without password defaults or suggestions",async()=>{
+  const {panel}=fixture();nativeSolcast(panel);await openManual(panel);
+  const key=panel.shadowRoot.querySelector('[data-solcast-field="api_key"]');
+  assert.equal(key.attrs.type,"password");assert.equal(key.attrs.value,undefined);assert.equal(key.value,"");
+  assert.equal(panel.solcastSecret,"");
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/saved-key-must-never-appear|saved-key-suggestion/);
+  assert.doesNotMatch(JSON.stringify(panel.solcastFlow),/saved-key-must-never-appear|saved-key-suggestion/);
+  assert.equal(panel.shadowRoot.querySelector('[data-solcast-field="poll_interval_minutes"]').value,"360");
+  assert.match(panel.solcastHtml(),/Zapisz i włącz pobieranie API/);
+});
+
+test("Solcast posts every visible native field using its actual type and clears ephemeral secrets after save",async()=>{
+  const {panel}=fixture(),{apiCalls,effects}=nativeSolcast(panel);await openManual(panel);
+  solcastInput(panel,"api_key","synthetic-user-key");
+  solcastInput(panel,"poll_interval_minutes","420");
+  solcastInput(panel,"initial_requests_used","7");
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/synthetic-user-key/);
+  assert.equal(panel.drafts.api_key,undefined);assert.equal(panel.payload.api_key,undefined);
+  await panel.submitSolcast();await flush();
+  const sent=apiCalls.at(-1).data;
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)),{api_key:"synthetic-user-key",resource_ids:"roof-one",
+    poll_interval_minutes:420,max_requests_per_day:10,initial_requests_used:7,dampening_factor:1,hourly_factors:"1 ".repeat(23)+"1"});
+  assert.equal(effects.writes,1);assert.equal(panel.solcastSecret,"");assert.equal(panel.solcastFlow.type,"create_entry");
+  assert.doesNotMatch(JSON.stringify(panel.solcastFlow)+JSON.stringify(panel.payload)+panel.shadowRoot.innerHTML,/synthetic-user-key|private-server-result/);
+  assert.doesNotMatch(source,/localStorage|sessionStorage|console\.(?:log|error|debug)/);
+});
+
+test("a blank Solcast password preserves the saved key by omitting only that field",async()=>{
+  const {panel}=fixture(),{apiCalls}=nativeSolcast(panel);await openManual(panel);await panel.submitSolcast();
+  const sent=apiCalls.at(-1).data;
+  assert.equal(Object.hasOwn(sent,"api_key"),false);
+  assert.deepEqual(Object.keys(sent).sort(),["resource_ids","poll_interval_minutes","max_requests_per_day",
+    "initial_requests_used","dampening_factor","hourly_factors"].sort());
+  assert.equal(sent.initial_requests_used,10);
+});
+
+test("Solcast validation errors retain nonsecret drafts and the transient key without echoing native error text",async()=>{
+  const {panel}=fixture(),{apiCalls}=nativeSolcast(panel,{manual:()=>manualForm("native-flow",false,
+    {base:"invalid_solcast",other:"<script>private-error-key</script>"})});
+  await openManual(panel);solcastInput(panel,"api_key","synthetic-key-retained");solcastInput(panel,"resource_ids","roof-edited");
+  await panel.submitSolcast();
+  assert.equal(panel.solcastSecret,"synthetic-key-retained");assert.equal(panel.solcastDraft.resource_ids,"roof-edited");
+  assert.equal(panel.solcastCommitting,false);assert.equal(panel.solcastFlow.type,"form");
+  assert.match(panel.solcastHtml(),/Sprawdź klucz/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/synthetic-key-retained|private-error-key|<script>/);
+  await panel.cancelSolcast();assert.equal(panel.solcastSecret,"");
+  assert.equal(apiCalls.at(-1).method,"DELETE");
+});
+
+test("Solcast transport and HTTP schema errors use a fixed safe message and retain editable input",async()=>{
+  const {panel}=fixture();nativeSolcast(panel,{manual:()=>{throw {message:"private-provider-key",body:{errors:"private-provider-key"}};}});
+  await openManual(panel);solcastInput(panel,"api_key","synthetic-local-key");await panel.submitSolcast();
+  assert.match(panel.solcastHtml(),/Nie udało się wykonać kroku/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/private-provider-key|synthetic-local-key/);
+  assert.equal(panel.solcastSecret,"synthetic-local-key");assert.equal(panel.solcastFlow.type,"form");
+});
+
+test("Solcast import reuses one flow and displays select and explicit calibration consent",async()=>{
+  const {panel}=fixture(),{apiCalls,effects}=nativeSolcast(panel);await panel.openSolcast();
+  await panel.advanceSolcast({next_step_id:"solcast_import"});
+  const select=solcastInput(panel,"source_entry","source-one");assert.equal(select.attrs.tag,"select");
+  await panel.submitSolcast();
+  assert.equal(effects.writes,0);assert.equal(panel.solcastFlow.flow_id,"native-flow");
+  assert.equal(panel.solcastFlow.step_id,"solcast_manual");
+  assert.equal(panel.solcastDraft.accept_manual_calibration,false);
+  assert.match(panel.solcastHtml(),/bez dalszego samouczenia/);
+  solcastInput(panel,"accept_manual_calibration",true);await panel.submitSolcast();
+  assert.equal(apiCalls.at(-1).data.accept_manual_calibration,true);
+  assert.equal(apiCalls.filter(call=>call.route==="config/config_entries/options/flow").length,1);
+});
+
+test("Solcast disable requires a separate explicit confirmation and cancel never enters that step",async()=>{
+  const {panel}=fixture(),{apiCalls,effects}=nativeSolcast(panel);await panel.openSolcast();
+  const button=panel.shadowRoot.querySelectorAll("[data-solcast-step]").find(node=>node.dataset.solcastStep==="solcast_disable");
+  button.events.click();assert.equal(effects.writes,0);
+  assert.match(panel.solcastHtml(),/Tak, wyłącz pobieranie/);
+  panel.shadowRoot.getElementById("solcast-disable-back").events.click();assert.equal(effects.writes,0);
+  button.events.click();await panel.shadowRoot.getElementById("solcast-disable-confirm").events.click();
+  assert.equal(effects.writes,1);assert.equal(apiCalls.at(-1).data.next_step_id,"solcast_disable");
+  assert.match(panel.solcastNotice,/wyłączone/);
+});
+
+test("Solcast final saves cannot be cancelled while an already dispatched commit is pending",async()=>{
+  for(const disable of [false,true]){
+    const {panel}=fixture();let finish;
+    nativeSolcast(panel,{manual:()=>new Promise(resolve=>{finish=resolve;}),finish:()=>new Promise(resolve=>{finish=resolve;})});
+    if(disable){await panel.openSolcast();panel.solcastConfirmDisable=true;}else await openManual(panel);
+    const pending=disable?panel.advanceSolcast({next_step_id:"solcast_disable"}):panel.submitSolcast();
+    assert.equal(panel.solcastCommitting,true);
+    assert.equal(panel.shadowRoot.getElementById("solcast-cancel").disabled,true);
+    const sequence=panel.solcastSequence;
+    await panel.cancelSolcast();assert.equal(panel.solcastOpen,true);assert.equal(panel.solcastSequence,sequence);
+    finish({type:"create_entry",flow_id:"native-flow"});await pending;
+    assert.equal(panel.solcastCommitting,false);assert.equal(panel.solcastFlow.type,"create_entry");
+  }
+});
+
+test("Solcast active mode requires an explicit observation action and blocks pending form submits",async()=>{
+  const {panel,calls}=fixture(),{apiCalls}=nativeSolcast(panel);panel.payload.mode="active";
+  await panel.openSolcast();assert.equal(apiCalls.length,0);assert.match(panel.solcastHtml(),/Przejdź do obserwacji/);
+  panel._hass.callWS=async message=>{calls.push(message);panel.payload={...panel.payload,mode:message.mode||panel.payload.mode};return panel.payload;};
+  await panel.shadowRoot.getElementById("solcast-observe").events.click();
+  assert.equal(calls[0].command,"mode");assert.equal(calls[0].mode,"shadow");
+  assert.equal(panel.solcastFlow.step_id,"solcast");
+  await panel.advanceSolcast({next_step_id:"solcast_manual"});
+  const before=apiCalls.length;panel.payload.mode="active";await panel.submitSolcast();
+  assert.equal(apiCalls.length,before);
+});
+
+test("Solcast cancel and disconnect clear the key and DELETE only the native options flow",async()=>{
+  for(const disconnect of [false,true]){
+    const {panel}=fixture(),{apiCalls}=nativeSolcast(panel);await openManual(panel);
+    solcastInput(panel,"api_key","synthetic-cancel-key");
+    if(disconnect){panel.disconnectedCallback();await flush();}else await panel.cancelSolcast();
+    assert.equal(panel.solcastOpen,false);assert.equal(panel.solcastSecret,"");assert.equal(panel.solcastFlow,null);
+    assert.equal(apiCalls.at(-1).method,"DELETE");
+    assert.equal(apiCalls.at(-1).route,"config/config_entries/options/flow/native-flow");
+    assert.equal(apiCalls.some(call=>call.method==="POST"&&call.data&&Object.keys(call.data).length===0),false);
+  }
+});
+
+test("a cancelled late Solcast START is deleted and never advances or reopens the editor",async()=>{
+  const {panel}=fixture(),apiCalls=[];let finish;
+  panel._hass.callApi=(method,route,data)=>{apiCalls.push({method,route,data});return method==="POST"?new Promise(resolve=>{finish=resolve;}):Promise.resolve({message:"Flow aborted"});};
+  const opening=panel.openSolcast();await flush();await panel.cancelSolcast();
+  finish(nativeMenu("late-created","init"));await opening;await flush();
+  assert.equal(panel.solcastOpen,false);assert.equal(panel.solcastFlow,null);
+  assert.equal(apiCalls.filter(call=>call.method==="POST").length,1);
+  assert.ok(apiCalls.some(call=>call.method==="DELETE"&&call.route.endsWith("/late-created")));
+});
+
+test("a late cancelled import cannot overwrite the current Solcast flow",async()=>{
+  const {panel}=fixture();nativeSolcast(panel);await panel.openSolcast();
+  const originalApi=panel._hass.callApi;let finish;
+  panel._hass.callApi=(method,route,data)=>method==="POST"&&data?.next_step_id==="solcast_import"?
+    new Promise(resolve=>{finish=resolve;}):originalApi(method,route,data);
+  const importing=panel.advanceSolcast({next_step_id:"solcast_import"});
+  await panel.cancelSolcast();nativeSolcast(panel,{id:"new-flow"});await panel.openSolcast();
+  finish(manualForm("native-flow",true));await importing;await flush();
+  assert.equal(panel.solcastFlow.flow_id,"new-flow");assert.equal(panel.solcastFlow.step_id,"solcast");
+  assert.equal(panel.solcastSecret,"");
+});
+
+test("cancelling during previous-flow DELETE cannot resurrect a new Solcast START",async()=>{
+  const {panel}=fixture();nativeSolcast(panel);await panel.openSolcast();
+  let finish;const calls=[];
+  panel._hass.callApi=(method,route,data)=>{calls.push({method,route,data});return new Promise(resolve=>{finish=resolve;});};
+  const reopening=panel.openSolcast();await flush();await panel.cancelSolcast();
+  finish({message:"Flow aborted"});await reopening;
+  assert.equal(panel.solcastOpen,false);assert.equal(calls.filter(call=>call.method==="POST").length,0);
+});
+
+test("Solcast abort reasons and unsupported selectors cannot expose raw messages or submit empty defaults",async()=>{
+  const {panel}=fixture();nativeSolcast(panel);await panel.openSolcast();
+  panel.applySolcastResult({type:"abort",reason:"private-token-in-reason"},panel.solcastSequence);panel.render();
+  assert.doesNotMatch(panel.solcastHtml(),/private-token-in-reason/);
+  assert.doesNotMatch(JSON.stringify(panel.solcastFlow),/private-token-in-reason/);
+  panel.applySolcastResult({type:"form",flow_id:"native-flow",step_id:"solcast_manual",
+    data_schema:[{name:"api_key",selector:{object:{default:"secret"}}}]},panel.solcastSequence);panel.render();
+  assert.equal(panel.solcastFlow.type,"abort");assert.equal(panel.shadowRoot.getElementById("solcast-form"),undefined);
+  assert.doesNotMatch(panel.solcastHtml(),/secret/);
+});
+
+test("Solcast drafts and password input survive polling without inserting the password into HTML",async()=>{
+  const {panel}=fixture();nativeSolcast(panel);await openManual(panel);
+  const input=solcastInput(panel,"api_key","synthetic-focus-key");solcastInput(panel,"resource_ids","roof-draft");
+  panel.shadowRoot.activeElement=input;const html=panel.shadowRoot.innerHTML;
+  await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);assert.equal(panel.solcastSecret,"synthetic-focus-key");
+  assert.doesNotMatch(html,/synthetic-focus-key/);
+  panel._hass.callWS=async()=>({...panel.payload,mode:"active"});await panel.refresh();
+  assert.match(panel.solcastHtml(),/Przejdź do obserwacji/);assert.equal(panel.solcastDraft.resource_ids,"roof-draft");
+});
+
+test("a valid plan from before Solcast SAVE cannot enable resume, and a new plan requires an explicit click",async()=>{
+  const {panel,calls}=fixture();panel.payload.data.plan.generated_at=new Date(NOW-1000).toISOString();
+  nativeSolcast(panel);await openManual(panel);await panel.submitSolcast();await flush();
+  assert.equal(panel.solcastPlanReady(),false);assert.equal(panel.shadowRoot.getElementById("solcast-resume").disabled,true);
+  assert.equal(calls.some(call=>call.command==="mode"),false);
+  panel.payload={...panel.payload,data:{...panel.payload.data,plan:{...panel.payload.data.plan,generated_at:new Date(NOW).toISOString()}}};
+  await panel.refreshAfterSolcast(panel.solcastSequence);
+  assert.equal(panel.solcastPlanReady(),true);assert.equal(panel.shadowRoot.getElementById("solcast-resume").disabled,false);
+  assert.equal(calls.some(call=>call.command==="mode"),false);
+  await panel.shadowRoot.getElementById("solcast-resume").events.click();
+  assert.equal(calls.at(-1).command,"mode");assert.equal(calls.at(-1).mode,"active");
 });

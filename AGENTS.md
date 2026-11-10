@@ -1,16 +1,13 @@
-# Deye EMS — samodzielna integracja
+# Deye EMS — development guidance
 
-- Użytkownik chce niezależny, instalowalny custom component HA z własnym silnikiem i maksymalnie prostym panelem. Bez EMHASS, helperów i automatyzacji pomocniczych.
-- Użytkownik zatwierdził PUBLICZNY kod gaszu/ha-deye-ems, aby umożliwić instalację przez Marketplace na innych instancjach HA. Tylko ten projekt może być publiczny; pozostałe repozytoria starego EMS i indywidualne dane pozostają prywatne. Nie publikuj danych dostępu ani bieżącej/historii telemetrii domu.
-- Podstawą pierwszej wersji są dotychczasowe mechanizmy sezonowe, datowany cache prognoz, profil LOAD i odbiorników, sloty G13 i Deye/YamBMS. Dalsze strojenie później.
-- Minimalny bezpieczny SoC to osobna trwała konfiguracja, domyślnie40%, zakres40–90%. Cele pogodowe i sieciowe nie mogą obniżać tego progu. Domyślne limity:12kW razem,5kW na fazę,108A/BMS.
-- Przy jawnie potwierdzonym Asymmetric phase feeding ON i Zero Export To Load modeluj zbilansowany pobór GRID; nie przypisuj całej mocy ładowania do najgorszej fazy LOAD. Faktyczne limity GRID sumy/faz, BMS i osobna moc konwersji pozostają nadrzędne. Brak potwierdzenia daje wariant zachowawczy. Podtrzymanie GC podczas bezpiecznej obniżki wymaga przyjętej próby i nieodnawialnego limitu30s; sam ledger nie potwierdza wykonania.
-- Główny LOAD mierzy całe zużycie domu, łącznie z odbiornikami z listy. Lista (nazwa, energia, opcjonalnie moc, ON/OFF) służy wyłącznie modelowaniu prognozy SoC. Nie doliczaj ponownie mocy ani energii kanałów do LOAD lub regulatora importu; legacy included_in_load normalizuj do True. Domyślny PC obejmuje całą pompę, nie jedną fazę.
-- Pierwszy start tylko shadow/obserwacja. Zmiany wyjść i odbiorników wymagają obserwacji. Nie wyłączaj innego regulatora automatycznie.
-- Zwykła praca i restart wymagają zachowania zapamiętanych właścicieli OFF. Jawne ponowne przejęcie pozwala po świadomym usunięciu starego EMS przyjąć aktualną listę istniejących właścicieli.
-- Po instalacji i zweryfikowanym przejęciu użytkownik chce USUNĄĆ automatyzacje, helpery, sensory i dashboardy OBU poprzednich EMS; nie poprzestawać na OFF. Najpierw sporządź dokładny aktualny inwentarz i odtwarzalną kopię lokalną. Nie usuwaj niezwiązanych funkcji domu ani sterowników źródłowych ESPHome/MQTT/YamBMS/Recorder/PV.
-- Rozróżniaj model, wybrany cel, próbę polecenia, odczyt nastawy i fizyczną reakcję. Nie obiecuj idealnego zera importu ani fizycznego SoC.
-- Wbudowany klient Solcast jest częścią integracji; osobna integracja solcast_solar nie jest wymagana. Klucz i konfiguracja źródła pozostają prywatne w ConfigEntry. Panel, plan, cache, diagnostyka ani publiczne repo nie mogą zawierać klucza. Limit konta jest na dobę UTC, zapis próby przed HTTP; zmiana źródła nie zeruje wykorzystanego limitu.
-- Prognoza całej instalacji pozostaje1:1. Moc PV kWp jest ustawieniem, cache jest z nią powiązany. Tylko jawny tryb specific_profile skaluje przez stosunek mocy. Parametry geometrii Hobbyist ustawia się w Solcast Toolkit, nie komercyjnym API.
-- Pobieranie prognoz i Recorder nie może blokować bieżącej regulacji ładowania. Testy offline opisuje VALIDATION.md; natywny start HA i sprzęt wymagają osobnego odczytu. Nie opisuj samego opublikowania ZIP jako wdrożenia produkcyjnego.
-- Po zmianie zbudujZIP build_release.py i zsynchronizuj repo, weryfikując treść/blobSHA. Nie kopiuj plików z nadrzędnego starego projektu jako zależności runtime.
+- Maintain an independently installable Home Assistant custom integration with a local engine. Runtime must not depend on EMHASS, auxiliary helpers or user automations.
+- Preserve the engine contract documented in SPECIFICATION.md. Treat source mappings, safety settings, capacity and power ratings as private configuration. Do not change live settings as part of interface work.
+- Start new installations in observation mode. Source changes require observation; resuming control must be explicit and require current valid inputs and a current plan. Never automatically disable another controller.
+- Preserve ownership checks, BMS restrictions, actual grid limits, telemetry freshness and fail-closed behavior. Distinguish a calculation, a service attempt, register readback and physical response.
+- Use total LOAD once. Optional receiver channels model the SoC forecast; do not add their energy or power a second time to total demand.
+- Keep slow forecast and history requests outside the immediate control path. Preserve durable request accounting across restarts and configuration changes.
+- Keep credentials in Home Assistant configuration. Never expose stored keys through status, diagnostics, plans, cache, logs or public files. A newly entered wizard key may exist only in transient form memory; clear it on completion, cancellation or disconnect.
+- Use the native Home Assistant options flow for Solcast configuration. Opening or cancelling a wizard must not change the forecast source. Saving and disabling require explicit actions; do not prefetch a step that performs a write.
+- Keep the interface simple, with muted pastel colors derived from the current HA theme and readable text and focus states in light and dark modes.
+- Public documentation describes product behavior and synthetic validation. Keep deployment records, personal configuration, household telemetry and private audits outside the repository.
+- Run meaningful checks for changed behavior. Build the standalone ZIP with build_release.py and verify published sources against the tested files. Describe publication and live deployment separately.

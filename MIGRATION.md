@@ -1,53 +1,38 @@
-# Przejście z dotychczasowego EMS
+# Przejście z innego EMS i powrót z kopii
 
-Ta instrukcja jest procedurą. Samo zainstalowanie albo opublikowanie integracji nie wyłącza dotychczasowego EMS.
+Instalacja Deye EMS nie wyłącza innych regulatorów. Poniższa procedura jest ogólną instrukcją dla operatora instalacji.
 
-## 1. Instalacja i porównanie
+## Przygotowanie
 
-Dodaj Deye EMS w obserwacji. Obecny wykonawca EMHASS pozostaje jedynym sterownikiem. Sprawdź: rezerwę 40%, godziny zimowe i letnie, jednostki i znaki mocy, prognozę PV z datami, profil LOAD/odbiorników, wybrany cel na termin oraz ograniczenia 12 kW / 5 kW na fazę.
+1. Zapisz odtwarzalną kopię Home Assistant oraz ustawień dotychczasowego EMS. Zachowaj ją prywatnie.
+2. Sporządź aktualną listę sterowników, ich wejść, wyjść i zależności. Uwzględnij automatyzacje, aplikacje i zewnętrzne systemy zapisujące nastawy falownika.
+3. Dodaj Deye EMS w obserwacji. Wskaż własne encje i sprawdź jednostki, znaki mocy, zakres pomiaru LOAD, daty prognozy oraz limity i rezerwę baterii.
+4. Porównaj plan z pomiarami. Brak danych i nieosiągalny cel wymagają wyjaśnienia; nie oznaczają zerowego zużycia lub importu.
 
-Plan i runtime mają sygnalizować braki danych i nieosiągalność. Nie zastępuj tych stanów deklaracją „0 kWh importu”. Pierwsze niepełne pomiary slotów mają niepełne pokrycie.
+## Przejęcie sterowania
 
-## 2. Przejęcie wykonawcy
+Zatrzymaj wszystkich konkurujących wykonawców i ich mechanizmy automatycznego ponownego uruchamiania. Następnie jawnie wybierz sterowanie w Deye EMS. Integracja sprawdza bieżące pomiary, przypisania wyjść, tryby falownika i znanych właścicieli. Nie wyłącza innych regulatorów samoczynnie i nie zastępuje pełnego inwentarza operatora.
 
-Zachowaj kopie konfiguracji oraz listę włączonych encji. W obecnej instalacji stare siedem sterowników ma pozostać OFF. Wyłącz również:
+Sprawdź oddzielnie wyliczone żądanie, przyjętą próbę polecenia, odczyt rejestru i fizyczny przepływ energii. Zgodność jednego z tych etapów nie potwierdza wszystkich pozostałych ani osiągnięcia przyszłego SoC.
 
-- `automation.ems_emhass_sterowanie_produkcyjne`;
-- `automation.ems_emhass_ochrona_wlasciciela`;
-- `automation.ems_emhass_plan_shadow_co_5_minut`.
+## Usuwanie nieużywanych elementów
 
-Następnie w Deye EMS wybierz **Sterowanie** (`active`). Integracja sprawdza pomiary, tryby falownika, komplet i unikalność przypisań wyjść oraz znanych konkurujących sterowników. Nie wyłącza automatycznie innego regulatora. W nowej instalacji HA nie wymaga istnienia żadnego starego automatu.
+Samodzielny Deye EMS nie wymaga helperów lub automatyzacji innego EMS. Przed usunięciem każdego starego elementu sprawdź jego konsumentów i sposób odtworzenia. Zachowaj fizyczne pomiary, integrację falownika i baterii, Recorder oraz wybrane źródła prognozy.
 
-Po przejęciu sprawdź oddzielnie: obliczenie, próbę polecenia, odczyt nastawy oraz rzeczywistą moc baterii i Grid. Pomiary aktualizują się z opóźnieniem. Zmiana prądu nie jest dowodem osiągnięcia przyszłego SoC.
+Na czas świadomego usuwania wpisów znanych sterowników wybierz obserwację, gdy dotychczasowi wykonawcy jeszcze istnieją i są wyłączeni. Potwierdź odczyt zerowego prądu ładowania sieciowego i wyłączenie Grid Charge przed zmianami właścicieli. Samo automatyczne wycofanie sterowania po konflikcie nie zeruje nastaw falownika.
 
-## 3. Usunięcie obu poprzednich EMS
+Po zakończeniu zmian jawne ponowne przejęcie sprawdza aktualnie istniejących właścicieli. W zwykłej aktywnej pracy zniknięcie zapamiętanego właściciela pozostaje konfliktem.
 
-Nowa integracja nie korzysta z helperów `ems_` ani pomocniczych automatyzacji EMS. Sama mierzy energię slotów, przechowuje prognozy i cele z datami oraz rejestruje próby poleceń.
+Jeżeli prognoza pochodzi z encji HA, zachowaj dostarczającą je integrację. Wbudowany klient Solcast jest alternatywą opisaną w [INSTALL.md](INSTALL.md). Przy zmianie klienta zachowaj zużyty budżet API i unikaj równoległego odpytywania jednego konta.
 
-Po potwierdzeniu pracy, zgodnie z decyzją użytkownika, usuń dawne logistyki nocy, pomiary slotów 3/5, cache Solcast i potwierdzanie progów SoC, a także automatyzacje wykonawcze, helpery i dashboardy obu poprzednich EMS. Przed usunięciem zapisz odtwarzalną kopię konfiguracji oraz lokalną kopię stanu. Bieżących odczytów domu i danych dostępu nie publikuj w repozytorium.
+## Restart
 
-Na czas świadomego usuwania wpisów starych sterowników przełącz nową integrację w **Obserwację**, gdy stare sterowniki jeszcze istnieją i są OFF. Potwierdź odczyt **0 A prądu sieciowego i GC OFF**, zanim usuniesz pierwszego właściciela. Samo automatyczne przejście do obserwacji po wykryciu konfliktu nie zeruje nastaw falownika. Po zakończeniu porządkowania jawnie wybierz **Sterowanie** — ponowne przejęcie sprawdzi aktualnie istniejące regulatory. Zniknięcie zapamiętanego sterownika podczas zwykłej aktywnej pracy pozostaje konfliktem, a nie automatycznym zezwoleniem na pominięcie ochrony.
+Falownik może zachować ostatnie nastawy i harmonogram podczas restartu HA. Wyładowanie integracji nie jest poleceniem zerowania prądu. Po uruchomieniu sprawdź tryb, świeżość wejść, plan i konflikty. Brak wymaganych danych podczas startu może pozostawić EMS w obserwacji; po wyjaśnieniu problemu przelicz plan i jawnie wznów sterowanie.
 
-Przed wyłączeniem sprawdź rzeczywistych konsumentów: inne dashboardy, sensory lub niezwiązane automatyzacje mogą nadal odczytywać te encje. Dla każdego elementu odnotuj: poprzedni stan, zależności, decyzję i sposób odtworzenia. Historyczny inwentarz starego projektu nie zastępuje aktualnego odczytu HA.
+## Powrót do poprzedniego EMS
 
-**Zachowaj wejścia fizyczne i integracje źródłowe:** Deye ESPHome, YamBMS, pomiary odbiorników, Recorder i źródła prognoz PV. Nie są częścią likwidowanej warstwy helperów EMS.
-
-Przy korzystaniu z prognoz z encji HA zachowaj integrację **Solcast Solar** i wskazane encje prognozy. Usunięcie dawnych helperów cache EMS nie usuwa tego niezależnego źródła. Wbudowany klient API Solcast jest alternatywną konfiguracją źródła, a jego uruchomienie opisuje [INSTALL.md](INSTALL.md). Przy zmianie klienta zachowaj wykorzystany budżet API i zakończ równoległe odpytywanie konta.
-
-## 4. Restart Home Assistant
-
-Falownik podczas restartu HA zachowuje swoje ostatnie nastawy i harmonogram TOU. Wyładowanie integracji nie jest poleceniem zerowania prądu.
-
-Po uruchomieniu sprawdź **Tryb pracy**, świeżość pomiarów, plan i konflikty. Jeżeli wymagane źródła nie były gotowe podczas startu, integracja zapisuje **Obserwację** i nie włącza później sterowania samoczynnie. Po przywróceniu źródeł przelicz plan i jawnie wybierz **Sterowanie**. Nie wymuszaj przejęcia przy nieprawidłowych danych lub konflikcie właścicieli.
-
-## 5. Powrót do EMHASS z kopii
-
-1. Przełącz Deye EMS do obserwacji; sprawdź GC i prąd sieciowy.
-2. Odtwórz usuniętą aplikację EMHASS wraz z jej danymi oraz helpery, sensory, pakiety i makra według spisanej listy. Same eksporty definicji nie odtwarzają dokładnych identyfikatorów wpisów rejestru; do tego służy natywna kopia HA. Przywrócenie pełnej kopii cofa także inne zmiany od momentu jej wykonania i restartuje HA — wymaga osobnej decyzji operatora.
-3. Przywróć pomocnicze mechanizmy telemetryczne i potwierdzacz zgodnie z kopią.
-4. Włącz koordynator EMHASS i ochronę właściciela, a następnie jego wykonawcę.
-5. Siedem dawnych wykonawców pozostaje OFF.
-6. Sprawdź odczyty i rzeczywiste przepływy. Deye EMS pozostaje w obserwacji.
-
-Konflikt wykryty w aktywnym Deye EMS powoduje rezygnację z jego własnego sterowania. Nie uruchamia starej wersji automatycznie.
-
+1. Przełącz Deye EMS do obserwacji i potwierdź bezpieczny stan ładowania.
+2. Odtwórz poprzedni system według prywatnej kopii oraz jego instrukcji. Eksport definicji nie zawsze odtwarza identyfikatory rejestru; do pełnego odtworzenia służy natywna kopia HA.
+3. Pełne przywrócenie kopii cofa również niezwiązane zmiany i restartuje HA. Operator powinien świadomie wybrać ten zakres odtwarzania.
+4. Przywróć wymagane pomiary i usługi poprzedniego EMS, a potem jego jedynego wykonawcę i nadzór. Pozostaw Deye EMS w obserwacji.
+5. Sprawdź odczyty nastaw i rzeczywiste przepływy. Konflikt nie uruchamia poprzedniego regulatora automatycznie.

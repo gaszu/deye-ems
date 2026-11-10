@@ -113,6 +113,7 @@ def load_module():
 
 def coordinator():
     return SimpleNamespace(
+        entry=SimpleNamespace(entry_id="synthetic-ems-entry"),
         mode="shadow", data={"status": "shadow", "inputs": {"soc": 65}},
         options={"min_soc_percent": 50, "sources": {"soc": "sensor.test_soc"},
                  "api_key": "synthetic-private-top-key",
@@ -143,6 +144,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(connection.errors, [])
         self.assertEqual(connection.results[0][0], 1)
         self.assertEqual(connection.results[0][1]["data"]["inputs"]["soc"], 65)
+        self.assertEqual(connection.results[0][1]["entry_id"], "synthetic-ems-entry")
         self.assertFalse(hasattr(connection, "require_admin"))
         co.async_recalculate.assert_not_awaited()
         co.async_set_mode.assert_not_awaited()
@@ -234,7 +236,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, _ = load_module()
         co = coordinator()
         payload = module["_payload"](co)
-        self.assertEqual(set(payload), {"mode", "data", "options", "sources", "effective_loads", "loads_revision"})
+        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision"})
         self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]))
         self.assertEqual(payload["options"]["min_soc_percent"], 50)
         self.assertEqual(payload["sources"]["soc"], "sensor.test_soc")

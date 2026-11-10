@@ -1,52 +1,55 @@
-# Sprawdzenia wersji 1.0.3
+# Sprawdzenia wersji 1.0.4
 
-- **279/279 testów Python PASS i 31/31 testów panelu PASS**.
-- Testy CRUD obejmują domyślną PC, trwałe usunięcie, ON/OFF z zachowaniem konfiguracji i identyfikatora, walidację jednostek i źródeł, konflikt wersji listy, blokadę active i kolejność zapisu przed reload.
-- Testy panelu sprawdzają zachowanie szkicu, przełączenie trybu podczas edycji, zgodność wersji wiersza z jego formularzem i przełącznikiem oraz brak ujawniania danych dostępu.
-- W podglądzie przeglądarki na syntetycznych danych dodano, zmieniono i usunięto testowy odbiornik oraz przełączono PC OFF i ON. Te czynności nie zmieniały konfiguracji domu.
-- Cały LOAD pozostaje źródłem zużycia domu: kanały, także historyczne z flagą poza LOAD, nie doliczają mocy/energii i nie blokują regulatora przy braku opcjonalnego pomiaru. Kanały ON służą wyłącznie modelowaniu prognozy SoC.
-- Potwierdzone ON bilansowania faz i Zero Export To Load aktywuje model zbilansowanego poboru GRID; brak/OFF/stare dane zachowują wariant zachowawczy. Limity importu sumy/faz i osobny limit konwersji falownika sprawdzono niezależnie.
-- Regresje utrzymania GC przy bezpiecznym obniżeniu obejmują stary odczyt, zmianę limitu w trakcie zapisu, nieudaną usługę, brak dowodu przyjęcia, timeout bez odnawiania 30 s, wzrost odczytu, utratę flagi, BMS, GRID, stare pomiary, zmianę właściciela i okno chronione. Dowód przyjęcia usługi nie jest traktowany jako fizyczny odczyt urządzenia.
+Wyniki dotyczą testów oprogramowania offline i syntetycznych scenariuszy przeglądarkowych. Nie stanowią raportu z konkretnej instalacji HA ani potwierdzenia fizycznej reakcji falownika.
 
-## Weryfikacja poprawki 1.0.2
+## Wyniki
 
-Poprawka panelu, 10 listopada 2026:
+- **279/279 testów Python PASS**.
+- **48/48 testów panelu PASS**.
+- Podgląd i obsługa przeglądarki zostały sprawdzone na danych syntetycznych, bez połączenia z produkcyjnym HA i bez użycia rzeczywistego konta Solcast.
 
-- Zachowanie aktualnego stanu `details.open` przy przebudowie widoku. Pierwszy widok pozostaje zwinięty; kolejne odświeżenia zachowują ostatni wybór użytkownika.
-- **19/19 testów panelu PASS**. Nowe regresje obejmują wielokrotne odświeżanie otwartej sekcji przy aktualizujących się pomiarach, ręczne zamknięcie, powodzenie i błąd polecenia oraz zamknięcie podczas oczekiwania na jego wynik.
-- W podglądzie przeglądarki na danych syntetycznych potwierdzono utrzymanie rozwiniętej sekcji po kilku automatycznych odświeżeniach. Testy instalacji i zgodności wersji panelu: **10/10 PASS**.
+Testy runtime zastępują framework HA na granicy API, wykonując rzeczywiste funkcje planera, regulatora i obsługi stanu. HTTP Solcast i usługi HA są atrapami; nie potwierdzają wykonania polecenia przez sprzęt.
 
-## Weryfikacja poprawki 1.0.1
+## Kreator Solcast
 
-Poprawka panelu, 10 listopada 2026:
+Sprawdzono natywny options flow, menu, formularze i ograniczenia schematów selectorów. Panel korzysta z POST/DELETE kreatora HA, a zapis konfiguracji pozostaje w options flow integracji.
 
-- Ustalono natywną przyczynę braku danych: `AttributeError: ActiveConnection has no attribute require_admin` w obu handlerach WebSocket. Zastąpiono wywołanie oficjalnym dekoratorem HA 2026.11, w kolejności przed `async_response`.
-- 8 nowych testów granicy WebSocket PASS: administrator, blokada zwykłego użytkownika i braku użytkownika przed uruchomieniem handlera, polecenia, błędy walidacji i brak prywatnych ustawień Solcast w odpowiedzi.
-- 15 testów panelu Node.js PASS, w tym regresja aktualizacji komponentu przy już zarejestrowanej poprzedniej wersji w przeglądarce. Rejestracja HA, nazwa elementu i URL modułu wskazują tę samą wersję.
-- Pełny zestaw Python po poprawce: **213/213 PASS**.
-- Specyfikacja algorytmu pozostaje 1.0.0. Wydanie 1.0.1 nie zmienia obliczeń ani parametrów użytkownika.
-- Workflow GitHub wykonuje testy i buduje paczkę przed utworzeniem nowego wydania. Istniejące tagi i pliki wydań pozostają niezmienione.
-- Po instalacji 1.0.1 przez natywny Marketplace i restarcie HA sprawdzono prawdziwe wywołania `deye_ems/status` oraz polecenia `recalculate` i `mode`: poprawne odpowiedzi bez wcześniejszego `Unknown error`. Rejestr paneli HA wskazuje komponent `deye-ems-panel-1-0-1` i moduł `?v=1.0.1`.
-- Po uzyskaniu świeżych pomiarów i pełnego planu ponownie włączono produkcyjne sterowanie bez konfliktów właścicieli. Weryfikacja API nie jest równoznaczna z wizualnym sprawdzeniem wszystkich widoków przeglądarki.
+Scenariusze obejmują:
 
-## Weryfikacja bazowej wersji 1.0.0
+- Otwarcie i anulowanie bez przełączenia źródła; usunięcie niezakończonego flow po anulowaniu, odłączeniu panelu i spóźnionej odpowiedzi.
+- Zapis ręczny włączający klienta API oraz osobne potwierdzenie jego wyłączenia.
+- Zachowanie szkicu po błędzie walidacji, kompletność pól i obsługę importu kalibracji.
+- Brak zapisanego klucza w formularzu i publicznym statusie; prywatną, nietrwałą pamięć nowego klucza oraz czyszczenie jej po zakończeniu lub zamknięciu.
+- Brak klucza w HTML `value`, planie, cache i diagnostyce.
+- Blokadę anulowania podczas końcowego zapisu i brak automatycznego włączenia sterowania. Stary poprawny plan sprzed zapisu nie odblokowuje przycisku wznowienia.
+- Utrwalanie wykorzystania API przed HTTP, rozliczanie doby UTC, błędy API i zachowanie wykorzystania po restarcie lub zmianie konfiguracji.
+- Import 24/48 współczynników, wartości zerowych, wykluczeń i pierwszeństwa tabeli globalnej; odrzucanie niepełnej kalibracji.
+- Snapshot kalibracji bez migracji dalszego samouczenia i bez automatycznego zatrzymywania innego klienta. Korekty dotyczą tylko surowych odpowiedzi API EMS.
 
-Data: 10 listopada 2026, Europe/Warsaw.
+Kontrakt interfejsów porównano z [HA Core 2026.11 — config entries](https://github.com/home-assistant/core/blob/2026.11.0/homeassistant/components/config/config_entries.py) i [data entry flow](https://github.com/home-assistant/core/blob/2026.11.0/homeassistant/helpers/data_entry_flow.py). Zasady zewnętrznego API opisuje [dokumentacja Solcast](https://docs.solcast.com.au/docs/section/rooftop-sites-hobbyist).
 
-- 205 testów Python PASS: planer, limity i rampa, cache, pomiary slotów, runtime, start/reload integracji, konfiguracja i wbudowany klient oraz importer Solcast.
-- 14 testów panelu Node.js PASS: prosty widok, brak fikcyjnych zer, XSS, błędy poleceń, zachowanie edytowanych pól i wyścigi odpowiedzi.
-- Sprawdzono składnię Python/JSON/JavaScript, komplet platform, manifest i strukturę ZIP.
-- Sprawdzono wizualnie panel w przeglądarce na danych syntetycznych; zapis rezerwy 55% w podglądzie aktualizuje widok. Nie jest to zmiana ustawienia HA.
-- Porównano użyte API instalacji, panelu i Recorder z kodem HA Core 2026.11.0.
-- Solcast: quota UTC przed HTTP, restart i zmiana źródła bez zerowania limitu, pełne pokrycie prognozy, błędy API, import korekt i brak klucza w panelu/cache/planie. HTTP jest atrapą; nie wykonano testu prawdziwym kluczem.
-- Symulowane zablokowane pobieranie HTTP nie zatrzymuje regulacji: przy przeciążeniu żądanie prądu spada do 0 A w wywołaniu trwającym poniżej 0,5 s. Sprawdzono anulowanie zadania oraz odrzucenie planu dla nieaktualnej konfiguracji.
-- Niższa skonfigurowana moc falownika i fazy ogranicza prąd oraz model niezależnie od wyższych limitów sieci.
-- Import 24/48 współczynników zachowuje prawdziwe zero, odrzuca braki, uwzględnia pierwszeństwo ALL/global i wykluczenia. Korekty są stosowane tylko do surowego API, bez ponownego mnożenia skorygowanych prognoz HA.
-- Natywny start w HA Core2026.11: wpis integracji `loaded`, własne encje i tryb obserwacji; brak wpisów błędów `deye_ems` w dzienniku systemowym. Dotychczasowy regulator pozostał aktywny.
-- Następnie sprawdzono przejęcie produkcyjne: poprzedni wykonawca i jego nadzór OFF, nowa integracja `active`, brak konfliktu właścicieli, zgodny odczyt nastawy prądu, aktywny GC w bieżącym tanim slocie i pomiar ładowania baterii. GC w chronionych slotach3/5 pozostajeOFF. To obserwacja konkretnych odczytów, nie gwarancja osiągnięcia każdego celu SoC.
-- Po pełnej kopii HA usunięto poprzednią warstwę EMS, jej wpisy rejestru i aplikację EMHASS. Wykonano restart, sprawdzenie konfiguracji bez błędów, przeliczenie planu na świeżych danych i ponowne przejęcie `active`. Zachowane źródła fizyczne i Solcast pozostały załadowane; dziennik nowej integracji nie zawierał błędów. Dokładny inwentarz, kopie i odczyty wdrożenia są przechowywane prywatnie.
-- Stała flaga blokady BMS nie wymaga cyklicznych zmian wartości. Jej poprawny odczyt nadal wymaga dostępności i świeżego napięcia tego samego BMS; aktywna blokada, przywrócony stan lub nieprawidłowe dane blokują ładowanie.
+## Silnik i regulator
 
-Testy runtime i cyklu życia podstawiają framework HA na granicy API; rzeczywiste funkcje planera i regulatora są wykonywane. Osobno potwierdzono natywne załadowanie, przejęcie sterowania i odczyty opisane powyżej. Pełna ocena działania w różnych warunkach pogodowych i obciążeniach wymaga obserwacji w czasie.
+Testy obejmują bilans energii, cele sezonowe, datowany cache, profil LOAD, liczniki slotów, warunki fallbacku oraz ograniczenia baterii i falownika. Sprawdzają świeżość i jednostki pomiarów, BMS, faktyczne limity GRID, rozdzielenie limitów importu od mocy konwersji i wybór modelu fazowego na podstawie potwierdzonych ustawień.
 
-Paczka nie zawiera tokenów, haseł ani historii domu. Przykłady i testy są syntetyczne.
+Regresje bezpiecznej redukcji obejmują opóźniony odczyt, zmianę limitu podczas zapisu, nieudaną usługę lub zapis, brak dowodu przyjęcia, nieodnawialny limit 30 s, wzrost odczytu, utratę wymaganej flagi, BMS, GRID, stare pomiary, konflikt właściciela i okno chronione. Rejestr próby, przyjęcie usługi i odczyt urządzenia mają osobne znaczenie.
+
+Sprawdzono również, że opóźnione pobieranie prognozy nie blokuje bieżącej regulacji, a wynik planowania nie jest przyjmowany po zmianie jego konfiguracji.
+
+## Odbiorniki, panel i instalacja
+
+Testy dodatkowych zużyć obejmują tworzenie, edycję, usuwanie, trwałe ON/OFF, zachowanie identyfikatorów, walidację jednostek, konflikt wersji listy oraz blokadę zmian w active. Kanały są używane wyłącznie w prognozie SoC i nie podwajają bieżącego LOAD.
+
+Testy panelu obejmują zachowanie szkiców, wyścigi odpowiedzi, zmiany trybu podczas edycji, obsługę błędów, brak fikcyjnych zer i ochronę przed wstawieniem kodu HTML. Podgląd przeglądarki obejmuje kreator Solcast, kalibrację, jawne przejście do obserwacji, osobne wznowienie i potwierdzenie wyłączenia. Pastelowa kolorystyka wykorzystuje zmienne motywu HA; sprawdzono również ciemny podgląd.
+
+Sprawdzenia struktury obejmują platformy integracji, manifest, zgodność wersji panelu, konfigurację WebSocket z autoryzacją administratora oraz strukturę paczki. Specyfikacja silnika pozostaje **1.0.0**; wydanie 1.0.4 dotyczy kreatora i wyglądu panelu.
+
+## Powtórzenie testów
+
+```shell
+python -m unittest discover -s tests -q
+node tests/test_frontend.cjs
+python build_release.py
+```
+
+Pełne warunki działania opisuje [SPECIFICATION.md](SPECIFICATION.md), instalację [INSTALL.md](INSTALL.md), a zasady przejścia i powrotu [MIGRATION.md](MIGRATION.md). Wynik testów syntetycznych nie zastępuje sprawdzenia własnych mapowań, pomiarów i reakcji urządzenia.

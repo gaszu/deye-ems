@@ -12,7 +12,7 @@ def _coordinator(hass):
 
 
 def _payload(coordinator):
-    return {"mode": coordinator.mode, "data": coordinator.data or {},
+    return {"entry_id": coordinator.entry.entry_id, "mode": coordinator.mode, "data": coordinator.data or {},
         "effective_loads": coordinator.effective_loads, "loads_revision": coordinator.loads_revision,
         "options": {k: coordinator.options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
         "sources": {**DEFAULT_SOURCES, **coordinator.options.get("sources", {})}}

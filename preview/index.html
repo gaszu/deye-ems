@@ -4,11 +4,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deye EMS — podgląd interfejsu</title>
 <style>
-  body {margin:0;background:#f3f6f7;font:15px system-ui;color:#20383d}
-  .demo {padding:12px 24px;background:#e3eef8;text-align:center;line-height:1.5}
+  :root {color-scheme:light dark;--primary-background-color:#f4f2f8;--secondary-background-color:#eae7f0;--card-background-color:#faf9fd;--primary-text-color:#38343f;--secondary-text-color:#746e7e;--divider-color:#dfdae7;--primary-color:#a29bbc;--warning-color:#bea16f;--error-color:#b98e9b}
+  body {margin:0;background:var(--primary-background-color);font:15px system-ui;color:var(--primary-text-color)}
+  .demo {padding:12px 24px;background:var(--secondary-background-color);border-bottom:1px solid var(--divider-color);color:var(--primary-text-color);text-align:center;line-height:1.5}
+  @media(prefers-color-scheme:dark) {:root {--primary-background-color:#24222c;--secondary-background-color:#302e3b;--card-background-color:#2d2b36;--primary-text-color:#eeeaf4;--secondary-text-color:#c4bdcf;--divider-color:#45404f;--primary-color:#b2acd1;--warning-color:#bba879;--error-color:#bb91a2}}
 </style>
 <div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.</div>
-<deye-ems-panel-1-0-3 id="preview"></deye-ems-panel-1-0-3>
+<deye-ems-panel-1-0-4 id="preview"></deye-ems-panel-1-0-4>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -16,11 +18,12 @@
   const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
   const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
   const deadline=night.toISOString();
-  const example={mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
+  const example={entry_id:"preview-entry",mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,reserve_margin_soc_percent:5,
     winter_weather_soc_percent:75,grid_current_max_a:108,charge_max_kw:5.3,
     discharge_max_kw:10,grid_max_soc_percent:95,
     extra_loads:[]},sources:{},data:{
+    solcast:{status:"ha_entities",quota:{utc:{used:3},limit:10}},
     updated_at:new Date().toISOString(),inputs:{soc:64,soc_valid:true,
       telemetry_valid:true,grid_power:4600,load_power:2800,
       total_load_with_outside_w:2800,outside_load_w:0,battery_power:-1200,current_a:26},
@@ -33,10 +36,64 @@
         pv_kw:Math.max(0,5*Math.sin((i%48-12)/12)),load_kw:2.8,
         grid_import_kw:i<16?1.8:0}))}}};
   let revision=1;
+  const previewFlows=new Map();
+  let previewFlowNumber=0,previewConfigured=false;
+  const previewMenu=(flow)=>({type:"menu",flow_id:flow.id,step_id:flow.step,
+    menu_options:flow.step==="init"?["parameters","solcast","sources"]:["solcast_manual","solcast_import","solcast_disable"]});
+  function previewForm(flow,errors={}){
+    if(flow.step==="solcast_import")return {type:"form",flow_id:flow.id,step_id:flow.step,errors,
+      data_schema:[{name:"source_entry",required:true,selector:{select:{options:[
+        {value:"preview-solcast",label:"Solcast — syntetyczne źródło z kalibracją"}]}}}]};
+    const schema=[
+      {name:"api_key",selector:{text:{type:"password"}}},
+      {name:"resource_ids",default:"demo-roof",selector:{text:{}}},
+      {name:"poll_interval_minutes",required:true,default:360,selector:{number:{min:15,max:1440,step:1}}},
+      {name:"max_requests_per_day",required:true,default:10,selector:{number:{min:1,max:1000,step:1}}},
+      {name:"initial_requests_used",required:true,default:10,selector:{number:{min:0,max:1000,step:1}}},
+      {name:"dampening_factor",required:true,default:1,selector:{number:{min:0,max:2,step:0.01}}},
+      {name:"hourly_factors",default:"1 ".repeat(23)+"1",selector:{text:{}}}
+    ];
+    if(flow.imported)schema.push({name:"accept_manual_calibration",required:true,default:false,selector:{boolean:{}}});
+    return {type:"form",flow_id:flow.id,step_id:"solcast_manual",data_schema:schema,errors,
+      description_placeholders:{import_note:flow.imported?
+        "Bieżące współczynniki zostały odczytane i skopiowane. To stan kalibracji, bez dalszego samouczenia. Dane podglądu są wyłącznie syntetyczne.":
+        "Podgląd: możesz wpisać dowolny syntetyczny klucz o długości co najmniej 8 znaków. Nie wpisuj prawdziwego klucza."}};
+  }
   document.getElementById("preview").hass={states:{
     "sensor.demo_pump_energy":{state:"123",attributes:{friendly_name:"Pompa ciepła — energia",unit_of_measurement:"kWh"}},
     "sensor.demo_cwu_energy":{state:"456",attributes:{friendly_name:"CWU — energia",unit_of_measurement:"kWh"}},
     "sensor.demo_cwu_power":{state:"500",attributes:{friendly_name:"CWU — moc",unit_of_measurement:"W"}}
+  },async callApi(method,route,data){
+    if(method==="POST"&&route==="config/config_entries/options/flow"){
+      const flow={id:"preview-flow-"+(++previewFlowNumber),step:"init",imported:false};
+      previewFlows.set(flow.id,flow);return previewMenu(flow);
+    }
+    const id=decodeURIComponent(route.split("/").at(-1)),flow=previewFlows.get(id);
+    if(method==="DELETE"){previewFlows.delete(id);return {message:"Flow aborted"};}
+    if(!flow)throw Error("Synthetic flow not found");
+    if(example.mode==="active"){previewFlows.delete(id);return {type:"abort",reason:"stop_before_mapping"};}
+    if(method==="GET")return flow.step==="init"||flow.step==="solcast"?previewMenu(flow):previewForm(flow);
+    if(data.next_step_id){
+      flow.step=data.next_step_id;
+      if(flow.step==="solcast")return previewMenu(flow);
+      if(flow.step!=="solcast_disable")return previewForm(flow);
+      example.data.solcast.status="disabled";
+    }else if(flow.step==="solcast_import"){
+      flow.imported=true;flow.step="solcast_manual";return previewForm(flow);
+    }else{
+      if(flow.imported&&!data.accept_manual_calibration)return previewForm(flow,{base:"import_calibration_required"});
+      if(!flow.imported&&!previewConfigured&&(!data.api_key||data.api_key.length<8))return previewForm(flow,{base:"invalid_solcast"});
+      const hourly=String(data.hourly_factors||"").trim();
+      if(hourly){
+        const factors=hourly.replaceAll(";", " ").replaceAll(",", " ").split(/\s+/).map(Number);
+        if(factors.length!==24||factors.some(value=>!Number.isFinite(value)||value<0||value>2))return previewForm(flow,{base:"invalid_solcast"});
+      }
+      previewConfigured=true;example.data.solcast.status="cached";
+      example.data.solcast.quota={utc:{used:data.initial_requests_used},limit:data.max_requests_per_day};
+    }
+    previewFlows.delete(id);
+    example.data.updated_at=new Date().toISOString();example.data.plan.generated_at=new Date().toISOString();
+    return {type:"create_entry",flow_id:id};
   },async callWS(message){
     if(["load_save","load_delete","load_toggle"].includes(message.command)){
       if(example.mode==="active")throw Error("Przejdź do obserwacji przed zmianą odbiorników.");

@@ -1,60 +1,68 @@
-# Instalacja Deye EMS
+# Instalacja i obsługa Deye EMS 1.0.4
 
-Wymagany Home Assistant **2026.11.0 lub nowszy**. W tej wersji używane są aktualne interfejsy config flow, panelu i walidacji HA. Silnik nie pobiera pakietów spoza HA.
+Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i nie wymaga EMHASS ani zewnętrznego solvera. Użytkownik wybiera źródła danych i parametry właściwe dla swojej instalacji.
 
-## Marketplace — zalecana instalacja
+## Marketplace
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
-1. Kliknij przycisk powyżej i wskaż swoją instancję Home Assistant.
-2. Jeśli Marketplace nie zna jeszcze repozytorium, zaakceptuj jego dodanie jako **Integracja**. W razie potrzeby połącz GitHub w kreatorze Marketplace.
-3. Wybierz **Instaluj** i wersję **v1.0.3**.
-4. Jeśli HA poprosi o restart, wykonaj go. Następnie [dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems).
+1. Kliknij przycisk i wskaż instancję HA.
+2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
+3. Zainstaluj **v1.0.4**. Wykonaj restart, jeżeli HA go wymaga.
+4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
-Jeśli przycisk nie otwiera Twojej instancji, przejdź ręcznie do **Ustawienia → Marketplace → Dodaj z linku**, wpisz `https://github.com/gaszu/ha-deye-ems`, dodaj i zainstaluj projekt.
+Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/ha-deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
-Jeżeli Deye EMS była już skonfigurowana, [otwórz istniejącą integrację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems) w **Ustawienia → Urządzenia i usługi → Integracje**. Nie dodawaj drugiego wpisu. Panel **Deye EMS** jest widoczny w menu bocznym administratora. Gdy po instalacji go nie widać, odśwież przeglądarkę; po aktualizacji sprawdź też, czy Marketplace oczekuje restartu HA.
+## Instalacja z ZIP
 
-Jest to instalacja z własnego repozytorium Marketplace. Projekt nie jest jeszcze pozycją domyślnego katalogu. Publiczne repozytorium zawiera kod, dokumentację i dane syntetyczne, bez danych dostępu i historii domu.
+1. Pobierz [deye-ems-1.0.4.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.4/deye-ems-1.0.4.zip).
+2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
+3. Uruchom HA ponownie i dodaj integrację.
 
-## Instalacja ręczna z ZIP
+## Pierwsza konfiguracja
 
-1. Pobierz ZIP z katalogu `dist` repozytorium.
-2. Rozpakuj go. Skopiuj cały katalog `custom_components/deye_ems` do katalogu konfiguracji HA, zwykle `/config/custom_components/deye_ems`.
-3. Uruchom ponownie Home Assistant, aby wykrył nową integrację.
-4. Otwórz **Ustawienia → Urządzenia i usługi → Dodaj integrację → Deye EMS**.
-5. Ustaw minimalny bezpieczny SoC, pojemność magazynu, moc PV w kWp, moc falownika łącznie i na fazę oraz osobne limity poboru. Wartości początkowe to 40%, 66 kWh oraz 12 kW łącznie i 5 kW na fazę; dopasuj je do własnej instalacji.
-6. Integracja zaczyna w trybie **shadow / obserwacja**. Panel Deye EMS pojawi się w menu bocznym administratora.
-7. W **Konfiguruj → Encje pomiarowe i sterujące** sprawdź przypisania. Domyślne identyfikatory to przykład dla ESPHome Deye/YamBMS i można je zastąpić własnymi.
-8. W **Dodatkowe zużycia** dodaj odpowiednie liczniki pompy ciepła, CWU, klimatyzacji itd.
-9. Porównaj pomiary i cele z działającym EMS. Przejście produkcyjne opisano w [MIGRATION.md](MIGRATION.md).
+1. Wpisz minimalny bezpieczny SoC, pojemność baterii, moc PV, moc falownika łącznie i na fazę oraz osobne limity importu. Domyślne wartości produktu to m.in. 40%, 66 kWh, 12 kW łącznie i 5 kW na fazę; wymagają dopasowania do urządzeń.
+2. Pozostań w **shadow / obserwacja**. W tym trybie integracja pokazuje obliczenia bez sterowania wyjściami.
+3. W **Konfiguruj → Encje pomiarowe i sterujące** sprawdź lub zastąp przykładowe przypisania. Każde wyjście musi wskazywać właściwą, istniejącą encję, a wyjścia muszą mieć unikalne przypisania.
+4. Skonfiguruj źródło prognozy PV i ewentualne dodatkowe profile zużycia.
+5. Sprawdź pomiary, ich jednostki, daty prognozy, wybrany cel i warunki konfiguracji. Dopiero potem osobno wybierz sterowanie. Zasady przejścia i powrotu opisuje [MIGRATION.md](MIGRATION.md).
 
-## Połączenie z Solcast
+Wymagane pomiary obejmują SoC i napięcie tego samego BMS, dopuszczony prąd i blokadę BMS, GRID/LOAD łącznie i na trzech fazach, moc baterii oraz odczyt nastawy prądu ładowania. Sterowanie wymaga zgodnych ustawień trybów falownika i mapowań TOU. Szczegółowe warunki opisuje [SPECIFICATION.md](SPECIFICATION.md). Integracja nie ustawia automatycznie wszystkich trybów sprzętowych.
 
-1. W [Solcast Toolkit](https://toolkit.solcast.com.au/) załóż konto i skonfiguruj instalacje: moc AC/DC, azymut, nachylenie i sprawność. Skopiuj klucz API i identyfikatory `rooftop_resource_id` z ich szczegółów.
-2. W HA otwórz **Deye EMS → Konfiguruj → Solcast — połączenie i ustawienia → Połącz / zmień ustawienia**. Moduł jest już częścią EMS; nie wymaga osobnej instalacji Solcast.
-3. Wpisz klucz i identyfikatory oddzielone przecinkami. Puste identyfikatory uruchamiają próbę wykrywania konta; jeżeli API jej nie obsługuje, wpisz identyfikatory ręcznie.
-4. Dopasuj częstotliwość i limit konta. Dwie instalacje i pobieranie co 6 h zużywają zwykle 8 zapytań na dobę; wykrywanie lub nieudane próby też mogą zużyć zapytanie. Standardowy plan Hobbyist pozwala na 10 na dobę UTC. Nie ustawiaj wyższego limitu bez odpowiedniego planu Solcast.
-5. Wpisz rzeczywistą liczbę zapytań już wykorzystanych tego dnia na tym koncie. Gdy jej nie znasz, pozostaw 10 i poczekaj na nową dobę. Wpisane zużycie nie zmniejsza istniejącego rejestru; po zmianie konfiguracji może go podnieść.
-6. Zostaw mnożnik 1 i puste korekty godzinowe, jeśli nie wymagają zmiany. Prognoza Solcast jest już obliczona dla mocy zapisanej w portalu; w EMS pozostaw tryb **prognoza całej instalacji, bez skalowania**.
-7. Alternatywnie wybierz **Importuj dostępne ustawienia z HA**. Klucz, limit konta, wykluczenia i bieżące 24/48 współczynników zostaną skopiowane lokalnie. Sensor korekt jest wyszukiwany w rejestrze wybranej integracji, bez zależności od jego polskiej nazwy. Import zachowuje stan korekt, bez całej historii i algorytmu dalszego samouczenia; kreator poda zakres i poprosi o potwierdzenie. Brak kompletnych korekt zatrzymuje import zamiast zgadywać wartości.
-8. Podczas przełączania źródła zatrzymaj odpytywanie poprzedniego klienta Solcast. Sprawdź datę prognozy i stan API w panelu EMS. Zmiany źródła wykonuje się w obserwacji; produkcyjne przejęcie wymaga kompletnej konfiguracji.
+Recorder HA dostarcza historię LOAD i liczników energii. Do stabilnego profilu potrzebne są porównywalne obserwacje poszczególnych godzin; brak wystarczającej historii uruchamia jawny fallback. Zweryfikuj, że główny LOAD obejmuje odbiorniki używane w modelu.
 
-## Wymagane pomiary
+## Solcast — konfiguracja w panelu
 
-SoC i napięcie tego samego BMS; prąd dopuszczony i blokada BMS; suma i trzy fazy Grid/LOAD; rzeczywista moc baterii; odczyt limitu prądu ładowania. Dynamiczne pomiary mocy muszą być świeże i mieć poprawne jednostki.
+1. W [Solcast Toolkit](https://toolkit.solcast.com.au/) skonfiguruj konto i instalacje. Moc AC/DC, azymut, nachylenie i sprawność należą do konfiguracji usługi Solcast.
+2. W panelu wybierz **Połącz i skonfiguruj Solcast → Połącz / zmień ustawienia**. Dostępna jest również droga **Integracje → Deye EMS → Konfiguruj → Solcast — połączenie i ustawienia**. Jeżeli działa sterowanie, najpierw jawnie wybierz **Przejdź do obserwacji**.
+3. Wpisz klucz API i identyfikatory `rooftop_resource_id` oddzielone przecinkami. Puste identyfikatory pozwalają spróbować wykrywania; jeśli API go nie obsługuje, wpisz je ręcznie.
+4. Dobierz odstęp pobierania i limit konta. Każda instalacja wymaga osobnego zapytania, a wykrywanie oraz nieudane próby mogą również zużyć limit. Dwie instalacje odpytywane co 6 h oznaczają zwykle 8 zapytań na dobę, bez dodatkowych prób. Domyślny limit wynosi 10 na dobę UTC; dopasuj go do planu konta zgodnie z [dokumentacją Solcast](https://docs.solcast.com.au/docs/section/rooftop-sites-hobbyist).
+5. Podaj znane wykorzystanie bieżącej doby. Jeśli jest nieznane, pozostaw pełny limit i poczekaj na następną dobę UTC. Wartość ta nie obniża istniejącego rejestru, lecz może go podnieść.
+6. Dla prognozy całej instalacji pozostaw skalowanie 1:1. Moc kWp nie mnoży ponownie prognozy obliczonej dla instalacji w portalu. Mnożnik stały i 24 korekty godzinowe zmieniaj świadomie; osobny tryb profilu referencyjnego wymaga właściwej mocy odniesienia.
+7. Wybierz **Zapisz i włącz pobieranie API**. Zapis włącza klienta i kolejne pobrania mogą zużyć limit. Zaczekaj na nowy plan, sprawdź go i osobno włącz sterowanie.
 
-Integracja używa standardowego Recorder HA do profilu historycznego LOAD i liczników energii. LOAD zawiera cały dom, w tym pompę ciepła. Zalecana jest co najmniej tygodniowa historia, z minimum trzema porównywalnymi obserwacjami każdej godziny. Brak historii daje jawny fallback.
+Otwarcie lub anulowanie kreatora, a także aktualizacja wersji, nie przełączają źródła. **Anuluj kreator** odrzuca niezapisany szkic. **Zamknij kreator** po zapisie nie cofa konfiguracji. Wyłączenie pobierania w panelu wymaga osobnego potwierdzenia i zachowuje klucz oraz kalibrację.
 
-Prognozy PV są opcjonalnymi danymi planowania; obsługiwany jest format `detailedForecast` z `period_start`, `pv_estimate10`, `pv_estimate`. Cache jest przypisany do konkretnych dat i przedziałów. Brak kompletnych danych nie jest zastępowany fikcyjną produkcją zero.
+Zapisany klucz pozostaje ukryty; puste pole zachowuje dotychczasowy. Klucz wpisany w formularzu jest przechowywany nietrwale i czyszczony po zakończeniu lub zamknięciu. Panel statusu, plan, cache i diagnostyka nie udostępniają klucza.
 
-## HACS / Marketplace
+### Import istniejącej konfiguracji
 
-Repozytorium zawiera strukturę `custom_components` i `hacs.json`. Marketplace i HACS wymagają publicznego repozytorium dla instalacji i aktualizacji tą drogą. Prywatny projekt można nadal instalować ręcznie z ZIP. Integracja EMS nie potrzebuje tokenu GitHub do działania.
+Wybierz **Importuj ustawienia z HA** i wskaż wpis `solcast_solar`. Import kopiuje dostępny klucz, limit konta, wykluczenia oraz bieżące 24/48 współczynników. Kalibracja jest odczytywana z encji przypisanej do wybranej integracji przez rejestr HA, bez zależności od jej wyświetlanej nazwy.
 
-## Aktualizacje i usunięcie
+Jest to snapshot, bez historii i dalszego samouczenia poprzedniego klienta. Kreator pokazuje zakres importu, a wymagający przeglądu import wymaga dodatkowego potwierdzenia. Brak kompletnych korekt zatrzymuje import. Dane pozostają szkicem aż do zapisu formularza. Korekty są stosowane wyłącznie do surowego API EMS; prognozy odczytywane z encji HA nie są korygowane ponownie.
 
-Aktualizacja: podmień wyłącznie katalog integracji i uruchom HA ponownie. Nie usuwaj jej konfiguracji ani magazynu runtime, jeżeli chcesz zachować ustawienia i cache.
+Import nie zatrzymuje innej integracji. Przy zmianie klienta użytkownik osobno zarządza jej odpytywaniem, aby nie współdzielić nieświadomie limitu konta. EMS utrwala wykorzystanie przed HTTP; restart, import i zapis konfiguracji nie zerują licznika bieżącej doby.
 
-Przed usunięciem wybierz obserwację. Gdy integracja nadal ma wyłączną kontrolę, świadome przejście z active do shadow próbuje wyłączyć Grid Charge i ustawić prąd sieciowy 0 A; trzeba sprawdzić odczyty urządzenia. Wyładowanie samego kodu nie wysyła poleceń sprzętowych. Ostatnie ustawienia falownika mogą pozostać zapisane, więc jego stan należy zweryfikować.
+## Dodatkowe zużycia
 
+W panelu użyj **Dodaj odbiornik**, podaj nazwę, licznik energii Wh/kWh i opcjonalną moc W/kW. **Edytuj** zmienia konfigurację, **Usuń** usuwa kanał, a ON/OFF zachowuje jego dane i identyfikator. Zmiany wymagają obserwacji i nie wznawiają sterowania automatycznie.
+
+Kanały służą wyłącznie modelowaniu SoC. Nie sterują urządzeniami i nie są ponownie dodawane do bieżącego LOAD ani ograniczania importu. Przy niedostatecznej historii kanału model korzysta z całkowitego LOAD.
+
+## Aktualizacja i zakończenie pracy
+
+Zaktualizuj przez Marketplace albo podmień katalog integracji z ZIP i wykonaj wymagany restart HA. Zachowaj wpis konfiguracji i magazyn runtime, aby zachować ustawienia, cache oraz rejestr prób. Sama aktualizacja nie wybiera nowego źródła Solcast.
+
+Przed usunięciem integracji jawnie wybierz obserwację i sprawdź odczyty urządzenia. Gdy EMS nadal ma wyłączną kontrolę, przejście z active do shadow próbuje wyłączyć Grid Charge i ustawić 0 A. Samo wyładowanie kodu nie wysyła poleceń sprzętowych; ostatnie ustawienia mogą pozostać w urządzeniu.
+
+[README](README.md) · [Specyfikacja](SPECIFICATION.md) · [Przejście i powrót](MIGRATION.md) · [Testy](VALIDATION.md)
