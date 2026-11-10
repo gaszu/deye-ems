@@ -4,10 +4,16 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. W tej wersji używane są aktu
 
 ## Marketplace — zalecana instalacja
 
-1. W HA otwórz **Ustawienia → Marketplace → Dodaj z linku**.
-2. Wpisz `https://github.com/gaszu/ha-deye-ems` i wybierz typ **Integracja**.
-3. Dodaj repozytorium, otwórz Deye EMS i wybierz **Instaluj**.
-4. Jeśli HA poprosi o restart, wykonaj go. Następnie dodaj Deye EMS w **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
+[![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
+
+1. Kliknij przycisk powyżej i wskaż swoją instancję Home Assistant.
+2. Jeśli Marketplace nie zna jeszcze repozytorium, zaakceptuj jego dodanie jako **Integracja**. W razie potrzeby połącz GitHub w kreatorze Marketplace.
+3. Wybierz **Instaluj** i wersję **v1.0.0**.
+4. Jeśli HA poprosi o restart, wykonaj go. Następnie [dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems).
+
+Jeśli przycisk nie otwiera Twojej instancji, przejdź ręcznie do **Ustawienia → Marketplace → Dodaj z linku**, wpisz `https://github.com/gaszu/ha-deye-ems`, dodaj i zainstaluj projekt.
+
+Jeżeli Deye EMS była już skonfigurowana, [otwórz istniejącą integrację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems) w **Ustawienia → Urządzenia i usługi → Integracje**. Nie dodawaj drugiego wpisu. Panel **Deye EMS** jest widoczny w menu bocznym administratora. Gdy po instalacji go nie widać, odśwież przeglądarkę; po aktualizacji sprawdź też, czy Marketplace oczekuje restartu HA.
 
 Jest to instalacja z własnego repozytorium Marketplace. Projekt nie jest jeszcze pozycją domyślnego katalogu. Publiczne repozytorium zawiera kod, dokumentację i dane syntetyczne, bez danych dostępu i historii domu.
 

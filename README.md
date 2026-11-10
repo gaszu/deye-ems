@@ -6,11 +6,19 @@ Pierwsza wersja zachowuje mechanizmy obecnego EMS: harmonogram G13, sezonowe cel
 
 ## Instalacja
 
-**Marketplace (HA 2026.11+): Ustawienia → Marketplace → Dodaj z linku → `https://github.com/gaszu/ha-deye-ems` → typ Integracja → Instaluj.** Następnie dodaj Deye EMS w Urządzeniach i usługach. Repozytorium jest publicznym kodem integracji; indywidualne ustawienia i dane domu pozostają w HA.
+[![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
+
+1. Kliknij przycisk **Marketplace**, wskaż swoją instancję HA i zaakceptuj dodanie repozytorium, jeśli pojawi się taka propozycja.
+2. Wybierz **Instaluj** i wersję **v1.0.0**. Jeśli HA poprosi o restart, wykonaj go.
+3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems). Jeżeli jest już skonfigurowana, [otwórz istniejącą integrację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
+
+W HA znajdziesz ją pod **Ustawienia → Urządzenia i usługi → Integracje → Deye EMS**. Jej panel pojawia się w menu bocznym administratora; po instalacji lub restarcie odśwież stronę. Pierwszy start to obserwacja.
+
+Wymagany HA **2026.11+**. Przycisk otwiera normalną instalację Marketplace i obsługuje także dodanie tego projektu jako własnego repozytorium. Projekt nie jest jeszcze w katalogu domyślnym. [Zasady przycisku i katalogu](https://contributors.home-assistant.io/marketplace/guides/catalog/#the-link-to-your-repository).
 
 [Specyfikacja 1.0.0](SPECIFICATION.md) · [Instrukcja instalacji](INSTALL.md) · [Przejście z obecnego EMS i powrót](MIGRATION.md)
 
-Pakiet: [deye-ems-1.0.0.zip](dist/deye-ems-1.0.0.zip). Po skopiowaniu katalogu integracji i restarcie HA: **Ustawienia → Urządzenia i usługi → Dodaj integrację → Deye EMS**. Panel **Deye EMS** pojawia się w menu bocznym. Pierwsze dodanie uruchamia obserwację, bez poleceń do falownika.
+Alternatywna instalacja ręczna: [deye-ems-1.0.0.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.0/deye-ems-1.0.0.zip).
 
 ## Najważniejsze ustawienia
 

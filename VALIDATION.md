@@ -12,8 +12,9 @@ Data: 10 listopada 2026, Europe/Warsaw.
 - Niższa skonfigurowana moc falownika i fazy ogranicza prąd oraz model niezależnie od wyższych limitów sieci.
 - Import 24/48 współczynników zachowuje prawdziwe zero, odrzuca braki, uwzględnia pierwszeństwo ALL/global i wykluczenia. Korekty są stosowane tylko do surowego API, bez ponownego mnożenia skorygowanych prognoz HA.
 - Natywny start w HA Core2026.11: wpis integracji `loaded`, własne encje i tryb obserwacji; brak wpisów błędów `deye_ems` w dzienniku systemowym. Dotychczasowy regulator pozostał aktywny.
+- Następnie sprawdzono przejęcie produkcyjne: poprzedni wykonawca i jego nadzór OFF, nowa integracja `active`, brak konfliktu właścicieli, zgodny odczyt nastawy prądu, aktywny GC w bieżącym tanim slocie i pomiar ładowania baterii. GC w chronionych slotach3/5 pozostajeOFF. To obserwacja konkretnych odczytów, nie gwarancja osiągnięcia każdego celu SoC.
 - Stała flaga blokady BMS nie wymaga cyklicznych zmian wartości. Jej poprawny odczyt nadal wymaga dostępności i świeżego napięcia tego samego BMS; aktywna blokada, przywrócony stan lub nieprawidłowe dane blokują ładowanie.
 
-Testy runtime i cyklu życia podstawiają framework HA na granicy API; rzeczywiste funkcje planera i regulatora są wykonywane. Osobno potwierdzono natywne załadowanie integracji w obserwacji. Nie potwierdza to fizycznego wykonania sterowania przez Deye ani przejęcia produkcji.
+Testy runtime i cyklu życia podstawiają framework HA na granicy API; rzeczywiste funkcje planera i regulatora są wykonywane. Osobno potwierdzono natywne załadowanie, przejęcie sterowania i odczyty opisane powyżej. Pełna ocena działania w różnych warunkach pogodowych i obciążeniach wymaga obserwacji w czasie.
 
 Paczka nie zawiera tokenów, haseł ani historii domu. Przykłady i testy są syntetyczne.
