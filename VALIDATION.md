@@ -1,4 +1,13 @@
-# Sprawdzenia wersji 1.0.5
+# Sprawdzenia wersji 1.0.6
+
+- **322/322 testów Python PASS** i **60/60 testów panelu PASS**.
+- Zwykłe polecenia prądu respektują600s od każdej możliwej wysłanej nastawy, próg5A i krok20A. Testy obejmują bezpieczny start poniżej5A, brak nowego kroku przy opóźnionym odczycie oraz wznowienie po redukcji ochronnej.
+- Testy trwałego rejestru rozróżniają pewne niewysłanie, transport o niepewnym wyniku i przyjęcie usługi. Sprawdzono60s po pewnej niewysłanej próbie bez kasowania wcześniejszej600s przerwy, odtworzenie przygotowanej próby po restarcie, stare metadane oraz zapis trwający dłużej niż600s.
+- Zapas GRID jest ponownie sprawdzany po zapisie Store, bezpośrednio przed usługą. Scenariusze obejmują zmianę obciążenia, obcy znacznik próby, pełny zapas wymagany do GC ON i zmniejszenie zbyt wysokiej nastawy przed włączeniem ładowania.
+- Możliwa wcześniejsza wyższa nastawa pozostaje ryzykiem po niższym poleceniu o wyniku accepted/uncertain/not_sent, aż do świeżego zgodnego odczytu. Przyjęcie usługi nadal nie oznacza potwierdzenia sprzętu.
+- Przechodzą wcześniejsze regresje nieodnawialnego30s oczekiwania na bezpieczną redukcję, BMS, GRID, świeżości, własności sterowania i okien chronionych. Testy używają syntetycznych pomiarów i atrap usług; nie potwierdzają fizycznej reakcji falownika.
+
+## Sprawdzenia wersji 1.0.5
 
 - **289/289 testów Python PASS** i **60/60 testów panelu PASS**.
 - Preferencja wyglądu ma osobny Store. Testy obejmują walidację dostępnych nazw motywów, admin-only WebSocket, trwały zapis przed publikacją, błąd zapisu bez zmiany wartości oraz serializację równoległych zapisów. Błąd odczytu kosmetycznej preferencji nie blokuje startu sterownika.

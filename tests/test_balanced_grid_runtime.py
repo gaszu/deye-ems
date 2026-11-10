@@ -107,6 +107,11 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
     async def test_initial_gc_off_still_waits_for_exact_settled_readback(self):
         h = scenario()
         h.set("tou_gc_2", "off")
+        # With charging OFF, GRID contains only LOAD. Enabling the charger
+        # must have room for the full setting, not just a register delta.
+        h.set("grid_power", 9280, "W")
+        for index, value in enumerate((3000, 3500, 2780), 1):
+            h.set(f"grid_l{index}_power", value, "W")
         await drive(h)
         self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "off")
         self.assertFalse(any(action == "turn_on" for _, action, _ in h.calls))

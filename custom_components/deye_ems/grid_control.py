@@ -17,6 +17,12 @@ from __future__ import annotations
 import math
 
 
+ORDINARY_INTERVAL_SECONDS = 600
+ORDINARY_RETRY_BACKOFF_SECONDS = 60
+ORDINARY_DEADBAND_A = 5
+ORDINARY_MAX_STEP_A = 20
+
+
 def _number(value):
     return (not isinstance(value, bool) and isinstance(value, (int, float))
             and math.isfinite(value))
@@ -85,6 +91,44 @@ def calculate_grid_charge_cap(g: dict) -> dict:
                 telemetry_ok=True, reason=reason, power_per_a_w=round(per_amp, 6))
 
 
+def calculate_grid_charge_increase_cap(g: dict) -> dict:
+    """Bound an increase by measured GRID headroom, in addition to full caps.
+
+    ``current_a`` is the baseline of the incremental request, not power that
+    can be added back to GRID headroom. A caller enabling previously inactive
+    grid charging must supply a zero baseline so the entire setting fits.
+    Register acknowledgement alone does not prove physical charger power.
+    """
+    cap = calculate_grid_charge_cap(g)
+    if not cap["telemetry_ok"]:
+        return dict(increase_cap_a=0, grid_step_headroom_a=0,
+                    telemetry_ok=False, reason="telemetry_invalid")
+    total_available = (g.get("total_limit_w", 12000) - g.get("headroom_w", 500)
+                       - max(g["grid_w"], sum(g["grid_phases_w"])))
+    phase_available = (g.get("phase_limit_w", 5000) - g.get("phase_headroom_w", 250)
+                       - max(g["grid_phases_w"]))
+    available = max(0, min(total_available, phase_available *
+                          (3 if g.get("grid_charge_balanced") is True else 1)))
+    per_amp = g["battery_voltage_v"] / g.get("charge_efficiency", .9)
+    delta = math.floor(available / per_amp)
+    return dict(increase_cap_a=max(0, min(cap["cap_a"], math.floor(g["current_a"] + delta))),
+                grid_step_headroom_a=delta, telemetry_ok=True,
+                reason="grid_step_headroom")
+
+
+def _ordinary_history(g, now):
+    """Accept only an explicitly validated dispatch history from the caller."""
+    keys = ("ordinary_last_possible_ts", "ordinary_last_not_sent_ts")
+    if (g.get("ordinary_history_known") is not True or not _number(now) or now <= 0
+            or not all(key in g for key in keys)):
+        return None
+    possible, not_sent = (g[key] for key in keys)
+    if any(value is not None and not (_number(value) and 0 <= value <= now)
+           for value in (possible, not_sent)):
+        return None
+    return possible, not_sent
+
+
 def calculate_grid_charge(g: dict) -> dict:
     """Propose a bounded setting; persist its ledger before attempting a write.
 
@@ -95,23 +139,38 @@ def calculate_grid_charge(g: dict) -> dict:
     cheap-window reserve emergency. This minimum is a reserve floor, not a
     weather-dependent charging target.
 
-    An unknown/future ledger prevents increases.  A readback different from the
-    last attempt can only retry that proposal, never stack another increase.
+    An unknown/future history or attempt ledger prevents ordinary changes.
+    The dispatch clock includes every potentially sent current setting,
+    including safety reductions. Ordinary writes require 600 seconds since
+    that dispatch, 60 seconds since a certainly not-sent attempt, and at least
+    5 A of actual setting change, except a safe nonzero start from zero. A
+    step is at most 20 A. A readback different
+    from the last attempt can only retry that proposal, never stack another
+    increase. Only a validated virgin history may start immediately.
     The caller must supply fresh telemetry (<=30 s, proper units, not restored).
     """
     cap = calculate_grid_charge_cap(g)
     current = g.get("current_a")
     current_ok = _number(current) and 0 <= current <= 1000
     current = current if current_ok else 0
+    pending = g.get("pending_current_a")
+    pending_ok = pending is None or (_number(pending) and 0 <= pending <= 1000)
+    # An inactive charger may add the entire register setting when enabled.
+    # Reduce a pre-existing high setting to that absolute start budget first.
+    if cap["telemetry_ok"] and g.get("grid_charge_active") is not True:
+        start_cap = calculate_grid_charge_increase_cap({**g, "current_a": 0})["increase_cap_a"]
+        if start_cap < cap["cap_a"]:
+            cap = dict(cap, cap_a=start_cap, reason="grid_start_headroom")
+    pending_unsafe = pending_ok and pending is not None and pending > cap["cap_a"]
     now = g.get("now_ts")
     attempted_at, attempted_a = g.get("last_attempt_ts"), g.get("last_attempt_a")
     ledger_ok = (all(_number(v) for v in (now, attempted_at, attempted_a))
                  and now > 0 and 0 <= attempted_at <= now and 0 <= attempted_a <= 1000)
     age = now - attempted_at if ledger_ok else -1
     if g.get("safety_only") is True:
-        candidate = min(current, cap["cap_a"]) if current_ok else 0
+        candidate = min(current, cap["cap_a"]) if current_ok and pending_ok else 0
         same_attempt = ledger_ok and abs(attempted_a - candidate) < .01
-        change = not current_ok or abs(current - candidate) >= .01
+        change = not current_ok or not pending_ok or pending_unsafe or abs(current - candidate) >= .01
         return dict(cap, need_a=0, next_a=candidate,
                     write=change and (not same_attempt or age >= 10), safety=True,
                     reason="safety_" + cap["reason"] if change else "safety_hold",
@@ -137,48 +196,60 @@ def calculate_grid_charge(g: dict) -> dict:
                   gap_kwh=round(gap, 6), projected_soc=round(projected, 3) if projected is not None else None)
     # No charge, a failed snapshot and lower load/BMS limits take precedence
     # over all time/ramp gates. Identical failed writes are retried, not flooded.
-    force_zero = not allowed or need == 0 or not cap["telemetry_ok"]
-    safety = not current_ok or current > cap["cap_a"] or force_zero
+    force_zero = not allowed or need == 0 or not cap["telemetry_ok"] or not pending_ok
+    safety = not current_ok or current > cap["cap_a"] or pending_unsafe or force_zero
     if safety:
-        candidate = 0 if force_zero or not current_ok else cap["cap_a"]
+        candidate = 0 if force_zero or not current_ok else min(current, cap["cap_a"])
         same_attempt = ledger_ok and abs(attempted_a - candidate) < .01
-        change = not current_ok or abs(current - candidate) >= .01
+        change = (not current_ok or not pending_ok or pending_unsafe
+                  or (force_zero and pending is not None and pending > 0)
+                  or abs(current - candidate) >= .01)
         result.update(next_a=candidate, safety=True,
                       write=change and (not same_attempt or age >= 10),
-                      reason=("telemetry_invalid" if not cap["telemetry_ok"] else
+                      reason=("pending_current_invalid" if not pending_ok else
+                              "telemetry_invalid" if not cap["telemetry_ok"] else
                               "window_or_policy_blocked" if not allowed else
                               "target_reached" if need == 0 else cap["reason"]))
         return result
-    if not ledger_ok:
+    history = _ordinary_history(g, now)
+    if history is None:
+        result["reason"] = "dispatch_history_unknown"
+        return result
+    possible, not_sent = history
+    first_attempt = (attempted_at is None and attempted_a is None and possible is None)
+    if not (ledger_ok or first_attempt):
         result["reason"] = "ledger_missing_or_future"
         return result
-    if abs(current - attempted_a) >= .01:
-        candidate = min(attempted_a, wanted)
-        # Cancelling an obsolete higher proposal may reduce normally, but it
-        # must not invent an immediate multi-amp ordinary downward jump.
-        if candidate < current:
-            candidate = max(candidate, current - 5)
-            ready = age >= 30
-        else:
-            # A manual setting change or stale readback can put the device far
-            # below the previous proposal.  Retrying that old high value must
-            # not bypass the ordinary upward ramp from the observed setting.
-            candidate = min(candidate, current + 2)
-            same_proposal = abs(candidate - attempted_a) < .01
-            ready = age >= (10 if same_proposal else 30)
-        result.update(next_a=candidate, write=ready and abs(candidate-current) >= .01,
-                      reason="retry_unconfirmed" if ready else "awaiting_readback")
+    unconfirmed = ledger_ok and abs(current - attempted_a) >= .01
+    if possible is not None and now - possible < ORDINARY_INTERVAL_SECONDS:
+        result["reason"] = "awaiting_readback" if unconfirmed else "ramp_wait"
         return result
-    if age < 30:
-        result["reason"] = "ramp_wait"
+    if not_sent is not None and now - not_sent < ORDINARY_RETRY_BACKOFF_SECONDS:
+        result["reason"] = "dispatch_retry_wait"
         return result
+    if unconfirmed:
+        wanted = min(attempted_a, wanted)
     difference = wanted - current
-    if abs(difference) < 2:
+    starting = current == 0 and difference > 0
+    if abs(difference) < ORDINARY_DEADBAND_A and not starting:
         result["reason"] = "deadband"
         return result
-    candidate = min(wanted, current + 2) if difference > 0 else max(wanted, current - 5)
-    result.update(next_a=int(candidate), write=True,
-                  reason="ramp_up" if difference > 0 else "ramp_down")
+    candidate = (min(wanted, current + ORDINARY_MAX_STEP_A) if difference > 0
+                 else max(wanted, current - ORDINARY_MAX_STEP_A))
+    if difference > 0:
+        increase = calculate_grid_charge_increase_cap(g)
+        result.update(increase)
+        candidate = min(candidate, increase["increase_cap_a"])
+    candidate = math.floor(candidate) if difference > 0 else math.ceil(candidate)
+    # Test the final setting difference as well: GRID clipping to 1--4 A must
+    # not turn a large requested increase into another small ordinary write.
+    if (abs(candidate - current) < ORDINARY_DEADBAND_A
+            and not (starting and candidate > 0)):
+        result["reason"] = "grid_step_headroom" if difference > 0 else "deadband"
+        return result
+    result.update(next_a=candidate, write=True,
+                  reason="retry_unconfirmed" if unconfirmed else
+                         "ramp_up" if difference > 0 else "ramp_down")
     return result
 
 

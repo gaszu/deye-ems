@@ -39,7 +39,7 @@ function fixture(previousElements = []) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-5");
+  const Panel = registry.get("deye-ems-panel-1-0-6");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -56,11 +56,12 @@ function fixture(previousElements = []) {
 
 test("an existing browser session registers the updated panel alongside the old element",()=>{
   class LegacyPanel {}
-  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel]]);
+  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel]]);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.5/);
+  assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-6"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.6/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{

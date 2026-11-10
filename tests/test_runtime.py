@@ -311,31 +311,35 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await h.co._grid_attempt(2, h.now.timestamp()))
         self.assertEqual(h.calls, [])
 
-    async def test_failed_command_keeps_journal_and_retries_no_earlier_than_ten_seconds(self):
+    async def test_uncertain_command_keeps_journal_and_waits_six_hundred_seconds(self):
         h = Harness()
         h.active()
         h.fail_service = True
         await h.tick()
-        self.assertEqual(h.current_calls(), [2])
-        h.advance(9)
+        self.assertEqual(h.current_calls(), [20])
+        self.assertEqual(h.co._memory["grid_dispatch"]["outcome"], "uncertain")
+        h.advance(599)
         await h.tick()
-        self.assertEqual(h.current_calls(), [2])
+        self.assertEqual(h.current_calls(), [20])
         h.advance(1)
         await h.tick()
-        self.assertEqual(h.current_calls(), [2, 2])
+        self.assertEqual(h.current_calls(), [20, 20])
 
     async def test_current_ramps_without_pulsing_active_grid_charge(self):
         h = Harness()
         h.active()
         await h.tick()
-        self.assertEqual(h.current_calls(), [2])
+        self.assertEqual(h.current_calls(), [20])
         self.assertFalse(any(a == "turn_on" for _, a, _ in h.calls))
         h.advance(10)
         await h.tick()
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "on")
-        h.advance(20)
+        h.advance(589)
         await h.tick()
-        self.assertEqual(h.current_calls(), [2, 4])
+        self.assertEqual(h.current_calls(), [20])
+        h.advance(1)
+        await h.tick()
+        self.assertEqual(h.current_calls(), [20, 39])
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "on")
 
     async def test_incoming_protected_clock_mismatch_blocks_enabling_grid_charge(self):
@@ -595,7 +599,7 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["control"]["target_soc"], 95)
         self.assertEqual(result["control"]["target_source"], "unreachable_plan_raise")
         self.assertEqual(h.co._memory["target_cache"]["night"]["soc_percent"], 45)
-        self.assertEqual(h.current_calls(), [2])
+        self.assertEqual(h.current_calls(), [20])
         self.assertLessEqual(result["control"]["next_a"], result["control"]["cap_a"])
 
     async def test_invalid_plan_keeps_winter_higher_setting_until_fresh_valid_counterplan(self):

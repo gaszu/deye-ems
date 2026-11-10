@@ -4,17 +4,17 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.5
+## Instalacja wersji 1.0.6
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.5** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.6** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.5.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.5/deye-ems-1.0.5.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.5.md).
+Alternatywnie pobierz [deye-ems-1.0.6.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.6/deye-ems-1.0.6.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.6.md).
 
 ## Konfiguracja
 
@@ -54,7 +54,7 @@ Silnik tworzy deterministyczną projekcję bilansu energii na 48 h. Zimą wyznac
 
 Regulator uwzględnia świeżość i jednostki pomiarów, GRID/LOAD łącznie i na fazach, napięcie baterii oraz ograniczenia BMS i falownika. Model rozkładu fazowego zależy od potwierdzonych ustawień urządzenia; brak potwierdzenia wybiera wariant zachowawczy. Limity importu i mocy konwersji są kontrolowane osobno. EMS nie przełącza automatycznie trybów falownika.
 
-Zwykła rampa zwiększa nastawę o maks. 2 A co 30 s, a zmniejsza do 5 A co 30 s. Ochrony mogą wymagać natychmiastowej redukcji. Próba polecenia jest zapisywana przed usługą; przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
+Zwykłe zmiany prądu są wysyłane nie częściej niż co 10 minut, przy korekcie co najmniej 5 A i kroku do 20 A. Bezpieczny start z zera może użyć 1–4 A. Zwiększenia muszą zmieścić się w aktualnym zapasie GRID oraz limitach LOAD, falownika i BMS. Ochrony i zakończenie ładowania mogą wymagać natychmiastowej redukcji. Restart ani opóźniony odczyt nie kasują przerwy między możliwymi wysłanymi poleceniami. Próba polecenia jest zapisywana przed usługą; przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
 
 ## Dodatkowe zużycia
 
