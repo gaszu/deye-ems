@@ -4,8 +4,9 @@ No Home Assistant calls.  This standalone standard-library module is bundled wit
 Measurements and the attempt ledger must
 come from a single validated snapshot.  A proposed value is not a device ACK.
 
-The phase budget intentionally allows the *whole* incremental charger power on
-any phase.  It does not assume balanced AC charging.  LOAD budgets ignore PV so
+The balanced model is available only with the coordinator's explicit confirmed
+Asymmetric Phase Feeding / Zero Export To Load signal. Otherwise the fallback
+allows the whole incremental charger power on any phase. LOAD budgets ignore PV so
 a sudden loss of PV cannot create additional charging headroom.
 ``load_w`` and ``load_phases_w`` are native LOAD measurements. Optional
 ``outside_load_w`` is additional demand outside LOAD: added once to the total
@@ -28,8 +29,12 @@ def _vector(value):
 
 def calculate_grid_charge_cap(g: dict) -> dict:
     """Return an instantaneous upper bound; never grant a time-based override."""
-    result = dict(cap_a=0, telemetry_ok=False, reason="telemetry_invalid",
-                  power_per_a_w=0.0)
+    balanced = g.get("grid_charge_balanced") is True
+    result = dict(cap_a=0, planning_cap_a=0, bms_cap_a=0, converter_cap_a=0,
+                  hard_current_cap_a=0, feedback_cap_a=0,
+                  grid_excess_w=None, grid_within_limits=False,
+                  phase_model="balanced" if balanced else "conservative",
+                  telemetry_ok=False, reason="telemetry_invalid", power_per_a_w=0.0)
     values = [g.get(k) for k in ("load_w", "grid_w", "battery_voltage_v", "current_a")]
     loads, grids = g.get("load_phases_w"), g.get("grid_phases_w")
     if not (g.get("telemetry_valid") is True and all(_number(v) for v in values)
@@ -48,23 +53,36 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     eta = g.get("charge_efficiency", .9)
     bms = g.get("bms_cap_a", 0)
     outside = g.get("outside_load_w", 0)
-    if not (all(_number(v) for v in (total, phase, margin, phase_margin, eta, bms, outside))
+    converter_total = g.get("conversion_total_limit_w", 12000)
+    converter_phase = g.get("conversion_phase_limit_w", 5000)
+    if not (all(_number(v) for v in (total, phase, margin, phase_margin, eta, bms, outside,
+                                     converter_total, converter_phase))
             and 0 < total <= 30000 and 0 < phase <= 15000
             and 0 <= margin < total and 0 <= phase_margin < phase
-            and .5 <= eta <= 1 and 0 <= bms <= 1000 and 0 <= outside <= 60000):
+            and .5 <= eta <= 1 and 0 <= bms <= 1000 and 0 <= outside <= 60000
+            and 0 < converter_total <= 1000000 and 0 < converter_phase <= 500000):
         return result
     per_amp = voltage / eta
-    load_budget = min(total - margin - max(load, sum(max(v, 0) for v in loads), 0) - outside,
-                      phase - phase_margin - max(max(loads), 0) - outside)
+    whole_load = max(load, sum(max(v, 0) for v in loads), 0) + outside
+    phase_budget = (3 * (phase - phase_margin) - whole_load if balanced else
+                    phase - phase_margin - max(max(loads), 0) - outside)
+    load_budget = min(total - margin - whole_load, phase_budget)
     excess = max(grid - (total - margin), sum(grids) - (total - margin),
-                 max(grids) - (phase - phase_margin), 0)
+                 (3 if balanced else 1) * (max(grids) - (phase - phase_margin)), 0)
     load_cap = math.floor(max(load_budget, 0) / per_amp)
+    converter_cap = math.floor(min(converter_total, (3 if balanced else 1) * converter_phase) / per_amp)
     feedback_cap = math.floor(max(current - excess / per_amp, 0)) if excess > 0 else 108
-    cap = max(0, min(108, math.floor(bms), load_cap, feedback_cap))
+    cap = max(0, min(108, math.floor(bms), converter_cap, load_cap, feedback_cap))
     reason = ("bms_blocked" if bms < 1 else "grid_headroom" if excess > 0
+              else "converter_cap" if converter_cap < min(108, math.floor(bms), load_cap)
               else "load_headroom" if cap < min(108, math.floor(bms)) else "bms_cap")
-    return dict(cap_a=cap, telemetry_ok=True, reason=reason,
-                power_per_a_w=round(per_amp, 6))
+    return dict(cap_a=cap, planning_cap_a=max(0, min(108, load_cap)),
+                bms_cap_a=max(0, min(108, math.floor(bms))), feedback_cap_a=feedback_cap,
+                converter_cap_a=max(0, min(108, converter_cap)),
+                hard_current_cap_a=max(0, min(108, math.floor(bms), converter_cap)),
+                grid_excess_w=round(excess, 6), grid_within_limits=excess == 0,
+                phase_model="balanced" if balanced else "conservative",
+                telemetry_ok=True, reason=reason, power_per_a_w=round(per_amp, 6))
 
 
 def calculate_grid_charge(g: dict) -> dict:

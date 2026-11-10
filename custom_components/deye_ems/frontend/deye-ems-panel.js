@@ -1,5 +1,5 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-2";
+const PANEL_TAG = "deye-ems-panel-1-0-3";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -29,7 +29,7 @@ const reasons = {
   planned:"Plan gotowy", initializing:"Uruchamianie", shadow:"Obserwacja",
   telemetry_invalid:"Brak poprawnych, świeżych pomiarów",
   bms_blocked:"BMS blokuje ładowanie", grid_headroom:"Ograniczenie poborem z sieci",
-  load_headroom:"Priorytet zasilania domu", bms_cap:"Limit baterii / falownika",
+  load_headroom:"Priorytet zasilania domu", bms_cap:"Limit baterii / falownika",converter_cap:"Limit mocy konwersji falownika",
   ramp_up:"Stopniowe zwiększanie prądu", ramp_down:"Stopniowe zmniejszanie prądu",
   ramp_wait:"Oczekiwanie na kolejny krok", target_reached:"Cel SoC osiągnięty",
   pending_readback:"Oczekiwanie na odczyt nastawy", safety_hold:"Nastawa bezpieczna",
@@ -48,19 +48,70 @@ const num = (v,d=1) => numeric(v) === null ? "—" : numeric(v).toLocaleString("
 const time = v => v && Number.isFinite(new Date(v).getTime()) ? new Date(v).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—";
 
 class DeyeEMSPanel extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;}
+  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";}
   set hass(value){this._hass=value;if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
   disconnectedCallback(){clearInterval(this.timer);this.started=false;}
   async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=payload;this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}this.render();}
-  async command(args,draftKey=null){if(this.busy)return;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=await this._hass.callWS({type:"deye_ems/command",...args});if(draftKey!==null)delete this.drafts[draftKey];}catch(e){this.error=e.message||String(e);}finally{this.busy=false;this.render();}}
+  async command(args,draftKey=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=await this._hass.callWS({type:"deye_ems/command",...args});if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=e.message||String(e);return false;}finally{this.busy=false;this.render();}}
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
-  measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(key==="load_power"?input.total_load_with_outside_w??input.load_power:input[key]);}
+  measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
   kw(key){const v=this.measurement(key);return v===null?null:v/1000;}
+  editLoad(channel=null,revision=this.payload?.loads_revision){
+    if(this.busy||this.payload?.mode==="active"||!Array.isArray(this.payload?.effective_loads))return;
+    this.loadDraft={original_energy_entity:channel?.energy_entity||"",name:channel?.name||"",energy_entity:channel?.energy_entity||"",power_entity:channel?.power_entity||"",enabled:channel?.enabled!==false,revision};
+    this.loadDelete=null;this.loadError="";this.render();
+  }
+  async saveLoad(){
+    if(!this.loadDraft||this.busy||this.payload?.mode==="active")return;
+    const draft={...this.loadDraft};
+    const ok=await this.command({command:"load_save",original_energy_entity:draft.original_energy_entity,
+      channel:{name:draft.name.trim(),energy_entity:draft.energy_entity.trim(),power_entity:draft.power_entity.trim(),included_in_load:true,enabled:draft.enabled},expected_loads_revision:draft.revision});
+    if(ok){this.loadDraft=null;this.loadError="";}else this.loadError=this.error;
+    this.render();
+  }
+  async deleteLoad(){
+    if(!this.loadDelete||this.busy||this.payload?.mode==="active")return;
+    const chosen=this.loadDelete;
+    const ok=await this.command({command:"load_delete",original_energy_entity:chosen.energy_entity,expected_loads_revision:chosen.revision});
+    if(ok){this.loadDelete=null;this.loadError="";}else this.loadError=this.error;
+    this.render();
+  }
+  async toggleLoad(channel,enabled,revision){
+    if(this.busy||this.payload?.mode==="active")return;
+    const ok=await this.command({command:"load_toggle",original_energy_entity:channel.energy_entity,enabled,expected_loads_revision:revision});
+    this.loadError=ok?"":this.error;this.render();
+  }
+  loadsHtml(){
+    const p=this.payload||{},ready=Array.isArray(p.effective_loads),loads=ready?p.effective_loads:[],active=p.mode==="active",disabled=this.busy||active||!ready;
+    const locked=active?'<div class="notice">Zmiana odbiorników wymaga trybu obserwacji. <button id="loads-observe" class="secondary" '+(this.busy?'disabled':'')+'>Przejdź do obserwacji</button></div>':'<div class="notice">Tryb obserwacji. Po zakończeniu zmian włącz sterowanie. <button id="loads-resume" '+(this.busy||!ready||this.loadDraft||this.loadDelete?'disabled':'')+'>Włącz sterowanie po edycji</button></div>';
+    const list=loads.map((load,index)=>'<li class="load-row"><div><b>'+esc(load.name||load.energy_entity)+'</b><div class="legend">Licznik energii: <code>'+esc(load.energy_entity)+'</code></div>'+(load.power_entity?'<div class="legend">Pomiar mocy: <code>'+esc(load.power_entity)+'</code></div>':'')+'<div class="legend">Profil do prognozy SoC. Zużycie jest już w głównym LOAD.</div></div><div class="actions"><button class="secondary" data-load-edit="'+index+'" '+(disabled?'disabled':'')+'>Edytuj</button><button class="secondary" data-load-delete="'+index+'" '+(disabled?'disabled':'')+'>Usuń</button><label class="load-switch"><input type="checkbox" data-load-toggle="'+index+'" aria-label="Uwzględniaj '+esc(load.name||load.energy_entity)+' w prognozie SoC" '+(load.enabled!==false?'checked':'')+' '+(disabled?'disabled':'')+'><b>'+(load.enabled!==false?'ON':'OFF')+'</b></label></div></li>').join("");
+    const choices=units=>Object.entries(this._hass?.states||{}).filter(([id,s])=>id.startsWith("sensor.")&&units.includes(s.attributes?.unit_of_measurement)).map(([id,s])=>'<option value="'+esc(id)+'" label="'+esc(s.attributes?.friendly_name||id)+' · '+esc(s.attributes?.unit_of_measurement)+'"></option>').join("");
+    const draft=this.loadDraft;
+    const editor=draft?'<form id="load-form"><h3>'+(draft.original_energy_entity?'Edytuj odbiornik':'Nowy odbiornik')+'</h3><fieldset '+(disabled?'disabled':'')+'><div class="fields"><label>Nazwa odbiornika<input data-load-field="name" required maxlength="80" value="'+esc(draft.name)+'"></label><label>Encja licznika energii (Wh / kWh)<input data-load-field="energy_entity" required pattern="sensor\\.[a-z0-9_]+" list="load-energy-options" placeholder="sensor.licznik_energii" value="'+esc(draft.energy_entity)+'"></label><label>Encja pomiaru mocy (W / kW, opcjonalna)<input data-load-field="power_entity" pattern="sensor\\.[a-z0-9_]+" list="load-power-options" placeholder="Opcjonalna" value="'+esc(draft.power_entity)+'"></label></div><p class="legend">Dane odbiornika służą modelowaniu prognozy SoC. Całe zużycie domu jest już zawarte w głównym pomiarze LOAD.</p></fieldset><div class="actions"><button type="submit" '+(disabled?'disabled':'')+'>Zapisz odbiornik</button><button type="button" id="load-cancel" class="secondary" '+(this.busy?'disabled':'')+'>Anuluj</button></div><datalist id="load-energy-options">'+choices(["Wh","kWh"])+'</datalist><datalist id="load-power-options">'+choices(["W","kW"])+'</datalist></form>':'';
+    const confirmation=this.loadDelete?'<div role="alert" class="notice">Usunąć „'+esc(this.loadDelete.name)+'” z EMS? Źródłowe encje pomiarowe i ich historia pozostaną w HA.<div class="actions"><button id="load-confirm-delete" '+(disabled?'disabled':'')+'>Usuń z EMS</button><button id="load-cancel-delete" class="secondary" '+(this.busy?'disabled':'')+'>Anuluj</button></div></div>':'';
+    return '<section><h2>Dodatkowe zużycia</h2><p class="legend">ON: uwzględniaj profil w prognozie SoC. OFF: pomiń profil, zachowując konfigurację. Całe zużycie domu odczytujemy wyłącznie z LOAD. Przełącznik nie steruje zasilaniem urządzenia.</p>'+locked+(this.loadError?'<div role="alert" class="notice error">'+esc(this.loadError)+'</div>':'')+(loads.length?'<ul class="loads">'+list+'</ul>':'<p class="legend">'+(ready?'Brak skonfigurowanych odbiorników. Podstawą pozostaje pomiar domu.':'Oczekiwanie na listę odbiorników…')+'</p>')+confirmation+(!draft?'<button id="load-add" class="secondary" '+(disabled?'disabled':'')+'>Dodaj odbiornik</button>':'')+editor+'</section>';
+  }
+  bindLoads(){
+    const root=this.shadowRoot,loads=this.payload?.effective_loads||[],revision=this.payload?.loads_revision;
+    root.getElementById("loads-observe")?.addEventListener("click",()=>this.command({command:"mode",mode:"shadow"}));
+    root.getElementById("loads-resume")?.addEventListener("click",()=>this.command({command:"mode",mode:"active"}));
+    root.getElementById("load-add")?.addEventListener("click",()=>this.editLoad(null,revision));
+    root.querySelectorAll("[data-load-edit]").forEach(button=>button.addEventListener("click",()=>this.editLoad(loads[Number(button.dataset.loadEdit)],revision)));
+    root.querySelectorAll("[data-load-delete]").forEach(button=>button.addEventListener("click",()=>{if(this.busy||this.payload.mode==="active")return;const load=loads[Number(button.dataset.loadDelete)];this.loadDelete={energy_entity:load.energy_entity,name:load.name||load.energy_entity,revision};this.loadDraft=null;this.loadError="";this.render();}));
+    root.querySelectorAll("[data-load-toggle]").forEach(input=>input.addEventListener("change",()=>this.toggleLoad(loads[Number(input.dataset.loadToggle)],input.checked,revision)));
+    root.getElementById("load-cancel")?.addEventListener("click",()=>{this.loadDraft=null;this.loadError="";this.render();});
+    root.getElementById("load-cancel-delete")?.addEventListener("click",()=>{this.loadDelete=null;this.loadError="";this.render();});
+    root.getElementById("load-confirm-delete")?.addEventListener("click",()=>this.deleteLoad());
+    root.querySelectorAll("[data-load-field]").forEach(input=>input.addEventListener("input",()=>{if(this.loadDraft)this.loadDraft[input.dataset.loadField]=input.value;}));
+    root.getElementById("load-form")?.addEventListener("submit",event=>{event.preventDefault();this.saveLoad();});
+  }
   render(){
     // A polling response must not replace a focused input or its caret. Drafts
     // also survive rendering after blur, failed commands and later refreshes.
-    if(this.shadowRoot.activeElement?.matches?.("input[data-key]"))return;
+    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads);
+    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field]"))return;
+    this.renderedMode=this.payload?.mode;this.renderedError=this.error;this.renderedLoadsReady=Array.isArray(this.payload?.effective_loads);
     const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{};
     const active=p.mode==="active", targets=plan.targets||{}, rows=plan.rows||[];
@@ -72,17 +123,17 @@ class DeyeEMSPanel extends HTMLElement {
     const owners=d.owner?.conflicts||d.owner?.blocking||d.conflicts||[];
     const safeReason=String(reason).replace(/^safety_/,"");
     const statusText=Object.hasOwn(reasons,reason)?reasons[reason]:Object.hasOwn(reasons,safeReason)?reasons[safeReason]:"Silnik sprawdza plan i dostępne dane";
-    const extraLoads=Array.isArray(o.extra_loads)?o.extra_loads:[];
     const solcast=d.solcast||{},quota=solcast.quota||{};
     const solcastLabels={ok:"Prognoza pobrana",cached:"Prognoza z datowanego cache",unavailable:"Brak aktualnej prognozy API",not_configured:"Połączenie nieustawione",ha_entities:"Prognoza z wybranych encji HA",disabled:"Pobieranie wyłączone"};
     const solcastStatus=Object.hasOwn(solcastLabels,solcast.status)?solcastLabels[solcast.status]:"Oczekiwanie na prognozę";
     const sourceNames={own_plan:"bieżący plan",dated_cache:"ostatni poprawny plan",dated_cache_with_retained_raise:"plan z dodatkowym zapasem",unreachable_plan_raise:"podwyższony zapas",winter_fallback:"zapas na zimę",summer_emergency_fallback:"awaryjne doładowanie",own_deterministic_planner:"bieżący plan"};
     const selectedSource=Object.hasOwn(sourceNames,c.target_source)?sourceNames[c.target_source]:"oczekiwanie na plan";
     const mode=active?"Sterowanie aktywne":"Obserwacja";
+    const phaseModel=fresh&&d.inputs?.grid_charge_balanced===true?"Bilansowanie poboru GRID potwierdzone":"Wariant zachowawczy — bilansowanie GRID niepotwierdzone";
     const basicField=(key,button)=>{const r=ranges[key],value=Object.hasOwn(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(labels[key])+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" '+(this.busy?'disabled':'')+'>'+esc(button)+'</button></label>';};
     this.shadowRoot.innerHTML='<style>'+
       ':host{display:block;background:var(--primary-background-color,#f3f6f7);color:var(--primary-text-color,#182b33);font:15px system-ui;min-height:100vh}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color,#64787f);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:100px;background:#dff2eb;color:#12664b;font-weight:650}.pill.shadow{background:#e6edf4;color:#39566e}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#e1e7e9);border-radius:16px;padding:22px}.label,.sub{display:block;color:var(--secondary-text-color,#627780);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color,#eaf0f2);border-radius:12px;line-height:1.6;margin:18px 0}.error,.warning{background:#fff0d7;color:#774e0c}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:11px 16px;background:#147a64;color:white;font-weight:600}button.secondary{background:var(--secondary-background-color,#e7edef);color:var(--primary-text-color,#294750)}button[disabled]{opacity:.5;cursor:wait}svg{width:100%;height:230px;display:block}.legend{font-size:12px;color:var(--secondary-text-color,#627780)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--secondary-text-color,#627780)}input{margin-top:7px;width:100%;border:1px solid var(--divider-color,#d9e2e5);border-radius:8px;background:var(--primary-background-color,#f6f8f9);color:var(--primary-text-color,#192d35);padding:10px;font:inherit}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color,#e1e7e9)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color,#627780);font-size:12px;line-height:1.7;margin-top:24px}a{color:#18876f}@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}'+
-      'summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
+      'summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color,#e1e7e9);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0;accent-color:#147a64}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form{border-top:1px solid var(--divider-color,#e1e7e9);margin-top:18px;padding-top:6px}@media(max-width:600px){.load-row{align-items:flex-start;flex-direction:column}}</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
       (this.error?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Stała rezerwa '+num(floor)+'%')+
       card("Sieć / dom",num(this.kw("grid_power"))+' / '+num(this.kw("load_power")),"kW","Sieć: + pobór, − eksport · dom: wszystkie wybrane obwody")+
@@ -97,8 +148,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
       (numeric(quota.utc?.used)!==null?'<p class="legend">Zapytania dziś (UTC): '+num(quota.utc.used,0)+' / '+num(quota.limit,0)+'</p>':'')+
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p><a href="/config/integrations/integration/deye_ems">Połącz i skonfiguruj Solcast</a></section>'+
-      '<section><h2>Dodatkowe zużycia</h2><ul>'+extraLoads.map(load=>'<li>'+esc(load.name||load.energy_entity||"Obwód")+' <span class="legend">'+(load.included_in_load?'już w pomiarze domu':'dodatkowy obwód')+'</span></li>').join("")+'</ul>'+
-      (!extraLoads.length?'<p class="legend">Brak dodatkowych obwodów. Podstawą pozostaje pomiar domu.</p>':'')+'<a href="/config/integrations/integration/deye_ems">Dodaj lub usuń obwód</a></section>'+
+      this.loadsHtml()+
       '<section><h2>Prognoza modelu</h2>'+(plan.quality==="valid"?'<div class="grid">'+card("Modelowy cel przed 07:00",num(targets.night?.soc_percent),"%",time(targets.night?.deadline))+
       card("Modelowy cel przed szczytem",num(targets.peak?.soc_percent),"%",time(targets.peak?.deadline))+
       '</div>':'')+
@@ -106,13 +156,14 @@ class DeyeEMSPanel extends HTMLElement {
       '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary><section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
-      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p class="legend">Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
+      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">GRID L1 / L2 / L3: '+num(this.kw("grid_l1_power"))+' / '+num(this.kw("grid_l2_power"))+' / '+num(this.kw("grid_l3_power"))+' kW · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
       '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.2.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.3.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
     if(details)details.open=detailsOpen;
+    this.bindLoads();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));
     this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active?"shadow":"active"}));
     this.shadowRoot.querySelectorAll("input[data-key]").forEach(input=>input.addEventListener("input",()=>{this.drafts[input.dataset.key]=input.value;}));

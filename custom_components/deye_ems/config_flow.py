@@ -179,7 +179,31 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return self.async_create_entry(title="", data={**dict(self.config_entry.options), "solcast": config})
 
     def _loads(self):
-        return list(self.config_entry.options.get("extra_loads", self.config_entry.data.get("extra_loads", [])))
+        runtime = getattr(self.config_entry, "runtime_data", None)
+        effective = getattr(runtime, "effective_loads", None)
+        if effective is not None:
+            return [{**dict(channel), "included_in_load": True} for channel in effective]
+        values = {**self.config_entry.data, **self.config_entry.options}
+        sources = {**DEFAULT_SOURCES, **self.config_entry.data.get("sources", {}),
+                   **self.config_entry.options.get("sources", {})}
+        loads, seen = [], set()
+        for raw in values.get("extra_loads", []):
+            if not isinstance(raw, dict):
+                continue
+            entity = raw.get("energy_entity")
+            if not isinstance(entity, str) or not entity or entity in seen:
+                continue
+            seen.add(entity)
+            loads.append({"id": raw.get("id") or entity,
+                "name": str(raw.get("name") or entity), "energy_entity": entity,
+                "power_entity": raw.get("power_entity", ""),
+                "included_in_load": True,
+                "enabled": raw.get("enabled", True) is True})
+        pump = sources.get("pc_energy_total")
+        if pump and pump not in seen and values.get("extra_loads_managed") is not True:
+            loads.append({"id": "configured_heatpump", "name": "Pompa ciepła",
+                "energy_entity": pump, "power_entity": "", "included_in_load": True, "enabled": True})
+        return loads
 
     async def async_step_add_load(self, user_input=None):
         if self._mapping_locked():
@@ -190,13 +214,14 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
             if any(x.get("energy_entity") == user_input["energy_entity"] for x in loads):
                 errors["base"] = "duplicate_load"
             else:
-                loads.append({"id": uuid4().hex[:12], **user_input})
-                return self.async_create_entry(title="", data={**dict(self.config_entry.options), "extra_loads": loads})
+                loads.append({"power_entity": "", "enabled": True, **user_input,
+                    "included_in_load": True, "id": uuid4().hex[:12]})
+                return self.async_create_entry(title="", data={**dict(self.config_entry.options),
+                    "extra_loads": loads, "extra_loads_managed": True})
         return self.async_show_form(step_id="add_load", errors=errors, data_schema=vol.Schema({
             vol.Required("name"): selector.TextSelector(),
             vol.Required("energy_entity"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor", device_class="energy")),
             vol.Optional("power_entity"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor", device_class="power")),
-            vol.Required("included_in_load", default=True): selector.BooleanSelector(),
         }))
 
     async def async_step_remove_load(self, user_input=None):
@@ -207,10 +232,11 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason="no_extra_loads")
         if user_input is not None:
             loads = [x for x in loads if x.get("id") != user_input["load_id"]]
-            return self.async_create_entry(title="", data={**dict(self.config_entry.options), "extra_loads": loads})
+            return self.async_create_entry(title="", data={**dict(self.config_entry.options),
+                "extra_loads": loads, "extra_loads_managed": True})
         return self.async_show_form(step_id="remove_load", data_schema=vol.Schema({
             vol.Required("load_id"): selector.SelectSelector(selector.SelectSelectorConfig(
-                options=[{"value": x["id"], "label": x.get("name", x["energy_entity"])} for x in loads]))
+                options=[{"value": x["id"], "label": x.get("name") or x["energy_entity"]} for x in loads]))
         }))
 
     async def async_step_parameters(self, user_input=None):
@@ -238,7 +264,7 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data={**dict(self.config_entry.options), "sources": values})
         fields = {}
         for key, entity in values.items():
-            domain = "number" if key in ("grid_current_number", "max_charge_current_number") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
+            domain = "number" if key in ("grid_current_number", "max_charge_current_number") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
             fields[vol.Optional(key, description={"suggested_value": entity})] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=domain))
         return self.async_show_form(step_id="sources", data_schema=vol.Schema(fields))

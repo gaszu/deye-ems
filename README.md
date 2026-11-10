@@ -9,7 +9,7 @@ Pierwsza wersja zachowuje mechanizmy obecnego EMS: harmonogram G13, sezonowe cel
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Kliknij przycisk **Marketplace**, wskaż swoją instancję HA i zaakceptuj dodanie repozytorium, jeśli pojawi się taka propozycja.
-2. Wybierz **Instaluj** i wersję **v1.0.2**. Jeśli HA poprosi o restart, wykonaj go.
+2. Wybierz **Instaluj** i wersję **v1.0.3**. Jeśli HA poprosi o restart, wykonaj go.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems). Jeżeli jest już skonfigurowana, [otwórz istniejącą integrację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 W HA znajdziesz ją pod **Ustawienia → Urządzenia i usługi → Integracje → Deye EMS**. Jej panel pojawia się w menu bocznym administratora; po instalacji lub restarcie odśwież stronę. Pierwszy start to obserwacja.
@@ -18,9 +18,9 @@ Wymagany HA **2026.11+**. Przycisk otwiera normalną instalację Marketplace i o
 
 [Specyfikacja 1.0.0](SPECIFICATION.md) · [Instrukcja instalacji](INSTALL.md) · [Przejście z obecnego EMS i powrót](MIGRATION.md)
 
-Alternatywna instalacja ręczna: [deye-ems-1.0.2.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.2/deye-ems-1.0.2.zip).
+Alternatywna instalacja ręczna: [deye-ems-1.0.3.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.3/deye-ems-1.0.3.zip).
 
-Wersja **1.0.2** zachowuje rozwinięcie ustawień zaawansowanych podczas odświeżania danych. [Opis poprawki](release-notes/1.0.2.md). Obejmuje też naprawę API panelu z 1.0.1. Specyfikacja silnika pozostaje 1.0.0.
+Wersja **1.0.3** udostępnia listę, dodawanie, edycję, usuwanie i checkboxy ON/OFF odbiorników bezpośrednio w panelu. [Opis zmian](release-notes/1.0.3.md). Specyfikacja silnika pozostaje 1.0.0.
 
 ## Najważniejsze ustawienia
 
@@ -65,9 +65,13 @@ Moc falownika i dopuszczalna moc na fazę są osobnymi polami konfiguracji. Regu
 
 ## Dodatkowe zużycia
 
-**Konfiguruj → Dodaj dodatkowe zużycie**: nazwa, encja energii (Wh/kWh), opcjonalna encja mocy (W/kW), pole „Zużycie jest już ujęte w LOAD”. Można dodać pompę ciepła, CWU, klimatyzację i następne odbiorniki.
+W panelu **Dodatkowe zużycia** są lista, przyciski **Dodaj odbiornik / Edytuj / Usuń** i checkbox ON/OFF przy każdej pozycji. Podaje się nazwę, licznik energii Wh/kWh oraz opcjonalny pomiar mocy W/kW. Odbiornik wyłączony pozostaje zapisany na liście. Zmiany wykonuje się w obserwacji; po zakończeniu użyj widocznego przycisku powrotu do sterowania.
 
-Dla odbiorników już w LOAD silnik rozdziela bazę domu i kanały, a następnie składa prognozę raz. Brak wiarygodnej historii takiego kanału pozostawia całkowity LOAD. Odbiorniki poza LOAD są dodawane osobno; wymagają świeżego pomiaru mocy do bezpiecznego zwiększania ładowania. Brak danych nie jest zerowym zużyciem.
+**Główny LOAD obejmuje wszystkie odbiorniki domu.** Lista służy wyłącznie modelowaniu prognozy SoC. Silnik rozdziela bazę domu i aktywne profile, a następnie składa prognozę raz; nie dolicza ponownie ich mocy do bieżącego LOAD ani regulatora importu. Brak wiarygodnej historii kanału pozostawia całkowity LOAD. Checkbox nie steruje zasilaniem fizycznego urządzenia.
+
+Zakres LOAD zależy od topologii: w **Zero Export To Load** instrukcja opisuje odbiory portu LOAD, a w **Zero Export To CT** ekran LOAD obejmuje backup i home. Samo włączenie CT nie uzasadnia ponownego dodawania odbiorników już ujętych w tym pomiarze. [Instrukcja Deye, s. 33 i 38](https://www.deyeinverter.com/deyeinverter/2026/03/19/BManualSUN-5-12K-SG04LP3-EU20260319en.pdf).
+
+Potwierdzone **Asymmetric phase feeding ON** w obsługiwanym trybie on-grid pozwala uwzględnić wyrównywanie poboru GRID pomimo niesymetrycznego LOAD. Limity importu są kontrolowane osobno od znamionowej mocy wyjściowej falownika. EMS nie zmienia automatycznie trybu LOAD/CT ani ustawienia bilansowania. [Opis producenta, s. 43](https://www.deyeinverter.com/deyeinverter/2026/03/19/BManualSUN-5-12K-SG04LP3-EU20260319en.pdf).
 
 ## Panel i diagnostyka
 

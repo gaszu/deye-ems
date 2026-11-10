@@ -1,6 +1,6 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button"]
 
 DEFAULT_OPTIONS = {
@@ -75,6 +75,7 @@ DEFAULT_SOURCES = {
     "tou_enabled": "switch.deye_inverter_time_of_use",
     "energy_priority": "select.deye_inverter_energy_management_priority",
     "work_mode": "select.deye_inverter_system_work_mode",
+    "asymmetric_phase_feeding": "switch.deye_inverter_asymmetric_phase_feeding",
 }
 for _phase in range(1, 4):
     for _kind in ("grid", "load"):

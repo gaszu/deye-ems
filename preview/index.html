@@ -8,7 +8,7 @@
   .demo {padding:12px 24px;background:#e3eef8;text-align:center;line-height:1.5}
 </style>
 <div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.</div>
-<deye-ems-panel-1-0-2 id="preview"></deye-ems-panel-1-0-2>
+<deye-ems-panel-1-0-3 id="preview"></deye-ems-panel-1-0-3>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -16,15 +16,14 @@
   const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
   const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
   const deadline=night.toISOString();
-  const example={mode:"shadow",options:{min_soc_percent:50,capacity_kwh:66,
+  const example={mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,reserve_margin_soc_percent:5,
     winter_weather_soc_percent:75,grid_current_max_a:108,charge_max_kw:5.3,
     discharge_max_kw:10,grid_max_soc_percent:95,
-    extra_loads:[{name:"Przykładowy dodatkowy obwód",energy_entity:"sensor.demo_energy",
-      power_entity:"sensor.demo_power",included_in_load:false}]},sources:{},data:{
+    extra_loads:[]},sources:{},data:{
     updated_at:new Date().toISOString(),inputs:{soc:64,soc_valid:true,
       telemetry_valid:true,grid_power:4600,load_power:2800,
-      total_load_with_outside_w:3400,outside_load_w:600,battery_power:-1200,current_a:26},
+      total_load_with_outside_w:2800,outside_load_w:0,battery_power:-1200,current_a:26},
     control:{next_a:28,cap_a:42,read_setting_a:26,target_soc:75,
       target_deadline:deadline,target_source:"dated_cache",reason:"ramp_up"},
     plan:{status:"ok",quality:"valid",generated_at:new Date().toISOString(),
@@ -33,7 +32,22 @@
         soc_percent:Math.min(96,Math.max(50,64+13*Math.sin(i/11))),
         pv_kw:Math.max(0,5*Math.sin((i%48-12)/12)),load_kw:2.8,
         grid_import_kw:i<16?1.8:0}))}}};
-  document.getElementById("preview").hass={states:{},async callWS(message){
+  let revision=1;
+  document.getElementById("preview").hass={states:{
+    "sensor.demo_pump_energy":{state:"123",attributes:{friendly_name:"Pompa ciepła — energia",unit_of_measurement:"kWh"}},
+    "sensor.demo_cwu_energy":{state:"456",attributes:{friendly_name:"CWU — energia",unit_of_measurement:"kWh"}},
+    "sensor.demo_cwu_power":{state:"500",attributes:{friendly_name:"CWU — moc",unit_of_measurement:"W"}}
+  },async callWS(message){
+    if(["load_save","load_delete","load_toggle"].includes(message.command)){
+      if(example.mode==="active")throw Error("Przejdź do obserwacji przed zmianą odbiorników.");
+      if(message.expected_loads_revision!==example.loads_revision)throw Error("Lista odbiorników uległa zmianie.");
+      const index=example.effective_loads.findIndex(load=>load.energy_entity===message.original_energy_entity);
+      if(message.command==="load_toggle")example.effective_loads[index].enabled=message.enabled;
+      else if(message.command==="load_delete")example.effective_loads.splice(index,1);
+      else if(index>=0)example.effective_loads[index]={...example.effective_loads[index],...message.channel};
+      else example.effective_loads.push({...message.channel,id:"demo-new-"+revision});
+      example.loads_revision="demo-"+(++revision);
+    }
     if(message.command==="mode")example.mode=message.mode;
     if(message.command==="option")example.options[message.key]=message.value;
     example.data.updated_at=new Date().toISOString();

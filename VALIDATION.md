@@ -1,4 +1,14 @@
-# Sprawdzenia wersji 1.0.2
+# Sprawdzenia wersji 1.0.3
+
+- **279/279 testów Python PASS i 31/31 testów panelu PASS**.
+- Testy CRUD obejmują domyślną PC, trwałe usunięcie, ON/OFF z zachowaniem konfiguracji i identyfikatora, walidację jednostek i źródeł, konflikt wersji listy, blokadę active i kolejność zapisu przed reload.
+- Testy panelu sprawdzają zachowanie szkicu, przełączenie trybu podczas edycji, zgodność wersji wiersza z jego formularzem i przełącznikiem oraz brak ujawniania danych dostępu.
+- W podglądzie przeglądarki na syntetycznych danych dodano, zmieniono i usunięto testowy odbiornik oraz przełączono PC OFF i ON. Te czynności nie zmieniały konfiguracji domu.
+- Cały LOAD pozostaje źródłem zużycia domu: kanały, także historyczne z flagą poza LOAD, nie doliczają mocy/energii i nie blokują regulatora przy braku opcjonalnego pomiaru. Kanały ON służą wyłącznie modelowaniu prognozy SoC.
+- Potwierdzone ON bilansowania faz i Zero Export To Load aktywuje model zbilansowanego poboru GRID; brak/OFF/stare dane zachowują wariant zachowawczy. Limity importu sumy/faz i osobny limit konwersji falownika sprawdzono niezależnie.
+- Regresje utrzymania GC przy bezpiecznym obniżeniu obejmują stary odczyt, zmianę limitu w trakcie zapisu, nieudaną usługę, brak dowodu przyjęcia, timeout bez odnawiania 30 s, wzrost odczytu, utratę flagi, BMS, GRID, stare pomiary, zmianę właściciela i okno chronione. Dowód przyjęcia usługi nie jest traktowany jako fizyczny odczyt urządzenia.
+
+## Weryfikacja poprawki 1.0.2
 
 Poprawka panelu, 10 listopada 2026:
 

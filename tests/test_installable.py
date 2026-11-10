@@ -177,3 +177,12 @@ class Installation(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((ROOT/(platform+".py")).is_file())
         self.assertTrue((ROOT/"frontend/deye-ems-panel.js").is_file())
 
+    async def test_phase_balancing_source_selector_accepts_switch_entities(self):
+        flow = self.flow()["DeyeEMSOptionsFlow"]()
+        flow.config_entry = SimpleNamespace(runtime_data=SimpleNamespace(mode="shadow"), options={}, data={})
+        result = await flow.async_step_sources()
+        domains = {marker.key: field["args"][0]["domain"]
+            for marker, field in result["data_schema"].items()}
+        self.assertEqual(domains["asymmetric_phase_feeding"], "switch")
+        self.assertEqual(domains["grid_power"], "sensor")
+

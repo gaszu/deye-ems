@@ -429,13 +429,15 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         await h.tick()
         self.assertEqual(h.calls, [])
 
-    async def test_lower_inverter_total_and_phase_ratings_limit_current_and_planner(self):
+    async def test_inverter_output_ratings_do_not_replace_grid_import_limits(self):
         h = Harness(options={"inverter_max_power_kw": 4, "inverter_phase_max_power_kw": 1.5})
         inputs = h.co._read_inputs(h.now)
         g = h.co._grid_input(inputs, h.now, 75, False)
-        self.assertEqual(g["total_limit_w"], 4000)
-        self.assertEqual(g["phase_limit_w"], 1500)
-        self.assertEqual(runtime.calculate_grid_charge_cap(g)["cap_a"], 10)
+        self.assertEqual(g["total_limit_w"], 12000)
+        self.assertEqual(g["phase_limit_w"], 5000)
+        self.assertEqual(g["conversion_total_limit_w"], 4000)
+        self.assertEqual(g["conversion_phase_limit_w"], 1500)
+        self.assertEqual(runtime.calculate_grid_charge_cap(g)["cap_a"], 25)
         captured = []
         planner = h.co._planner
         def calculate(value):
@@ -444,7 +446,7 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         h.co._planner = calculate
         await h.co._make_plan(h.now, inputs)
         self.assertEqual(captured[0]["inverter_max_kw"], 4)
-        self.assertEqual(captured[0]["grid_import_max_kw"], 4)
+        self.assertEqual(captured[0]["grid_import_max_kw"], 12)
         self.assertEqual(captured[0]["charge_max_kw"], 4)
         self.assertEqual(captured[0]["discharge_max_kw"], 4)
 
@@ -501,31 +503,36 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["pc_applied"])
         self.assertTrue(all(abs(v-3) < 1e-10 for v in result["profiles"]["False"]))
 
-    async def test_outside_load_added_once_to_forecast_and_budget_without_changing_grid(self):
+    async def test_legacy_outside_flag_never_adds_to_whole_load_forecast_or_budget(self):
         h = Harness(options={"extra_loads": [{"name": "Klima", "energy_entity": "sensor.klima_energy",
                        "power_entity": "sensor.klima_power", "included_in_load": False}]})
         h.set_entity("sensor.klima_energy", 100, "kWh")
         h.set_entity("sensor.klima_power", .5, "kW")
         async def provider(*args):
             return {SOURCES["load_power"]: self.rows(h.now, 2000),
-                    "sensor.klima_energy": self.rows(h.now, 500)}
+                    "sensor.klima_energy": self.rows(h.now, 500),
+                    SOURCES["pc_energy_total"]: self.rows(h.now, 500)}
         h.co._statistics_provider = provider
         result = await h.co._load_profile(h.now)
-        self.assertTrue(all(abs(v-2.5) < 1e-10 for v in result["profiles"]["False"]))
+        self.assertTrue(all(abs(v-2) < 1e-10 for v in result["profiles"]["False"]))
+        self.assertTrue(all(channel["included_in_load"] for channel in h.co.effective_loads))
         inputs = h.co._read_inputs(h.now)
         self.assertEqual(inputs["grid_power"], 1800)
         self.assertEqual(inputs["load_power"], 1800)
-        self.assertEqual(inputs["outside_load_w"], 500)
-        self.assertEqual(inputs["total_load_with_outside_w"], 2300)
+        self.assertEqual(inputs["outside_load_w"], 0)
+        self.assertEqual(inputs["total_load_with_outside_w"], 1800)
 
-    async def test_outside_missing_power_blocks_activation_and_missing_energy_invalidates_forecast(self):
+    async def test_optional_missing_channel_power_and_energy_keep_whole_load_and_allow_activation(self):
         h = Harness(options={"extra_loads": [{"name": "Klima", "energy_entity": "sensor.klima_energy", "included_in_load": False}]})
         async def provider(*args):
             return {SOURCES["load_power"]: self.rows(h.now, 2000)}
         h.co._statistics_provider = provider
-        self.assertEqual(await h.co._load_profile(h.now), {})
-        with self.assertRaises(ValueError):
-            await h.co.async_set_mode("active")
+        result = await h.co._load_profile(h.now)
+        self.assertTrue(all(abs(v-2) < 1e-10 for v in result["profiles"]["False"]))
+        self.assertFalse(result["pc_applied"])
+        self.assertTrue(h.co._read_inputs(h.now)["telemetry_valid"])
+        await h.co.async_set_mode("active")
+        self.assertEqual(h.co.mode, "active")
 
     async def test_invalid_solar_rows_do_not_poison_dated_cache(self):
         h = Harness()

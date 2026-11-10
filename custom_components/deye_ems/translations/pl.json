@@ -48,15 +48,15 @@
       },
       "sources": {
         "title": "Pomiary i sterowanie",
-        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Nie są wymagane żadne helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.",
+        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.",
         "data": {
           "soc": "soc",
           "voltage": "voltage",
           "bms_charge_current": "bms charge current",
           "bms_blocking_charge": "bms blocking charge",
           "battery_power": "battery power",
-          "grid_power": "grid power",
-          "load_power": "load power",
+          "grid_power": "Pobór / eksport z sieci (GRID)",
+          "load_power": "Całe zużycie modelowanego domu (LOAD)",
           "grid_current_number": "grid current number",
           "max_charge_current_number": "max charge current number",
           "pv_today": "pv today",
@@ -69,6 +69,7 @@
           "tou_enabled": "tou enabled",
           "energy_priority": "energy priority",
           "work_mode": "work mode",
+          "asymmetric_phase_feeding": "Bilansowanie faz GRID w Deye — przełącznik stanu",
           "grid_l1_power": "grid l1 power",
           "load_l1_power": "load l1 power",
           "grid_l2_power": "grid l2 power",
@@ -97,12 +98,11 @@
       },
       "add_load": {
         "title": "Dodatkowe zużycia",
-        "description": "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik. Licznik energii powinien podawać Wh lub kWh. Zaznaczenie LOAD zapobiega podwójnemu doliczaniu. Odbiornik poza LOAD wymaga również pomiaru mocy dla ograniczania importu.",
+        "description": "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik do modelowania prognozy SoC. Główny LOAD obejmuje całe zużycie domu; kanałów nie doliczamy ponownie. Licznik energii powinien podawać Wh lub kWh; pomiar mocy jest opcjonalny. Przełączniki ON/OFF i edycja są dostępne w panelu Deye EMS.",
         "data": {
           "name": "Nazwa odbiornika",
           "energy_entity": "Encja licznika energii",
-          "power_entity": "Encja chwilowej mocy (opcjonalnie)",
-          "included_in_load": "Zużycie jest już ujęte w głównym pomiarze LOAD"
+          "power_entity": "Encja chwilowej mocy (opcjonalnie)"
         }
       },
       "remove_load": {

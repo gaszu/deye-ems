@@ -118,8 +118,10 @@ def coordinator():
                  "api_key": "synthetic-private-top-key",
                  "password": "synthetic-private-password",
                  "solcast": {"api_key": "synthetic-private-solcast-key"}},
+        effective_loads=[], loads_revision="synthetic-load-revision",
         async_recalculate=AsyncMock(), async_set_mode=AsyncMock(),
-        async_set_option=AsyncMock())
+        async_set_option=AsyncMock(), async_save_load=AsyncMock(), async_delete_load=AsyncMock(),
+        async_toggle_load=AsyncMock())
 
 
 class WebSocketTests(unittest.IsolatedAsyncioTestCase):
@@ -175,6 +177,13 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
                 ("command", {"id": 5, "type": "deye_ems/command", "command": "mode", "mode": "active"}),
                 ("command", {"id": 6, "type": "deye_ems/command", "command": "option",
                              "key": "min_soc_percent", "value": 55}),
+                ("command", {"id": 10, "type": "deye_ems/command", "command": "load_save",
+                             "original_energy_entity": "", "channel": {}, "expected_loads_revision": "old"}),
+                ("command", {"id": 11, "type": "deye_ems/command", "command": "load_delete",
+                             "original_energy_entity": "sensor.test", "expected_loads_revision": "old"}),
+                ("command", {"id": 13, "type": "deye_ems/command", "command": "load_toggle",
+                             "original_energy_entity": "sensor.test", "enabled": False,
+                             "expected_loads_revision": "old"}),
             ):
                 with self.subTest(admin=user is not None, handler=handler, message=message["id"]):
                     module, _ = load_module()
@@ -192,6 +201,9 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
                     co.async_recalculate.assert_not_awaited()
                     co.async_set_mode.assert_not_awaited()
                     co.async_set_option.assert_not_awaited()
+                    co.async_save_load.assert_not_awaited()
+                    co.async_delete_load.assert_not_awaited()
+                    co.async_toggle_load.assert_not_awaited()
 
     async def test_admin_without_loaded_integration_receives_not_loaded(self):
         for handler, message in (
@@ -222,7 +234,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, _ = load_module()
         co = coordinator()
         payload = module["_payload"](co)
-        self.assertEqual(set(payload), {"mode", "data", "options", "sources"})
+        self.assertEqual(set(payload), {"mode", "data", "options", "sources", "effective_loads", "loads_revision"})
         self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]))
         self.assertEqual(payload["options"]["min_soc_percent"], 50)
         self.assertEqual(payload["sources"]["soc"], "sensor.test_soc")
@@ -231,6 +243,35 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(private, serialized)
         self.assertNotIn("solcast", payload["options"])
         self.assertIn("solcast", co.options)
+
+    async def test_admin_load_commands_forward_revision_and_return_current_list(self):
+        for command in ("load_save", "load_delete", "load_toggle"):
+            with self.subTest(command=command):
+                module, _ = load_module()
+                co = coordinator()
+                channel = {"name": "CWU", "energy_entity": "sensor.cwu_energy",
+                           "power_entity": "", "included_in_load": True}
+                async def changed(*args, **kwargs):
+                    co.effective_loads = [channel] if command == "load_save" else []
+                    co.loads_revision = "new-revision"
+                method = {"load_save": co.async_save_load, "load_delete": co.async_delete_load,
+                          "load_toggle": co.async_toggle_load}[command]
+                method.side_effect = changed
+                hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+                module["command"](hass, connection, {
+                    "id": 12, "type": "deye_ems/command", "command": command,
+                    "original_energy_entity": "sensor.original", "channel": channel,
+                    "expected_loads_revision": "old-revision", "enabled": False})
+                await hass.drain()
+                if command == "load_save":
+                    method.assert_awaited_once_with("sensor.original", channel, expected_revision="old-revision")
+                elif command == "load_delete":
+                    method.assert_awaited_once_with("sensor.original", expected_revision="old-revision")
+                else:
+                    method.assert_awaited_once_with("sensor.original", False, expected_revision="old-revision")
+                self.assertEqual(connection.errors, [])
+                self.assertEqual(connection.results[0][1]["effective_loads"], co.effective_loads)
+                self.assertEqual(connection.results[0][1]["loads_revision"], "new-revision")
 
     def test_registers_both_guarded_handlers(self):
         module, api = load_module()

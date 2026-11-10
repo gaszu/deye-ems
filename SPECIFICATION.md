@@ -15,7 +15,7 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - Rzeczywista moc PV w kWp, osobna moc referencyjna prognozy oraz jawny wybór jej interpretacji.
 - Moc falownika łącznie i dopuszczalna moc na fazę — osobno od limitów importu.
 - Regulowane limity importu, prądu i modelowej mocy ładowania/rozładowania. Wartości początkowe: rezerwa40%, magazyn66kWh, import12kW łącznie/5kW na fazę; wartości należy dopasować do instalacji.
-- Lista dodatkowych odbiorników: nazwa, licznik energii, opcjonalna moc, informacja o ujęciu w LOAD. Odbiornik już ujęty w LOAD nie jest dodawany ponownie.
+- Lista dodatkowych odbiorników: nazwa, licznik energii, opcjonalna moc. Uzupełnienie 1.0.3: checkbox ON/OFF włącza wyłącznie profil prognozy SoC. Główny LOAD obejmuje wszystkie odbiorniki domu; ich mocy i energii nie dolicza się ponownie do LOAD ani regulatora importu.
 
 ## Sterowanie
 
@@ -24,7 +24,8 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - Zimą pierwszeństwo mają autokonsumpcja, zapas na chronione okna i ograniczanie importu; pogodowy punkt odniesienia około75% przy słabej prognozie maleje wraz z dostępnością PV, z zachowaniem stałej rezerwy.
 - Latem PV zasila dom, następnie utrzymuje wysoki poziom baterii, a nadwyżka jest eksportowana. Doładowanie z sieci jest awaryjne, wyłącznie w tanich oknach przy deficycie lub utracie wiarygodnego planu/cache.
 - Ładowanie rozłożone na całe dostępne tanie okno, także nocą. Wzrost nastawy maks.2A/30s, zwykły spadek5A/30s; redukcja bezpieczeństwa jest natychmiastowa w cyklu sterownika.
-- Efektywne limity sumy i faz są przecięciem limitów importu oraz skonfigurowanej mocy falownika/fazy. Ograniczenia BMS i falownika mają pierwszeństwo.
+- Limity importu GRID sumy/faz i ograniczenie mocy konwersji falownika są sprawdzane osobno. BMS i twarde ograniczenia mają pierwszeństwo.
+- Uściślenie 1.0.3: potwierdzone bilansowanie faz w Zero Export To Load pozwala modelować równy pobór GRID. Przy bezpiecznej redukcji przyjętej przez usługę GC może pozostać ON podczas oczekiwania na odczyt, najwyżej30s bez odnawiania przez ponowienia; twarde ograniczenia i okna chronione pozostają nadrzędne.
 - Regulacja lokalna co10s; pobieranie prognoz i historii w tle. Powolne API nie zatrzymuje kontroli obciążenia.
 - Jeden właściciel sterowania, kontrola konfliktów, trwały zapis próby przed poleceniem, kontrolowany odczyt nastawy. Model, polecenie i pomiar fizyczny są rozróżniane.
 

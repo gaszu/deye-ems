@@ -14,6 +14,9 @@ spec.loader.exec_module(const)
 data_pl = dict(const.OPTION_LABELS)
 data_pl.update({key: key.replace("_", " ") for key in const.DEFAULT_SOURCES})
 data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika energii",
+    "asymmetric_phase_feeding": "Bilansowanie faz GRID w Deye — przełącznik stanu",
+    "load_power": "Całe zużycie modelowanego domu (LOAD)",
+    "grid_power": "Pobór / eksport z sieci (GRID)",
     "power_entity": "Encja chwilowej mocy (opcjonalnie)",
     "included_in_load": "Zużycie jest już ujęte w głównym pomiarze LOAD",
     "load_id": "Odbiornik do usunięcia", "pv_forecast_mode": "Sposób interpretacji prognozy PV",
@@ -29,8 +32,8 @@ data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika ene
 descriptions = {
     "user": ("Deye EMS — własny silnik", "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później."),
     "parameters": ("Parametry silnika", "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor."),
-    "sources": ("Pomiary i sterowanie", "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Nie są wymagane żadne helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji."),
-    "add_load": ("Dodatkowe zużycia", "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik. Licznik energii powinien podawać Wh lub kWh. Zaznaczenie LOAD zapobiega podwójnemu doliczaniu. Odbiornik poza LOAD wymaga również pomiaru mocy dla ograniczania importu."),
+    "sources": ("Pomiary i sterowanie", "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji."),
+    "add_load": ("Dodatkowe zużycia", "Dodaj pompę ciepła, CWU, klimatyzację lub inny odbiornik do modelowania prognozy SoC. Główny LOAD obejmuje całe zużycie domu; kanałów nie doliczamy ponownie. Licznik energii powinien podawać Wh lub kWh; pomiar mocy jest opcjonalny. Przełączniki ON/OFF i edycja są dostępne w panelu Deye EMS."),
     "remove_load": ("Usuń dodatkowe zużycie", "Usunięcie kanału nie usuwa encji źródłowej ani jej historii."),
     "solcast_manual": ("Solcast wewnątrz EMS", "Wbudowany klient nie wymaga osobnej integracji Solcast. Klucz i identyfikatory znajdziesz w toolkit.solcast.com.au. Moc AC/DC, kierunek i nachylenie paneli ustaw w portalu Solcast; EMS pobiera prognozę dla zapisanej tam instalacji. Zwykły limit Hobbyist: 10 zapytań na dobę UTC, każde pobranie dla każdej instalacji zużywa osobne zapytanie. Nie odpytuj równocześnie tego konta innym klientem. Przy nieznanym zużyciu pozostaw 10; klient zaczeka na nową dobę UTC. Wpisane zużycie nie zmniejsza rejestru; po zmianie konfiguracji może go podnieść. {import_note}"),
     "solcast_import": ("Import dostępnych ustawień Solcast", "Klucz, limit konta i wykluczenia są kopiowane lokalnie w HA. Kreator odczytuje bieżące współczynniki z sensora korekt przypisanego do wybranej integracji. Przenosi ich stan, bez pełnej historii i mechanizmu dalszego samouczenia. Prognozy sensorów HA są już skorygowane — nie korygujemy ich ponownie. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta."),
@@ -38,7 +41,7 @@ descriptions = {
 step_fields = {
     "user": ["min_soc_percent", "capacity_kwh", "pv_peak_kwp", "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"],
     "parameters": [*const.OPTION_RANGES, "pv_forecast_mode"], "sources": list(const.DEFAULT_SOURCES),
-    "add_load": ["name", "energy_entity", "power_entity", "included_in_load"],
+    "add_load": ["name", "energy_entity", "power_entity"],
     "remove_load": ["load_id"],
     "solcast_manual": ["api_key", "resource_ids", "poll_interval_minutes", "max_requests_per_day", "initial_requests_used", "dampening_factor", "hourly_factors", "accept_manual_calibration"],
     "solcast_import": ["source_entry"],

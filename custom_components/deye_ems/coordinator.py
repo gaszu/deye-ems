@@ -9,9 +9,13 @@ import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from hashlib import sha256
+import json
 import logging
 import math
+import re
 from urllib.parse import urlsplit
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from homeassistant.helpers.storage import Store
@@ -86,6 +90,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {}}
         self._last_save_ts = 0
         self._last_error = None
+        # Evidence of an accepted service call, never a physical charging ACK.
+        # Kept only in RAM: a restart must re-establish settled readback.
+        self._pending_grid_reduction = None
+        self._grid_reduction_chain = None
         super().__init__(hass, _LOGGER, name="Deye EMS", config_entry=entry,
                          update_interval=timedelta(seconds=self._update_seconds()))
         self.data = {"mode": "shadow", "status": "initializing", "owner": "shadow",
@@ -108,6 +116,16 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         public["solcast_configured"] = self._solcast_configured()
         public["solcast_site_count"] = len(config.get("resource_ids", []))
         return self._redact(public)
+
+    @property
+    def effective_loads(self):
+        """The public, effective meters, including any legacy default pump."""
+        return self._redact(self._configured_channels())
+
+    @property
+    def loads_revision(self):
+        snapshot = json.dumps(self.effective_loads, sort_keys=True, separators=(",", ":"))
+        return sha256(snapshot.encode("utf-8")).hexdigest()[:24]
 
     def _redact(self, value):
         """Secrets stay exclusively in the private ConfigEntry options."""
@@ -157,6 +175,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     async def async_shutdown(self):
         """Cancel future work, without emitting hardware commands on unload."""
         self._stopped = True
+        self._pending_grid_reduction = None
+        self._grid_reduction_chain = None
         await self._cancel_planning()
         shutdown = getattr(super(), "async_shutdown", None)
         if shutdown is not None:
@@ -165,25 +185,16 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     async def async_set_option(self, key, value):
         if key not in DEFAULT_OPTIONS and key not in ("sources", "extra_loads"):
             raise ValueError("Unknown EMS setting")
+        if key == "extra_loads":
+            async with self._lock:
+                await self._commit_loads_locked(value)
+            await self.async_request_refresh()
+            return
         if key == "sources":
             if not isinstance(value, dict) or any(k not in DEFAULT_SOURCES for k in value):
                 raise ValueError("Invalid source mapping")
             if any(not isinstance(v, str) or (v and "." not in v) for v in value.values()):
                 raise ValueError("Sources must be entity IDs")
-        elif key == "extra_loads":
-            if not isinstance(value, list) or len(value) > 32:
-                raise ValueError("Expected a list of up to 32 extra loads")
-            seen = set()
-            for channel in value:
-                if not isinstance(channel, dict):
-                    raise ValueError("Invalid extra load")
-                entity = channel.get("energy_entity")
-                power = channel.get("power_entity", "")
-                if (not isinstance(entity, str) or not entity.startswith("sensor.") or entity in seen
-                        or not isinstance(channel.get("included_in_load", True), bool)
-                        or not isinstance(power, str) or (power and not power.startswith("sensor."))):
-                    raise ValueError("Extra loads require unique energy sensors and valid power sensors")
-                seen.add(entity)
         elif key == "solcast":
             raise ValueError("Configure credentials in the integration setup")
         elif key == "pv_forecast_mode":
@@ -221,6 +232,143 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self.update_interval = timedelta(seconds=self._update_seconds())
             self.hass.config_entries.async_update_entry(self.entry, options=dict(self._options))
             await self._save()
+        await self.async_request_refresh()
+
+    def _check_load_revision(self, expected):
+        if not isinstance(expected, str) or expected != self.loads_revision:
+            raise ValueError("Lista zużyć zmieniła się. Odśwież panel i spróbuj ponownie.")
+
+    def _validate_loads(self, channels):
+        if not isinstance(channels, list) or len(channels) > 32:
+            raise ValueError("Lista może zawierać najwyżej 32 obwody.")
+        previous = self._configured_channels()
+        existing = {item["energy_entity"]: item["id"] for item in previous}
+        previous_by_id = {item["id"]: item for item in previous}
+        normalized, seen, ids, powers = [], set(), set(), set()
+        for raw in channels:
+            if not isinstance(raw, dict) or set(raw) - {
+                    "id", "name", "energy_entity", "power_entity", "included_in_load", "enabled"}:
+                raise ValueError("Nieprawidłowe pola obwodu.")
+            name, energy = raw.get("name"), raw.get("energy_entity")
+            power, included = raw.get("power_entity", ""), raw.get("included_in_load", True)
+            if (not isinstance(name, str) or not 1 <= len(name.strip()) <= 80
+                    or any(ord(char) < 32 or ord(char) == 127 for char in name)):
+                raise ValueError("Podaj nazwę obwodu od 1 do 80 znaków.")
+            if not isinstance(energy, str) or not re.fullmatch(r"sensor\.[a-z0-9_]+", energy):
+                raise ValueError("Wybierz prawidłowy sensor energii.")
+            if energy in seen:
+                raise ValueError("Ten licznik energii jest już używany przez inny obwód.")
+            if not isinstance(included, bool):
+                raise ValueError("Określ, czy obwód jest już zawarty w pomiarze domu.")
+            # The installation's LOAD meter includes every appliance. Keep the
+            # old field readable, but never treat any channel as extra demand.
+            included = True
+            if not isinstance(power, str) or (power and not re.fullmatch(r"sensor\.[a-z0-9_]+", power)):
+                raise ValueError("Wybierz prawidłowy sensor mocy.")
+            if power:
+                if power in powers:
+                    raise ValueError("Ten sensor mocy jest już używany przez inny obwód.")
+                powers.add(power)
+            channel_id = raw.get("id") or existing.get(energy) or uuid4().hex
+            if (not isinstance(channel_id, str) or not 1 <= len(channel_id) <= 128
+                    or not re.fullmatch(r"[a-zA-Z0-9_.-]+", channel_id) or channel_id in ids):
+                raise ValueError("Nieprawidłowy lub powtórzony identyfikator obwodu.")
+            seen.add(energy)
+            ids.add(channel_id)
+            old = previous_by_id.get(channel_id, {})
+            enabled = raw.get("enabled", old.get("enabled", True))
+            if not isinstance(enabled, bool):
+                raise ValueError("Stan obserwacji obwodu musi być włączony lub wyłączony.")
+            value = {"id": channel_id, "name": name.strip(), "energy_entity": energy,
+                     "power_entity": power, "included_in_load": included, "enabled": enabled}
+            # An unrelated broken/removed meter must never prevent repairing
+            # or deleting another row. Validate metadata only for changed rows.
+            source_fields = ("name", "energy_entity", "power_entity", "included_in_load")
+            if enabled and any(old.get(key) != value[key] for key in source_fields):
+                state = self.hass.states.get(energy)
+                if state is None or state.attributes.get("unit_of_measurement") not in ("Wh", "kWh"):
+                    raise ValueError("Sensor energii musi istnieć i mieć jednostkę Wh lub kWh.")
+                if power:
+                    state = self.hass.states.get(power)
+                    if state is None or state.attributes.get("unit_of_measurement") not in ("W", "kW"):
+                        raise ValueError("Sensor mocy musi istnieć i mieć jednostkę W lub kW.")
+            normalized.append(value)
+        return normalized
+
+    async def _commit_loads_locked(self, channels):
+        """Validate and persist under _lock, before an options reload can run."""
+        if self.mode != "shadow":
+            raise ValueError("Przełącz EMS w tryb obserwacji przed zmianą zużyć.")
+        channels = self._validate_loads(channels)
+        await self._cancel_planning()
+        old_options, old_due = deepcopy(self._options), self._plan_due
+        invalidated = ("plan", "target_cache", "safety_raise", "load_profiles")
+        previous = {key: deepcopy(self._memory[key]) for key in invalidated}
+        self._planning_revision += 1
+        self._options.update(extra_loads=channels, extra_loads_managed=True)
+        for key in invalidated:
+            self._memory[key] = {}
+        self._plan_due = 0
+        try:
+            await self._save()
+        except BaseException:
+            self._options = old_options
+            self._memory.update(previous)
+            self._plan_due = old_due
+            raise
+        self.hass.config_entries.async_update_entry(self.entry, options=deepcopy(self._options))
+
+    async def async_save_load(self, original_energy_entity, channel, *, expected_revision):
+        async with self._lock:
+            if self.mode != "shadow":
+                raise ValueError("Przełącz EMS w tryb obserwacji przed zmianą zużyć.")
+            self._check_load_revision(expected_revision)
+            if not isinstance(original_energy_entity, str) or not isinstance(channel, dict):
+                raise ValueError("Nieprawidłowe dane obwodu.")
+            if set(channel) - {"name", "energy_entity", "power_entity", "included_in_load", "enabled"}:
+                raise ValueError("Nieprawidłowe pola obwodu.")
+            channels = self._configured_channels()
+            value = deepcopy(channel)
+            if original_energy_entity:
+                index = next((i for i, item in enumerate(channels)
+                              if item["energy_entity"] == original_energy_entity), None)
+                if index is None:
+                    raise ValueError("Ten obwód nie istnieje już na liście. Odśwież panel.")
+                value["id"] = channels[index]["id"]
+                value.setdefault("enabled", channels[index]["enabled"])
+                channels[index] = value
+            else:
+                value["id"] = uuid4().hex
+                channels.append(value)
+            await self._commit_loads_locked(channels)
+        await self.async_request_refresh()
+
+    async def async_delete_load(self, original_energy_entity, *, expected_revision):
+        async with self._lock:
+            if self.mode != "shadow":
+                raise ValueError("Przełącz EMS w tryb obserwacji przed zmianą zużyć.")
+            self._check_load_revision(expected_revision)
+            channels = self._configured_channels()
+            remaining = [item for item in channels if item["energy_entity"] != original_energy_entity]
+            if len(remaining) == len(channels):
+                raise ValueError("Ten obwód nie istnieje już na liście. Odśwież panel.")
+            await self._commit_loads_locked(remaining)
+        await self.async_request_refresh()
+
+    async def async_toggle_load(self, original_energy_entity, enabled, *, expected_revision):
+        async with self._lock:
+            if self.mode != "shadow":
+                raise ValueError("Przełącz EMS w tryb obserwacji przed zmianą zużyć.")
+            self._check_load_revision(expected_revision)
+            if not isinstance(enabled, bool):
+                raise ValueError("Stan obserwacji obwodu musi być włączony lub wyłączony.")
+            channels = self._configured_channels()
+            index = next((i for i, item in enumerate(channels)
+                          if item["energy_entity"] == original_energy_entity), None)
+            if index is None:
+                raise ValueError("Ten obwód nie istnieje już na liście. Odśwież panel.")
+            channels[index]["enabled"] = enabled
+            await self._commit_loads_locked(channels)
         await self.async_request_refresh()
 
     async def async_set_mode(self, mode):
@@ -334,29 +482,33 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         cap = min(108, self._options["grid_current_max_a"], charge, deye) if bms_valid and block == 0 else 0
         current = self._measurement("grid_current_number", now, unit="A", low=0, high=1000)
         battery = self._measurement("battery_power", now, unit="W", age=30, low=-60000, high=60000)
-        outside, outside_valid = 0, True
-        for channel in self._channels():
-            if channel["included_in_load"]:
-                continue
-            entity = channel.get("power_entity")
-            state = self.hass.states.get(entity) if entity else None
-            unit = state.attributes.get("unit_of_measurement") if state else None
-            power = self._entity_measurement(entity, now, unit=unit, age=30, low=0, high=60000) if unit in ("W", "kW") else None
-            if power is None:
-                outside_valid = False
-            else:
-                outside += power * (1000 if unit == "kW" else 1)
         raw_load = powers["load_power"]
-        return {**powers, "soc": soc, "soc_valid": bool(soc_valid), "voltage": voltage,
+        inputs = {**powers, "soc": soc, "soc_valid": bool(soc_valid), "voltage": voltage,
                 "current_a": current, "bms_cap_a": cap, "bms_valid": bms_valid,
                 "battery_power": battery,
-                "outside_load_w": outside, "outside_power_valid": outside_valid, "raw_load_power": raw_load,
-                "total_load_with_outside_w": None if raw_load is None else raw_load+outside,
+                "outside_load_w": 0, "outside_power_valid": True, "raw_load_power": raw_load,
+                "total_load_with_outside_w": raw_load,
                 "telemetry_valid": voltage is not None and current is not None and
-                bms_valid and outside_valid and all(v is not None for v in powers.values())}
+                bms_valid and all(v is not None for v in powers.values())}
+        inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
+        return inputs
 
-    def _channels(self):
-        """Configured meters, with the default pump included at most once."""
+    def _grid_charge_balanced(self, inputs, now):
+        flag, mode = self._state("asymmetric_phase_feeding"), self._state("work_mode")
+        if (flag is None or flag.state not in ("on", "off") or flag.attributes.get("restored", False)
+                or mode is None or mode.state in _BAD or mode.attributes.get("restored", False)):
+            return None
+        report = _stamp(getattr(flag, "last_reported", None) or getattr(flag, "last_updated", None))
+        if report is None or report > now.timestamp():
+            return None
+        if flag.state == "off" or mode.state != "Zero Export To Load":
+            return False
+        # The switch is latched; its available value is anchored by fresh live
+        # power/BMS telemetry, rather than expiring an unchanged ON setting.
+        return True if inputs["telemetry_valid"] else None
+
+    def _configured_channels(self):
+        """Full meter configuration, including OFF rows and the legacy pump."""
         channels, seen = [], set()
         for raw in self._options.get("extra_loads", []):
             if not isinstance(raw, dict):
@@ -365,13 +517,19 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if not isinstance(entity, str) or not entity or entity in seen:
                 continue
             seen.add(entity)
-            channels.append({"name": str(raw.get("name") or entity), "energy_entity": entity,
-                "power_entity": raw.get("power_entity", ""), "included_in_load": raw.get("included_in_load", True) is True})
+            channels.append({"id": raw.get("id") or entity,
+                "name": str(raw.get("name") or entity), "energy_entity": entity,
+                "power_entity": raw.get("power_entity", ""), "included_in_load": True,
+                "enabled": raw.get("enabled", True) is True})
         pump = self._sources.get("pc_energy_total")
-        if pump and pump not in seen:
-            channels.append({"name": "Pompa ciepła", "energy_entity": pump,
-                             "power_entity": "", "included_in_load": True})
+        if pump and pump not in seen and self._options.get("extra_loads_managed") is not True:
+            channels.append({"id": "configured_heatpump", "name": "Pompa ciepła", "energy_entity": pump,
+                             "power_entity": "", "included_in_load": True, "enabled": True})
         return channels
+
+    def _channels(self):
+        """Only enabled meters are observed or separately modelled."""
+        return [channel for channel in self._configured_channels() if channel["enabled"]]
 
     def _owner_conflicts(self, *, ignore_missing=False):
         return [entity_id for entity_id in OWNER_ENTITIES
@@ -442,8 +600,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                    inputs["soc"] is not None and inputs["soc"] < floor)
         cap = calculate_grid_charge_cap(self._grid_input(inputs, now, target, emergency))
         if entity_id == self._sources["grid_current_number"] and value > 0:
+            reducing_safely = (inputs["current_a"] is not None and 0 < value < inputs["current_a"]
+                               and cap["grid_within_limits"] and value <= cap["hard_current_cap_a"])
             if not (allowed and inputs["soc_valid"] and inputs["telemetry_valid"] and
-                    inputs["soc"] < target and self._hardware_modes_ok() and value <= cap["cap_a"]):
+                    inputs["soc"] < target and self._hardware_modes_ok()
+                    and (value <= cap["cap_a"] or reducing_safely)):
                 self._last_error = "last_moment_current_guard"
                 return False
         if action == "turn_on":
@@ -500,9 +661,54 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return False
         return await self._service(entity_id, action, value)
 
+    def _observe_reduction_readback(self, inputs):
+        chain = self._grid_reduction_chain
+        if chain is None:
+            return
+        state = self._state("grid_current_number")
+        report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        current = inputs["current_a"]
+        if (current is not None and 0 <= current <= chain["to_a"]
+                and report is not None and report >= chain["attempt_at"]):
+            # A register read confirms the requested setting, never physical
+            # battery current. Only this observation closes the timed chain.
+            self._grid_reduction_chain = None
+            self._pending_grid_reduction = None
+
     async def _grid_attempt(self, value, now_ts, *, force=False):
-        return await self._attempt(self._sources["grid_current_number"], "set_value", int(value),
-                                   now_ts, cooldown=10, force=force)
+        value = int(value)
+        before = self._read_inputs(self._now())
+        self._observe_reduction_readback(before)
+        chain = self._grid_reduction_chain
+        old_ledger = deepcopy(self._memory["ledger"].get(self._sources["grid_current_number"], {}))
+        if value <= 0:
+            self._pending_grid_reduction = None
+        accepted = await self._attempt(self._sources["grid_current_number"], "set_value", value,
+                                       now_ts, cooldown=10, force=force)
+        ledger = self._memory["ledger"].get(self._sources["grid_current_number"], {})
+        if accepted:
+            current = before["current_a"]
+            unexpected = (chain is not None and current is not None
+                          and current > chain["last_observed_a"] + .01)
+            if chain is not None:
+                chain.update(to_a=value, attempt_at=ledger.get("at"))
+            if (before["grid_charge_balanced"] is True and current is not None
+                    and 0 < value < current and not unexpected):
+                if chain is None:
+                    chain = {"started_at": self._now().timestamp(), "to_a": value,
+                             "attempt_at": ledger.get("at"), "last_observed_a": current}
+                    self._grid_reduction_chain = chain
+                self._pending_grid_reduction = {
+                    "from_a": current, "to_a": value, "last_observed_a": current,
+                    "started_at": chain["started_at"], "attempt_at": ledger.get("at"),
+                }
+            else:
+                self._pending_grid_reduction = None
+        elif ledger != old_ledger:
+            # A durable attempt alone proves nothing about dispatch success.
+            # Keep the independent chain clock: failure is not readback ACK.
+            self._pending_grid_reduction = None
+        return accepted
 
     async def _gc(self, slot, enabled):
         key = f"tou_gc_{slot}"
@@ -566,12 +772,38 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "load_phases_w": [inputs[f"load_l{i}_power"] for i in (1, 2, 3)],
                 "grid_phases_w": [inputs[f"grid_l{i}_power"] for i in (1, 2, 3)],
                 "battery_voltage_v": inputs["voltage"], "current_a": inputs["current_a"],
+                "grid_charge_balanced": inputs.get("grid_charge_balanced"),
                 "last_attempt_ts": ledger.get("at", 0), "last_attempt_a": ledger.get("a", 0),
-                "total_limit_w": min(self._options["grid_import_limit_kw"],
-                                     self._options.get("inverter_max_power_kw", 12)) * 1000,
-                "phase_limit_w": min(self._options["grid_phase_limit_kw"],
-                                     self._options.get("inverter_phase_max_power_kw", 5)) * 1000,
+                "total_limit_w": self._options["grid_import_limit_kw"] * 1000,
+                "phase_limit_w": self._options["grid_phase_limit_kw"] * 1000,
+                "conversion_total_limit_w": self._options.get("inverter_max_power_kw", 12) * 1000,
+                "conversion_phase_limit_w": self._options.get("inverter_phase_max_power_kw", 5) * 1000,
                 "headroom_w": 500, "phase_headroom_w": 250, "charge_efficiency": .9}
+
+    def _pending_reduction_ok(self, inputs, now, requested, cap):
+        self._observe_reduction_readback(inputs)
+        pending = self._pending_grid_reduction
+        if pending is None:
+            return False
+        ledger = self._memory["ledger"].get(self._sources["grid_current_number"], {})
+        current = inputs["current_a"]
+        valid = (not self._stopped and self.mode == "active" and not self._owner_conflicts()
+                 and inputs["grid_charge_balanced"] is True
+                 and cap["telemetry_ok"] and cap["grid_within_limits"]
+                 and 0 <= now.timestamp() - pending["started_at"] <= 30
+                 and ledger.get("at") == pending["attempt_at"] and ledger.get("a") == pending["to_a"]
+                 and ledger.get("action") == "set_value"
+                 and current is not None and 0 < current <= pending["last_observed_a"] + .01
+                 and current <= cap["hard_current_cap_a"] and 0 < requested <= cap["hard_current_cap_a"])
+        if valid:
+            pending["last_observed_a"] = current
+            if self._grid_reduction_chain is not None:
+                self._grid_reduction_chain["last_observed_a"] = current
+        else:
+            self._pending_grid_reduction = None
+        # The separate unconfirmed chain survives expired/failed proof. Thus
+        # neither a transport failure nor a new accepted retry renews 30s.
+        return bool(valid)
 
     def _settled_grid(self, inputs, now, requested):
         requested = _number(requested)
@@ -613,24 +845,33 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         ready = (ready and inputs["soc_valid"] and soc_read is not None and abs(soc_read - target) < 2
                  and clock_read is not None and clock_read.state == times[active_slot - 1]
                  and control.get("telemetry_ok", False) and self._hardware_modes_ok() and self._clocks_ok(self._now()))
-        permitted = (night or afternoon) and (winter or emergency or
-                                              inputs["soc"] is not None and inputs["soc"] < floor)
+        current_winter, current_night, current_afternoon, _, _ = self._window(self._now())
+        permitted = (current_night or current_afternoon) and (current_winter or emergency or
+                                              observed["soc"] is not None and observed["soc"] < floor)
         active_gc = self._state(f"tou_gc_{active_slot}")
         cap = calculate_grid_charge_cap(self._grid_input(observed, self._now(), target, emergency))
+        ready = (ready and cap["grid_within_limits"] and observed["soc_valid"]
+                 and observed["soc"] < target and observed["current_a"] is not None
+                 and 0 < observed["current_a"] <= cap["hard_current_cap_a"]
+                 and 0 < control.get("next_a", 0) <= cap["cap_a"])
+        pending_reduction = self._pending_reduction_ok(
+            observed, self._now(), control.get("next_a", 0), cap)
         # A safe current ramp must not pulse an already enabled charger OFF for
         # ten seconds every thirty seconds. Initial enabling still requires the
         # exact requested setting to settle; continuing is a separate decision.
         continuing = (active_gc is not None and active_gc.state == "on" and permitted and
                       observed["telemetry_valid"] and observed["soc_valid"] and
                       observed["soc"] < target and
-                      observed["current_a"] is not None and 0 < observed["current_a"] <= cap["cap_a"] and
-                      0 < control.get("next_a", 0) <= cap["cap_a"] and
+                      ((observed["current_a"] is not None and 0 < observed["current_a"] <= cap["cap_a"]
+                        and 0 < control.get("next_a", 0) <= cap["cap_a"])
+                       or pending_reduction) and cap["grid_within_limits"] and
                       soc_read is not None and abs(soc_read - target) < 2 and
                       clock_read is not None and clock_read.state == times[active_slot - 1] and
                       self._hardware_modes_ok() and self._clocks_ok(self._now()))
         for slot in range(1, 7):
             await self._gc(slot, bool((ready or continuing) and permitted and slot == active_slot and slot not in (3, 5)))
         control["setting_settled"] = bool(ready)
+        control["reduction_pending"] = pending_reduction
         control["actual_battery_w"] = observed["battery_power"]
         control["read_setting_a"] = observed["current_a"]
         if permitted and control.get("next_a", 0) > 0 and not ready:
@@ -774,8 +1015,6 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                            state.attributes.get("unit_of_measurement") in ("Wh", "kWh") and _number(state.state) is not None)
                 # Recorder is explicitly asked for kWh, even for a Wh source.
                 values = hourly(stats.get(channel["energy_entity"], []), "change", 1000) if unit_ok else {}
-                if not channel["included_in_load"] and (not values or now.timestamp()-max(x[1] for x in values.values()) > 10800):
-                    raise ValueError("outside_load_history_missing")
                 by_hour = {}
                 yesterday = [x for x in values.values() if reference.timestamp() <= x[0] < midnight.timestamp()]
                 for at, _, power in yesterday:
@@ -789,8 +1028,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         ratio = sum(x[2] for x in current)/denominator
                 channels.append({**channel, "values": values, "by_hour": by_hour, "ratio": ratio,
                                  "reference_complete": len(yesterday) == expected and len(by_hour) >= 23})
-            included = [c for c in channels if c["included_in_load"]]
-            outside = [c for c in channels if not c["included_in_load"]]
+            included = channels
             included_ready = bool(included) and all(all(at in c["values"] for c in included) and
                     sum(c["values"][at][2] for c in included) <= row[2] for at, row in load.items())
             profiles, used = {}, set()
@@ -810,14 +1048,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     if included_ready:
                         total = sum((x[2]-sum(c["values"][x[0]][2] for c in included))*w
                                     for x, w in weighted)/denominator
-                    for channel in (included if included_ready else []) + outside:
-                        if channel["included_in_load"]:
-                            channel_rows = [channel["values"][x[0]] for x in use]
-                        else:
-                            channel_rows = [x for x in channel["values"].values()
-                                            if datetime.fromtimestamp(x[0], _TZ).hour == hour]
+                    for channel in included if included_ready else []:
+                        channel_rows = [channel["values"][x[0]] for x in use]
                         if len({datetime.fromtimestamp(x[0], _TZ).date() for x in channel_rows}) < 3:
-                            raise ValueError("outside_load_history_insufficient")
+                            raise ValueError("channel_load_history_insufficient")
                         if channel["reference_complete"] and hour in channel["by_hour"]:
                             forecast = sum(channel["by_hour"][hour])/len(channel["by_hour"][hour])*channel["ratio"]
                         else:
@@ -840,9 +1074,6 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         except Exception as error:
             previous = self._memory.get("load_profiles", {})
             through = _number(previous.get("through"))
-            if isinstance(error, ValueError) and str(error).startswith("outside_"):
-                self._last_error = str(error)
-                return {}
             if (through is not None and 0 <= now.timestamp()-through <= 10800 and previous.get("profiles")
                     and previous.get("signature") == signature):
                 return {**previous, "cached": True}
@@ -917,7 +1148,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
         config.update({"minimum_soc_percent": self._options["min_soc_percent"],
                   "margin_soc_percent": self._options["reserve_margin_soc_percent"],
-                  "grid_import_max_kw": min(self._options["grid_import_limit_kw"], rated),
+                  "grid_import_max_kw": self._options["grid_import_limit_kw"],
                   "inverter_max_kw": rated, "grid_export_max_kw": min(9, rated)})
         plan = self._planner({"now": now, "soc_percent": inputs["soc"], "soc_valid": inputs["soc_valid"],
                               "forecast": rows, "config": config,
@@ -1118,6 +1349,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "actual_battery_w": inputs["battery_power"]},
                     "slot_measurements": deepcopy(self._memory["slot_measurements"]),
                     "profiles": deepcopy(self._memory["load_profiles"]),
+                    "effective_loads": self.effective_loads, "loads_revision": self.loads_revision,
                     "planning": self._plan_task is not None and not self._plan_task.done(),
                     "solcast": self._redact(self._solcast_status),
                     "settings": self.options, "sources": dict(self._sources),

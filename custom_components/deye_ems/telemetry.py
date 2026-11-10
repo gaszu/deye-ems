@@ -5,7 +5,6 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import EntityCategory
 
 from .entity import DeyeEMSEntity
-from .const import DEFAULT_SOURCES
 
 METRICS = [
     ("soc", "Stan akumulatora", "%", "battery"),
@@ -28,11 +27,12 @@ def build_entities(coordinator, entry):
             ("grid_import_kwh", "Import w bieżącym slocie"),
             ("battery_charge_kwh", "Ładowanie w bieżącym slocie"),
             ("battery_discharge_kwh", "Rozładowanie w bieżącym slocie"))]
-    channels = list(coordinator.options.get("extra_loads", []))
-    legacy_pc = coordinator.options.get("sources", {}).get("pc_energy_total", DEFAULT_SOURCES.get("pc_energy_total"))
-    if legacy_pc and all(c.get("energy_entity") != legacy_pc for c in channels):
-        channels.append({"id": "configured_heatpump", "name": "Pompa ciepła", "energy_entity": legacy_pc})
-    for channel in channels:
+    # The coordinator owns legacy migration and explicit-list semantics. Its
+    # effective list includes the old pump only until the user manages loads;
+    # an intentionally empty list must never recreate that channel here.
+    for channel in coordinator.effective_loads:
+        if channel.get("enabled", True) is not True:
+            continue
         result.append(ExtraLoadSensor(coordinator, entry, channel, False))
         if channel.get("power_entity"):
             result.append(ExtraLoadSensor(coordinator, entry, channel, True))

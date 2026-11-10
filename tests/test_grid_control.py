@@ -35,6 +35,58 @@ def snapshot(**changes):
 
 
 class GridChargeScenarios(unittest.TestCase):
+    def test_confirmed_balanced_grid_does_not_charge_the_worst_load_phase(self):
+        g = snapshot(load_w=5500, load_phases_w=[500, 4500, 500],
+                     grid_w=6000, grid_phases_w=[2000, 2000, 2000])
+        conservative = calculate_grid_charge_cap(g)
+        balanced = calculate_grid_charge_cap({**g, "grid_charge_balanced": True})
+        self.assertEqual(conservative["planning_cap_a"], 4)
+        self.assertEqual(balanced["planning_cap_a"], 100)
+        self.assertEqual(balanced["cap_a"], 100)
+        self.assertTrue(balanced["grid_within_limits"])
+        self.assertEqual(balanced["phase_model"], "balanced")
+        for flag in (None, False, 1, "on"):
+            self.assertEqual(calculate_grid_charge_cap({**g, "grid_charge_balanced": flag})["cap_a"],
+                             conservative["cap_a"])
+
+    def test_balanced_phase_excess_is_converted_to_total_three_phase_correction(self):
+        g = snapshot(current_a=50, load_w=1500, load_phases_w=[500, 500, 500],
+                     grid_w=8000, grid_phases_w=[4800, 1600, 1600])
+        balanced = calculate_grid_charge_cap({**g, "grid_charge_balanced": True})
+        conservative = calculate_grid_charge_cap(g)
+        self.assertEqual(balanced["grid_excess_w"], 150)
+        self.assertEqual(conservative["grid_excess_w"], 50)
+        self.assertEqual(balanced["feedback_cap_a"], 47)
+        self.assertEqual(conservative["feedback_cap_a"], 49)
+        self.assertFalse(balanced["grid_within_limits"])
+        self.assertEqual(balanced["reason"], "grid_headroom")
+
+    def test_balanced_total_excess_is_not_multiplied_by_three(self):
+        g = snapshot(current_a=50, grid_w=11700, grid_phases_w=[3900, 3900, 3900],
+                     grid_charge_balanced=True)
+        result = calculate_grid_charge_cap(g)
+        self.assertEqual(result["grid_excess_w"], 200)
+        self.assertEqual(result["feedback_cap_a"], 46)
+        self.assertFalse(result["grid_within_limits"])
+
+    def test_current_register_cannot_create_extra_balanced_load_headroom(self):
+        common = snapshot(grid_charge_balanced=True, grid_w=3000, grid_phases_w=[1000]*3)
+        low = calculate_grid_charge_cap({**common, "current_a": 0})
+        high = calculate_grid_charge_cap({**common, "current_a": 108})
+        self.assertEqual(low["planning_cap_a"], high["planning_cap_a"])
+        self.assertEqual(low["cap_a"], high["cap_a"])
+
+    def test_converter_rating_is_separate_from_import_and_from_house_load(self):
+        common = snapshot(load_w=1800, load_phases_w=[600]*3,
+                          conversion_total_limit_w=4000, conversion_phase_limit_w=1500)
+        balanced = calculate_grid_charge_cap({**common, "grid_charge_balanced": True})
+        conservative = calculate_grid_charge_cap(common)
+        self.assertEqual(balanced["converter_cap_a"], 66)
+        self.assertEqual(conservative["converter_cap_a"], 25)
+        self.assertEqual(balanced["cap_a"], 66)
+        self.assertEqual(balanced["reason"], "converter_cap")
+        self.assertEqual(balanced["planning_cap_a"], 108)
+
     def test_start_and_low_soc_emergency_do_not_jump_to_full_current(self):
         for g in (snapshot(), snapshot(soc=38., remaining_h=.5),
                   snapshot(winter=False, emergency_allowed=True)):

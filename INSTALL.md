@@ -8,7 +8,7 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. W tej wersji używane są aktu
 
 1. Kliknij przycisk powyżej i wskaż swoją instancję Home Assistant.
 2. Jeśli Marketplace nie zna jeszcze repozytorium, zaakceptuj jego dodanie jako **Integracja**. W razie potrzeby połącz GitHub w kreatorze Marketplace.
-3. Wybierz **Instaluj** i wersję **v1.0.2**.
+3. Wybierz **Instaluj** i wersję **v1.0.3**.
 4. Jeśli HA poprosi o restart, wykonaj go. Następnie [dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems).
 
 Jeśli przycisk nie otwiera Twojej instancji, przejdź ręcznie do **Ustawienia → Marketplace → Dodaj z linku**, wpisz `https://github.com/gaszu/ha-deye-ems`, dodaj i zainstaluj projekt.

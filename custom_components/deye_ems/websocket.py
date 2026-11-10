@@ -13,6 +13,7 @@ def _coordinator(hass):
 
 def _payload(coordinator):
     return {"mode": coordinator.mode, "data": coordinator.data or {},
+        "effective_loads": coordinator.effective_loads, "loads_revision": coordinator.loads_revision,
         "options": {k: coordinator.options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
         "sources": {**DEFAULT_SOURCES, **coordinator.options.get("sources", {})}}
 
@@ -29,8 +30,11 @@ async def status(hass, connection, msg):
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/command",
-    vol.Required("command"): vol.In(("recalculate", "mode", "option")),
+    vol.Required("command"): vol.In(("recalculate", "mode", "option", "load_save", "load_delete", "load_toggle")),
     vol.Optional("mode"): vol.In(("shadow", "active")),
+    vol.Optional("original_energy_entity"): str, vol.Optional("channel"): dict,
+    vol.Optional("expected_loads_revision"): str,
+    vol.Optional("enabled"): bool,
     vol.Optional("key"): str, vol.Optional("value"): vol.Any(float, int)})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -44,6 +48,15 @@ async def command(hass, connection, msg):
             await coordinator.async_recalculate()
         elif msg["command"] == "mode":
             await coordinator.async_set_mode(msg["mode"])
+        elif msg["command"] == "load_save":
+            await coordinator.async_save_load(msg.get("original_energy_entity", ""), msg.get("channel"),
+                expected_revision=msg.get("expected_loads_revision"))
+        elif msg["command"] == "load_delete":
+            await coordinator.async_delete_load(msg.get("original_energy_entity", ""),
+                expected_revision=msg.get("expected_loads_revision"))
+        elif msg["command"] == "load_toggle":
+            await coordinator.async_toggle_load(msg.get("original_energy_entity", ""), msg.get("enabled"),
+                expected_revision=msg.get("expected_loads_revision"))
         else:
             await coordinator.async_set_option(msg["key"], msg["value"])
     except (ValueError, KeyError, HomeAssistantError) as err:
