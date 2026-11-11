@@ -80,3 +80,18 @@ W ustawieniach integracji wybierz **Deye EMS → Konfiguruj → Panel boczny →
 Panel jest dostępny tylko administratorom. Bezpośredni adres to `/deye-ems` na Twojej instancji, także przy wyłączonej widoczności wpisu. Jeżeli osobisty profil HA ukrywa tę pozycję, przywróć ją również w edycji menu bocznego. Samo pobranie plików z HACS wymaga restartu HA i dodania integracji w Urządzenia i usługi.
 
 Ta opcja jest częścią kandydata1.0.7; nie występuje w wydanej1.0.6.
+
+## Blokada włączenia sterowania: tryby falownika
+
+Przed aktywacją EMS sprawdza odczyty encji wybranych w **Konfiguruj → Źródła**:
+
+| Źródło | Wymagany stan HA |
+|---|---|
+| Solar Sell | `on` |
+| Time of Use | `on` |
+| Energy Management Priority | `Load First` |
+| System Work Mode | `Zero Export To Load` |
+
+Nazwy encji na innej instancji mogą być inne — przypisz jej właściwe encje. Brak encji, stan `unavailable` albo `restored` również blokują aktywację. EMS nie przełącza sam tych trybów. Dopasowanie trybów musi odpowiadać topologii i planowanemu sposobowi pracy instalacji.
+
+W wersji1.0.6 komunikat brzmi `Inverter modes do not match the EMS model`. Kandydat1.0.7 wymienia konkretne encje, odczyty i oczekiwane stany.

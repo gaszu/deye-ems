@@ -550,11 +550,27 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 or (not ignore_missing and state is None and entity_id in self._memory["observed_owners"])]
 
     def _hardware_modes_ok(self):
-        required = {"solar_sell": "on", "tou_enabled": "on",
-                    "energy_priority": "Load First", "work_mode": "Zero Export To Load"}
-        return all((state := self._state(key)) is not None and state.state == expected
-                   and not state.attributes.get("restored", False)
-                   for key, expected in required.items())
+        return not self._hardware_mode_issues()
+
+    def _hardware_mode_issues(self):
+        required = (("solar_sell", "Solar Sell", "on"),
+                    ("tou_enabled", "Time of Use", "on"),
+                    ("energy_priority", "Energy Management Priority", "Load First"),
+                    ("work_mode", "System Work Mode", "Zero Export To Load"))
+        issues = []
+        for key, label, expected in required:
+            state = self._state(key)
+            if state is None:
+                actual = "brak encji — sprawdź przypisanie w Źródłach"
+            elif state.attributes.get("restored", False):
+                actual = "stan odtworzony po restarcie — oczekiwanie na odczyt"
+            elif state.state != expected:
+                actual = str(state.state)
+            else:
+                continue
+            entity = self._sources.get(key) or "nie przypisano encji"
+            issues.append(f"{label} ({entity}): odczyt [{actual}], wymagane [{expected}]")
+        return issues
 
     def _clocks_ok(self, now):
         winter = self._window(now)[0]
@@ -578,8 +594,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs = self._read_inputs(now)
         if not inputs["telemetry_valid"] or not inputs["soc_valid"]:
             raise ValueError("Activation requires fresh, valid power and battery measurements")
-        if not self._hardware_modes_ok():
-            raise ValueError("Inverter modes do not match the EMS model")
+        mode_issues = self._hardware_mode_issues()
+        if mode_issues:
+            raise ValueError("Nie można włączyć sterowania. " + "; ".join(mode_issues))
         writable = [self._sources.get("grid_current_number")]
         for slot in range(1, 7):
             writable += [self._sources.get(f"tou_soc_{slot}"), self._sources.get(f"tou_gc_{slot}"),
