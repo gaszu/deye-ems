@@ -129,7 +129,7 @@ def _ordinary_history(g, now):
     return possible, not_sent
 
 
-def calculate_grid_charge(g: dict) -> dict:
+def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     """Propose a bounded setting; persist its ledger before attempting a write.
 
     Required snapshot fields are described by the cap function and integration
@@ -220,6 +220,8 @@ def calculate_grid_charge(g: dict) -> dict:
     if not (ledger_ok or first_attempt):
         result["reason"] = "ledger_missing_or_future"
         return result
+    if ordinary_policy is not None:
+        return ordinary_policy(g, result)
     unconfirmed = ledger_ok and abs(current - attempted_a) >= .01
     if possible is not None and now - possible < ORDINARY_INTERVAL_SECONDS:
         result["reason"] = "awaiting_readback" if unconfirmed else "ramp_wait"

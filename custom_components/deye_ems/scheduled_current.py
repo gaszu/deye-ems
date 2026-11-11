@@ -1,0 +1,131 @@
+"""Half-hour setting decisions; the existing instantaneous safety path stays first.
+
+The coordinator owns durable policy state. No service calls or physical ACKs here.
+The old pure controller remains a regression-tested safety/cap calculation; its
+600-second ramp is bypassed by the explicit ordinary-policy callback.
+"""
+from __future__ import annotations
+
+import math
+
+from .grid_control import calculate_grid_charge as _base, calculate_grid_charge_increase_cap
+
+SLOT_SECONDS = 1800
+DISPATCH_WINDOW_SECONDS = 60
+RECOVERY_SECONDS = 120
+DEADBAND_A = 10
+QUANTUM_A = 5
+SOC_HYSTERESIS = 2
+
+
+def _finite(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def dispatch_ready(now, possible, not_sent):
+    """First minute of :00/:30; one possible dispatch per block, safety included.
+
+    UTC half-hours also align to local half-hours in Europe/Warsaw, including DST.
+    Missed slots are skipped. Failed/uncertain sends cannot create a burst.
+    """
+    if not _finite(now) or now <= 0:
+        return False
+    if any(at is not None and (not _finite(at) or not 0 <= at <= now)
+           for at in (possible, not_sent)):
+        return False
+    slot = math.floor(now / SLOT_SECONDS) * SLOT_SECONDS
+    return (now - slot < DISPATCH_WINDOW_SECONDS
+            and (possible is None or possible < slot and now - possible >= RECOVERY_SECONDS)
+            and (not_sent is None or now - not_sent >= 60))
+
+
+def update_policy(g, previous):
+    """Target latch belongs to one tariff deadline, with a fresh safety timer.
+
+    Unknown/corrupt state is treated as stopped until target-2pp (or reserve
+    emergency). A changed target alone does not erase a reached-target latch.
+    """
+    now, soc, target = g.get("now_ts"), g.get("soc"), g.get("target_soc")
+    key = g.get("policy_deadline")
+    valid = (_finite(now) and now > 0 and _finite(soc) and 0 <= soc <= 100
+             and g.get("soc_valid") is True and _finite(target) and 40 <= target <= 95
+             and isinstance(key, str) and bool(key))
+    previous = previous if isinstance(previous, dict) else {"invalid": True}
+    known = previous == {} or (previous.get("version") == 1
+            and isinstance(previous.get("stopped"), bool)
+            and isinstance(previous.get("deadline"), str))
+    stopped = previous.get("stopped", False) if known else True
+    if valid:
+        if known and previous.get("deadline") != key:
+            stopped = soc >= target
+        if soc >= target:
+            stopped = True
+        elif soc <= target - SOC_HYSTERESIS or (_finite(g.get("minimum_soc_percent"))
+                                               and soc < g["minimum_soc_percent"]):
+            stopped = False
+    # Safety-only uses exactly the existing LOAD/GRID/BMS/converter validation.
+    safety = _base({**g, "safety_only": True})
+    healthy = (valid and safety["telemetry_ok"] and safety["grid_within_limits"]
+               and safety["cap_a"] > 0 and not safety["write"]
+               and g.get("hardware_ok") is True)
+    since = previous.get("safe_since")
+    observed = previous.get("observed_at")
+    if not healthy:
+        since = None
+    elif (not _finite(since) or not 0 <= since <= now or not _finite(observed)
+          or not 0 <= now - observed <= 30):
+        since = now
+    return dict(version=1, deadline=key if isinstance(key, str) else "",
+                stopped=bool(stopped), safe_since=since, observed_at=now)
+
+
+def _ordinary(g, result):
+    result.update(write=False, next_a=g["current_a"])
+    now = g["now_ts"]
+    if not dispatch_ready(now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts")):
+        result["reason"] = "scheduled_hold"
+        return result
+    policy = g.get("current_policy", {})
+    since = policy.get("safe_since")
+    observed = policy.get("observed_at")
+    if (not _finite(since) or not 0 <= since <= now - RECOVERY_SECONDS
+            or not _finite(observed) or not 0 <= now - observed <= 30):
+        result["reason"] = "recovery_wait"
+        return result
+    wanted = min(result["need_a"], result["cap_a"])
+    attempted = g.get("last_attempt_a")
+    unconfirmed = _finite(attempted) and abs(g["current_a"] - attempted) >= .01
+    if unconfirmed:
+        wanted = min(wanted, attempted)
+    if wanted > g["current_a"]:
+        increase = calculate_grid_charge_increase_cap(g)
+        result.update(increase)
+        wanted = min(wanted, increase["increase_cap_a"])
+    # Round demand upwards, but never round through a validated upper bound.
+    upper = min(result["cap_a"], result.get("increase_cap_a", result["cap_a"]))
+    if unconfirmed:
+        upper = min(upper, attempted)
+    candidate = min(math.ceil(wanted / QUANTUM_A) * QUANTUM_A,
+                    math.floor(upper / QUANTUM_A) * QUANTUM_A)
+    # A sub-5A hardware cap must still permit a safe initial start.
+    if candidate == 0 and wanted > 0 and g["current_a"] == 0:
+        candidate = math.floor(min(wanted, upper))
+    if abs(candidate - g["current_a"]) < DEADBAND_A and not (g["current_a"] == 0 and candidate > 0):
+        result["reason"] = "scheduled_deadband"
+        return result
+    result.update(next_a=candidate, write=True,
+                  reason="scheduled_retry" if unconfirmed else "scheduled_setpoint")
+    return result
+
+
+def calculate_grid_charge(g):
+    if g.get("safety_only") is True:
+        return _base(g)
+    policy = g.get("current_policy", {})
+    if policy.get("stopped", True):
+        # Keep all validation/safety cancellation semantics in the base path.
+        result = _base({**g, "soc": g.get("target_soc")}, ordinary_policy=_ordinary)
+        if result.get("reason") == "target_reached":
+            result["reason"] = "target_hysteresis"
+        return result
+    return _base(g, ordinary_policy=_ordinary)

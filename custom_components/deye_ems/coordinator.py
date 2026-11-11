@@ -22,10 +22,9 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OWNER_ENTITIES, OPTION_RANGES
-from .grid_control import (calculate_grid_charge, calculate_grid_charge_cap,
-                           calculate_grid_charge_increase_cap,
-                           ORDINARY_INTERVAL_SECONDS, ORDINARY_RETRY_BACKOFF_SECONDS,
-                           ORDINARY_DEADBAND_A, ORDINARY_MAX_STEP_A)
+from .grid_control import calculate_grid_charge_cap, calculate_grid_charge_increase_cap
+from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready,
+                                DEADBAND_A, QUANTUM_A)
 from .planner import plan_energy
 from .slot_meter import update_slot_measurements
 
@@ -91,7 +90,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "load_profiles": {}, "ledger": {}, "plan": {}, "observed_owners": {},
                         "slot_measurements": {}, "safety_raise": {},
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
-                        "grid_dispatch": {}}
+                        "grid_dispatch": {}, "current_policy": {}}
         self._last_save_ts = 0
         self._last_error = None
         # Evidence of an accepted service call, never a physical charging ACK.
@@ -169,6 +168,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 elif isinstance(saved.get(key), dict):
                     self._memory[key] = saved[key]
         self._memory = self._redact(self._memory)
+        # A restart retains the target latch, but cannot prove continuous safety.
+        self._memory["current_policy"]["safe_since"] = None
         dispatch = self._memory["grid_dispatch"]
         if dispatch.get("outcome") == "prepared" and self._dispatch_history(self._now())["known"]:
             # A crash may have happened after a slow Store and actual dispatch.
@@ -631,9 +632,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     def _ordinary_dispatch_ready(self, now, *, own_attempt=None):
         history = self._dispatch_history(now, own_attempt=own_attempt)
-        return (history["known"] and all(at is None or now.timestamp() - at >= wait for at, wait in (
-            (history.get("possible_at"), ORDINARY_INTERVAL_SECONDS),
-            (history.get("not_sent_at"), ORDINARY_RETRY_BACKOFF_SECONDS))))
+        return (history["known"] and dispatch_ready(now.timestamp(),
+                history.get("possible_at"), history.get("not_sent_at")))
 
     async def _service(self, entity_id, action, value=None):
         conflicts = self._owner_conflicts()
@@ -671,7 +671,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 starting_small = inputs["current_a"] == 0 and value > 0
                 if (not self._ordinary_dispatch_ready(now, own_attempt=context)
                         or inputs["current_a"] is None
-                        or delta > ORDINARY_MAX_STEP_A or not (starting_small or delta >= ORDINARY_DEADBAND_A)):
+                        or not (starting_small or delta >= DEADBAND_A)
+                        or value >= QUANTUM_A and value % QUANTUM_A != 0
+                        or self._memory["current_policy"].get("stopped", True)
+                        or not self._current_policy_stable(now)):
                     self._last_error = "last_moment_dispatch_guard"
                     return False
             if inputs["current_a"] is not None and value > inputs["current_a"]:
@@ -687,6 +690,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 self._last_error = "last_moment_current_guard"
                 return False
         if action == "turn_on":
+            if self._memory["current_policy"].get("stopped", True):
+                return False
             requested = self._memory["ledger"].get(self._sources["grid_current_number"], {}).get("a", 0)
             setting = self._measurement(f"tou_soc_{active_slot}", now, unit="%", low=0, high=100)
             expected_time = ("00:00:00", "04:00:00", "07:00:00", "13:00:00",
@@ -786,6 +791,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         chain = self._grid_reduction_chain
         old_ledger = deepcopy(self._memory["ledger"].get(self._sources["grid_current_number"], {}))
         ordinary = value > 0 and not (force and before["current_a"] is not None and value <= before["current_a"])
+        if not ordinary:
+            # A synchronous register readback after a safety reduction must not
+            # hide the interruption from this tick's later policy observation.
+            self._memory["current_policy"]["safe_since"] = None
         now = self._now()
         if ordinary and not self._ordinary_dispatch_ready(now):
             return False
@@ -905,6 +914,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         charging = (gc is not None and gc.state == "on" and not gc.attributes.get("restored", False)
                     and gc_report is not None and gc_report <= now.timestamp() and inputs["telemetry_valid"])
         return {"now_ts": now.timestamp(), "winter": winter, "cheap_window": night or afternoon,
+                "policy_deadline": deadline.isoformat(),
+                "current_policy": self._memory["current_policy"],
+                "hardware_ok": self._hardware_modes_ok(),
                 "ordinary_history_known": history["known"],
                 "ordinary_last_possible_ts": history.get("possible_at"),
                 "ordinary_last_not_sent_ts": history.get("not_sent_at"),
@@ -928,6 +940,13 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "conversion_total_limit_w": self._options.get("inverter_max_power_kw", 12) * 1000,
                 "conversion_phase_limit_w": self._options.get("inverter_phase_max_power_kw", 5) * 1000,
                 "headroom_w": 500, "phase_headroom_w": 250, "charge_efficiency": .9}
+
+    def _current_policy_stable(self, now):
+        policy = self._memory["current_policy"]
+        since, observed = _number(policy.get("safe_since")), _number(policy.get("observed_at"))
+        return (since is not None and observed is not None
+                and 0 <= now.timestamp() - observed <= 30
+                and 120 <= now.timestamp() - since)
 
     def _pending_reduction_ok(self, inputs, now, requested, cap):
         self._observe_reduction_readback(inputs)
@@ -1004,6 +1023,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         potential_hard_safe = pending_a is None or pending_a <= cap["hard_current_cap_a"]
         potential_plan_safe = pending_a is None or pending_a <= cap["cap_a"]
         ready = (ready and cap["grid_within_limits"] and observed["soc_valid"]
+                 and not self._memory["current_policy"].get("stopped", True)
                  and potential_hard_safe and potential_plan_safe
                  and observed["soc"] < target and observed["current_a"] is not None
                  and 0 < observed["current_a"] <= cap["hard_current_cap_a"]
@@ -1014,6 +1034,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # ten seconds every thirty seconds. Initial enabling still requires the
         # exact requested setting to settle; continuing is a separate decision.
         continuing = (active_gc is not None and active_gc.state == "on" and permitted and
+                      not self._memory["current_policy"].get("stopped", True) and
                       potential_hard_safe and
                       observed["telemetry_valid"] and observed["soc_valid"] and
                       observed["soc"] < target and
@@ -1477,6 +1498,17 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             now = self._now()
             inputs = self._read_inputs(now)
             target, emergency, target_source = self._target(now)
+            previous_policy = self._memory["current_policy"]
+            policy = update_policy(self._grid_input(inputs, now, target, emergency), previous_policy)
+            self._memory["current_policy"] = policy
+            # Persist latch transitions before any hardware action. Store failure
+            # blocks ordinary starts; stopping and immediate safety remain allowed.
+            if any(previous_policy.get(k) != policy.get(k) for k in ("deadline", "stopped")):
+                try:
+                    await self._save()
+                except Exception:
+                    self._memory["current_policy"] = {**policy, "stopped": True, "safe_since": None}
+                    self._last_error = "current_policy_store_failed"
             control = self._controller(self._grid_input(inputs, now, target, emergency))
             modes_ok = self._hardware_modes_ok()
             active = self.mode == "active"
