@@ -27,6 +27,7 @@ from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_r
                                 DEADBAND_A, QUANTUM_A)
 from .planner import plan_energy
 from .slot_meter import update_slot_measurements
+from .topology import ct_load_balance
 
 _LOGGER = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -90,7 +91,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "load_profiles": {}, "ledger": {}, "plan": {}, "observed_owners": {},
                         "slot_measurements": {}, "safety_raise": {},
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
-                        "grid_dispatch": {}, "current_policy": {}}
+                        "grid_dispatch": {}, "current_policy": {}, "metering_context": {}}
         self._last_save_ts = 0
         self._last_error = None
         # Evidence of an accepted service call, never a physical charging ACK.
@@ -210,6 +211,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 raise ValueError("Sources must be entity IDs")
         elif key == "solcast":
             raise ValueError("Configure credentials in the integration setup")
+        elif key == "topology":
+            if value not in ("load_only", "load_with_external_ct"):
+                raise ValueError("Invalid metering topology")
         elif key == "pv_forecast_mode":
             if value not in ("whole_system", "specific_profile"):
                 raise ValueError("Invalid PV forecast mode")
@@ -223,7 +227,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 raise ValueError("Setting outside its allowed range")
             value = int(number) if key == "update_seconds" else number
         async with self._lock:
-            if key in ("sources", "extra_loads") and self.mode == "active":
+            if key in ("sources", "extra_loads", "topology", "combined_output_limit_kw") and self.mode == "active":
                 raise ValueError("Switch to shadow before changing hardware mappings")
             if key == "sources":
                 value = {**self._sources, **value}
@@ -504,6 +508,38 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "telemetry_valid": voltage is not None and current is not None and
                 bms_valid and all(v is not None for v in powers.values())}
         inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
+        inputs["topology"] = self._options["topology"]
+        inputs["grid_port_power"] = powers["grid_power"]
+        inputs["topology_error"] = None
+        inputs["load_and_grid_output_w"] = None
+        if self._options["topology"] == "load_with_external_ct":
+            keys = ("ct_grid_power", "ct_grid_l1_power", "ct_grid_l2_power", "ct_grid_l3_power")
+            ct = {key: self._measurement(key, now, unit="W", age=30, low=-60000, high=60000)
+                  for key in keys}
+            try:
+                meter_keys = (*keys, "grid_power", "grid_l1_power", "grid_l2_power", "grid_l3_power")
+                ids = [self._sources.get(key) for key in meter_keys]
+                if any(not entity for entity in ids) or len(set(ids)) != len(ids):
+                    raise ValueError("ct_and_grid_port_require_distinct_meters")
+                reports = [_stamp(getattr(self._state(key), "last_reported", None) or
+                                  getattr(self._state(key), "last_updated", None)) for key in meter_keys]
+                if None in reports or max(reports)-min(reports) > 10:
+                    raise ValueError("ct_and_grid_port_not_synchronised")
+                balance = ct_load_balance(raw_load, [powers[f"load_l{i}_power"] for i in (1, 2, 3)],
+                    powers["grid_power"], [powers[f"grid_l{i}_power"] for i in (1, 2, 3)],
+                    ct["ct_grid_power"], [ct[f"ct_grid_l{i}_power"] for i in (1, 2, 3)])
+                inputs.update(outside_load_w=balance["outside_load_w"],
+                    load_power=balance["total_load_w"], total_load_with_outside_w=balance["total_load_w"],
+                    grid_power=balance["grid_w"], load_and_grid_output_w=balance["load_and_grid_output_w"])
+                for i in (1, 2, 3):
+                    inputs[f"load_l{i}_power"] = balance["total_load_phases_w"][i-1]
+                    inputs[f"grid_l{i}_power"] = balance["grid_phases_w"][i-1]
+            except (ValueError, TypeError):
+                inputs.update(telemetry_valid=False, outside_power_valid=False,
+                              outside_load_w=None, load_power=None, grid_power=None,
+                              total_load_with_outside_w=None, topology_error="invalid_ct_grid_balance")
+            # CT phase regulation is not inferred from the Load-mode switch.
+            inputs["grid_charge_balanced"] = False
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):
@@ -553,10 +589,12 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return not self._hardware_mode_issues()
 
     def _hardware_mode_issues(self):
+        expected_mode = ("Zero Export To CT" if self._options["topology"] == "load_with_external_ct"
+                         else "Zero Export To Load")
         required = (("solar_sell", "Solar Sell", "on"),
                     ("tou_enabled", "Time of Use", "on"),
                     ("energy_priority", "Energy Management Priority", "Load First"),
-                    ("work_mode", "System Work Mode", "Zero Export To Load"))
+                    ("work_mode", "System Work Mode", expected_mode))
         issues = []
         for key, label, expected in required:
             state = self._state(key)
@@ -581,6 +619,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                    for slot, clock in enumerate(clocks, 1))
 
     def _preflight(self, *, retake=False):
+        if self._options["topology"] not in ("load_only", "load_with_external_ct"):
+            raise ValueError("Unknown metering topology")
         if self._owner_conflicts(ignore_missing=retake):
             raise ValueError("Existing previous controllers must be OFF and observed controllers available")
         now = self._now()
@@ -592,6 +632,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if reference is None or not .1 <= reference <= 1000:
                 raise ValueError("A specific PV profile requires its reference capacity")
         inputs = self._read_inputs(now)
+        if inputs.get("topology_error"):
+            raise ValueError("Topologia CT: wymagane są osobne świeże pomiary CT i portu GRID (suma i fazy), zgodne kierunki i bilans faz")
         if not inputs["telemetry_valid"] or not inputs["soc_valid"]:
             raise ValueError("Activation requires fresh, valid power and battery measurements")
         mode_issues = self._hardware_mode_issues()
@@ -946,7 +988,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "capacity_kwh": self._options["capacity_kwh"],
                 "bms_cap_a": inputs["bms_cap_a"], "telemetry_valid": inputs["telemetry_valid"],
                 "load_w": inputs["load_power"], "grid_w": inputs["grid_power"],
-                "outside_load_w": inputs["outside_load_w"],
+                "outside_load_w": 0 if self._options["topology"] == "load_with_external_ct" else inputs["outside_load_w"],
                 "load_phases_w": [inputs[f"load_l{i}_power"] for i in (1, 2, 3)],
                 "grid_phases_w": [inputs[f"grid_l{i}_power"] for i in (1, 2, 3)],
                 "battery_voltage_v": inputs["voltage"], "current_a": inputs["current_a"],
@@ -954,7 +996,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "last_attempt_ts": ledger.get("at", 0), "last_attempt_a": ledger.get("a", 0),
                 "total_limit_w": self._options["grid_import_limit_kw"] * 1000,
                 "phase_limit_w": self._options["grid_phase_limit_kw"] * 1000,
-                "conversion_total_limit_w": self._options.get("inverter_max_power_kw", 12) * 1000,
+                "conversion_total_limit_w": min(self._options.get("inverter_max_power_kw", 12),
+                    self._options["combined_output_limit_kw"] if self._options["topology"] == "load_with_external_ct"
+                    else self._options.get("inverter_max_power_kw", 12)) * 1000,
                 "conversion_phase_limit_w": self._options.get("inverter_phase_max_power_kw", 5) * 1000,
                 "headroom_w": 500, "phase_headroom_w": 250, "charge_efficiency": .9}
 
@@ -1076,7 +1120,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         from homeassistant.components.recorder.statistics import statistics_during_period
         job = partial(statistics_during_period, self.hass,
                       start_time=(now - timedelta(days=7)).replace(minute=0, second=0, microsecond=0).astimezone(_UTC),
-                      end_time=now.astimezone(_UTC), statistic_ids={load_entity, *(c["energy_entity"] for c in self._channels())},
+                      end_time=now.astimezone(_UTC), statistic_ids={load_entity, *(c["energy_entity"] for c in self._channels()),
+                          *([self._sources["ct_grid_power"], self._sources["grid_power"]]
+                            if self._options["topology"] == "load_with_external_ct" else [])},
                       period="hour", units={"power": "W", "energy": "kWh"}, types={"mean", "change"})
         return await get_instance(self.hass).async_add_executor_job(job)
 
@@ -1084,7 +1130,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._memory["slot_measurements"] = update_slot_measurements(
             self._memory["slot_measurements"], {"at": now,
                 "battery_w": inputs["battery_power"], "grid_w": inputs["grid_power"],
-                "telemetry_valid": inputs["battery_power"] is not None and inputs["grid_power"] is not None})
+                "telemetry_valid": inputs["telemetry_valid"] and inputs["battery_power"] is not None and inputs["grid_power"] is not None})
 
     async def _solcast_fetch_json(self, url, *, headers, params):
         """HA HTTP boundary: fixed official host, TLS, no redirects or key URL."""
@@ -1177,24 +1223,34 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     async def _load_profile(self, now):
         signature = {"load": self._sources["load_power"], "channels": self._channels()}
+        if self._options["topology"] == "load_with_external_ct":
+            signature["ct"] = self._sources["ct_grid_power"]
+            signature["grid_port"] = self._sources["grid_power"]
         try:
             stats = await asyncio.wait_for(self._statistics_provider(
                 now, self._sources["load_power"], self._sources.get("pc_energy_total")), timeout=15)
             if isinstance(stats, dict) and isinstance(stats.get("statistics"), dict):
                 stats = stats["statistics"]
 
-            def hourly(items, field, scale=1):
+            def hourly(items, field, scale=1, signed=False):
                 output = {}
                 for item in items:
                     start, end, value = _stamp(item.get("start")), _stamp(item.get("end")), _number(item.get(field))
                     if None not in (start, end, value) and 3599 <= end-start <= 3601 and (
-                            now.timestamp()-8*86400 <= start < end <= now.timestamp()) and value >= 0:
+                            now.timestamp()-8*86400 <= start < end <= now.timestamp()) and (signed or value >= 0):
                         if start in output:
                             raise ValueError("duplicate_hourly_statistics")
                         output[start] = (start, end, value*scale)
                 return output
 
             load = hourly(stats.get(self._sources["load_power"], []), "mean")
+            if self._options["topology"] == "load_with_external_ct":
+                ct = hourly(stats.get(self._sources["ct_grid_power"], []), "mean", signed=True)
+                port = hourly(stats.get(self._sources["grid_power"], []), "mean", signed=True)
+                for at, row in list(load.items()):
+                    if at not in ct or at not in port or ct[at][2]-port[at][2] < -200:
+                        raise ValueError("ct_branch_history_missing_or_inconsistent")
+                    load[at] = (*row[:2], row[2]+max(ct[at][2]-port[at][2], 0))
             rows = list(load.values())
             if not rows or now.timestamp()-max(x[1] for x in rows) > 10800:
                 raise ValueError("load_statistics_missing")
@@ -1337,6 +1393,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "charge_max_kw", "discharge_max_kw", "grid_max_soc_percent",
                     "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode")}
         rated = self._options.get("inverter_max_power_kw", 12)
+        if self._options["topology"] == "load_with_external_ct":
+            rated = min(rated, self._options["combined_output_limit_kw"])
         config["charge_max_kw"] = min(config["charge_max_kw"], rated)
         config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
         config.update({"minimum_soc_percent": self._options["min_soc_percent"],
@@ -1485,6 +1543,18 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if self._stopped:
                 return self.data
             now = self._now()
+            context = {"topology": self._options["topology"], "sources": self._sources,
+                       "combined_output_limit_kw": self._options["combined_output_limit_kw"]}
+            previous_context = self._memory["metering_context"]
+            if context != previous_context:
+                if previous_context or self._options["topology"] == "load_with_external_ct":
+                    self._memory["mode"] = "shadow"
+                    self._memory["plan"] = {}
+                    self._memory["target_cache"] = {}
+                    self._memory["safety_raise"] = {}
+                    self._memory["load_profiles"] = {}
+                    self._memory["current_policy"] = {}
+                self._memory["metering_context"] = deepcopy(context)
             self._ensure_forecast_context()
             inputs = self._read_inputs(now)
             self._record_slot_measurements(now, inputs)

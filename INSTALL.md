@@ -90,7 +90,7 @@ Przed aktywacją EMS sprawdza odczyty encji wybranych w **Konfiguruj → Źród�
 | Solar Sell | `on` |
 | Time of Use | `on` |
 | Energy Management Priority | `Load First` |
-| System Work Mode | `Zero Export To Load` |
+| System Work Mode | `Zero Export To Load` lub `Zero Export To CT`, zgodnie z wybraną topologią |
 
 Nazwy encji na innej instancji mogą być inne — przypisz jej właściwe encje. Brak encji, stan `unavailable` albo `restored` również blokują aktywację. EMS nie przełącza sam tych trybów. Dopasowanie trybów musi odpowiadać topologii i planowanemu sposobowi pracy instalacji.
 
@@ -101,3 +101,15 @@ W wersji1.0.6 komunikat brzmi `Inverter modes do not match the EMS model`. Kandy
 Prefiks można wpisać przy dodawaniu integracji lub w **Deye EMS → Konfiguruj → Prefiks encji Deye**. Wpisz część nazwy bez domeny, np. `deye_dom_`. Daje to m.in. `sensor.deye_dom_load_power`, `select.deye_dom_system_work_mode` oraz `number.deye_dom_maximum_battery_grid_charge_current`. Końcowe podkreślenie jest uzupełniane automatycznie.
 
 Zmiana przypisań wymaga obserwacji. Kreator w istniejącej integracji pokazuje znalezione i brakujące encje, a następnie pełny formularz przypisań do sprawdzenia i ręcznej korekty. Dopiero zapis formularza zapisuje przypisania i prefiks. Anulowanie nie zmienia konfiguracji. Prefiks dotyczy wyłącznie encji falownika Deye: nie przepisuje nazw BMS, Solcast ani odbiorników. Prefiks pomaga dobrać nazwy; nie zmienia trybu fizycznego falownika ani nie dodaje obsługi Zero Export To CT. Po zmianie przypisań wznowienie sterowania wymaga jawnego działania użytkownika.
+
+## Dom pod LOAD, CWU między GRID a CT — kandydat1.0.7
+
+W obserwacji wybierz **Konfiguruj → Topologia i moc falownika → Dom pod LOAD i odbiory między GRID a CT**. Wpisz moc znamionową urządzenia (np.10kW) i wspólny limit modelu (np.10kW); limit obejmuje cały falownik, a nie osobno LOAD i port GRID. To parametry obliczeń, nie zapis ograniczenia mocy do urządzenia. Ograniczenia fizyczne zapewnia konfiguracja i znamionowa moc falownika.
+
+W **Źródłach** przypisz niezależne pomiary CT przy przyłączu i portu GRID falownika: suma orazL1/L2/L3. Dodatni znak CT oznacza import z sieci, dodatni znak GRID — dopływ do falownika. Dla standardowych nazw CT są to `external_ct_power` i `external_ct_l1_power`/`external_ct_l2_power`/`external_ct_l3_power` z prefiksem Deye. LOAD musi mierzyć samo wyjście LOAD/UPS, bez odbiorów między GRID a CT.
+
+Moc odbiorów między CT a GRID = CT − GRID. Przykład: CT0W i GRID−2000W oznaczają2kW zasilania odbiorów przed falownikiem przy zerowej wymianie z siecią. Do LOAD dodajemy tę moc dokładnie raz. Osobny licznik CWU nie jest wymagany do bieżącego bilansu; historia prognozy wymaga wspólnych godzinowych średnich LOAD, CT i portu GRID. Niekompletna historia nie jest zastępowana profilem samego LOAD.
+
+Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRID muszą mieścić się w10s. Wymagana jest zgodność sum i faz (tolerancja większa z300W i10% sumy) oraz nieujemny bilans odbiorów między CT a GRID (do200W tolerancji). Sterowanie nie zakłada bilansowania faz CT na podstawie przełącznika dotyczącego LOAD: zwiększenia prądu stosują zachowawczy model fazowy. Tryb wymagany w tej topologii to **Zero Export To CT**; EMS nie przełącza go sam.
+
+Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga ręcznego wznowienia. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.

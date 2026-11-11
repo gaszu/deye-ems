@@ -45,3 +45,10 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - Prognoza48h oparta na PV i profilach domu/odbiorników z Recorder, sezonowy bilans energii oraz zachowawczy fallback.
 - Usunięcie składników obu poprzednich EMS następuje po odtwarzalnej kopii, sprawdzeniu zależności i zweryfikowanym przejęciu produkcji. Źródła fizyczne i niezwiązane funkcje domu pozostają.
 - Publikacja i testy offline nie oznaczają same w sobie przejęcia produkcyjnego ani potwierdzenia reakcji sprzętu. Aktualny zakres sprawdzeń opisuje `VALIDATION.md`.
+
+## Kandydat1.0.7 — jawna topologia CT
+
+- Dom pod LOAD oraz pasywne odbiory między GRID falownika a CT przy przyłączu. CT i port GRID są osobnymi mapowaniami sumy/faz; oba dodatnie do domu/falownika. Bilans zewnętrznej gałęzi toCT−GRID. LOAD jest samo UPS/LOAD, a pełne zapotrzebowanie obejmuje LOAD plus tę gałąź dokładnie raz.
+- Wymiana z siecią, limity importu i rejestr energii slotów używają CT. PortGRID może oddawać do CWU przyCT=0 bez eksportu do sieci. Historia zapotrzebowania dodaje różnicę zgodnych godzin CT−GRID do LOAD.
+- Wymagany trybZero Export To CT jest wybrany jawnie; dotychczasowy wariantLoad-only nadal wymagaZero Export To Load. Żadnego automatycznego przełączania trybów. Zmiana kontekstu pomiarowego unieważnia plan i pozostawia obserwację.
+- Wspólna znamionowa moc oraz limit modelowy obejmują falownik jako całość. Model rozdziela dostępny limit między PV i baterię na pełne obciążenie; nie są to dwa niezależne limity dla LOAD i CWU. EMS nie zapisuje sprzętowego ograniczenia mocy falownika.

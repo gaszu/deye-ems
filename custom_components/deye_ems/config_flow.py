@@ -27,6 +27,8 @@ def _deye_prefix_sources(prefix):
     prefix += "_"
     mapping = {}
     for key, entity in DEFAULT_SOURCES.items():
+        if not entity:
+            continue
         domain, name = entity.split(".", 1)
         if name.startswith("deye_inverter_"):
             mapping[key] = f"{domain}.{prefix}{name[len('deye_inverter_'):]}"
@@ -113,7 +115,22 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return runtime is not None and runtime.mode == "active"
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["sidebar", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
+        return self.async_show_menu(step_id="init", menu_options=["sidebar", "topology", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
+
+    async def async_step_topology(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        if user_input is not None:
+            if user_input.get("topology") not in ("load_only", "load_with_external_ct"):
+                return self.async_abort(reason="invalid_topology")
+            return self.async_create_entry(title="", data={**dict(self.config_entry.options), **user_input})
+        values = {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
+        return self.async_show_form(step_id="topology", data_schema=_schema(values,
+            ["inverter_max_power_kw", "combined_output_limit_kw"]).extend({
+            vol.Required("topology", default=values["topology"]): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=[
+                    {"value": "load_only", "label": "Cały dom pod LOAD — Zero Export To Load"},
+                    {"value": "load_with_external_ct", "label": "Dom pod LOAD i odbiory między GRID a CT — Zero Export To CT"}]))}))
 
     async def async_step_entity_prefix(self, user_input=None):
         if self._mapping_locked():
@@ -304,6 +321,9 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         values = {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
         errors = {}
         if user_input is not None:
+            if (self._mapping_locked() and "combined_output_limit_kw" in user_input
+                    and user_input["combined_output_limit_kw"] != values["combined_output_limit_kw"]):
+                return self.async_abort(reason="stop_before_mapping")
             errors = _errors({**values, **user_input})
             if not errors:
                 return self.async_create_entry(title="", data={**dict(self.config_entry.options), **user_input})

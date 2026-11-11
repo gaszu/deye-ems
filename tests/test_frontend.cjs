@@ -191,6 +191,21 @@ test("whole-home card uses only the native total LOAD regardless of receiver met
   assert.equal(panel.kw("grid_power"),0);
 });
 
+test("CT topology separates zero utility exchange from GRID export feeding an external branch",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",grid_power:0,
+    load_power:5000,raw_load_power:3000,outside_load_w:2000,grid_port_power:-2000});
+  panel.payload.options.inverter_max_power_kw=10;
+  panel.render();
+  assert.equal(panel.kw("grid_power"),0);
+  assert.equal(panel.kw("grid_port_power"),-2);
+  assert.equal(panel.kw("load_power"),5);
+  assert.match(panel.shadowRoot.innerHTML,/Sieć mierzona na CT/);
+  assert.match(panel.shadowRoot.innerHTML,/port GRID falownika: -2/);
+  panel.payload.data.inputs.telemetry_valid=false;
+  assert.equal(panel.kw("grid_port_power"),null);
+});
+
 test("rejects snapshots over thirty seconds old and future timestamps",()=>{
   const {panel}=fixture();
   panel.payload.data.updated_at=new Date(NOW-30001).toISOString();

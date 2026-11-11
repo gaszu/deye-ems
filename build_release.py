@@ -12,12 +12,18 @@ const = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(const)
 
 data_pl = dict(const.OPTION_LABELS)
-data_pl["entity_prefix"] = "Prefiks encji Deye"
 data_pl.update({key: key.replace("_", " ") for key in const.DEFAULT_SOURCES})
+data_pl["entity_prefix"] = "Prefiks encji Deye"
+data_pl["topology"] = "Układ instalacji"
+data_pl.update({"ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
+    "grid_power": "Port GRID falownika — suma (+ do falownika, − z falownika)",
+    "load_power": "Wyjście LOAD/UPS — bez odbiorów między GRID a CT"})
+for phase in (1, 2, 3):
+    data_pl[f"ct_grid_l{phase}_power"] = f"Wymiana z siecią na CT — L{phase}"
 data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika energii",
     "asymmetric_phase_feeding": "Bilansowanie faz GRID w Deye — przełącznik stanu",
-    "load_power": "Całe zużycie modelowanego domu (LOAD)",
-    "grid_power": "Pobór / eksport z sieci (GRID)",
+    "load_power": "Wyjście LOAD/UPS — bez odbiorów między GRID a CT",
+    "grid_power": "Port GRID falownika (+ do falownika, − z falownika)",
     "power_entity": "Encja chwilowej mocy (opcjonalnie)",
     "included_in_load": "Zużycie jest już ujęte w głównym pomiarze LOAD",
     "load_id": "Odbiornik do usunięcia", "pv_forecast_mode": "Sposób interpretacji prognozy PV",
@@ -31,6 +37,7 @@ data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika ene
     "accept_manual_calibration": "Rozumiem zakres importu współczynników i brak kontynuacji poprzedniego samouczenia",
     "source_entry": "Obecna integracja Solcast"})
 descriptions = {
+    "topology": ("Topologia i moc falownika", "Wybierz miejsce pomiaru wymiany z siecią. Dla CWU między GRID a CT wybierz Zero Export To CT i w Źródłach przypisz osobno CT oraz port GRID (sumy i fazy). Oba kierunki dodatnie oznaczają pobór z sieci/do falownika. LOAD musi mierzyć samo wyjście LOAD/UPS. Moc znamionowa dotyczy całego falownika, łącznie domu i CWU. Wspólny limit jest limitem modelu; nie zapisuje ustawień mocy urządzenia. Brak zgodnych pomiarów blokuje sterowanie. Zmiana wymaga obserwacji, a wznowienie jest ręczne."),
     "entity_prefix": ("Prefiks encji Deye", "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Prefiks nie zmienia encji BMS, Solcast ani pompy."),
     "user": ("Deye EMS — własny silnik", "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później."),
     "parameters": ("Parametry silnika", "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor."),
@@ -41,6 +48,7 @@ descriptions = {
     "solcast_import": ("Import dostępnych ustawień Solcast", "Klucz, limit konta i wykluczenia są kopiowane lokalnie w HA. Kreator odczytuje bieżące współczynniki z sensora korekt przypisanego do wybranej integracji. Przenosi ich stan, bez pełnej historii i mechanizmu dalszego samouczenia. Prognozy sensorów HA są już skorygowane — nie korygujemy ich ponownie. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta."),
 }
 step_fields = {
+    "topology": ["topology", "inverter_max_power_kw", "combined_output_limit_kw"],
     "user": ["min_soc_percent", "capacity_kwh", "pv_peak_kwp", "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw", "entity_prefix"],
     "entity_prefix": ["entity_prefix"],
     "parameters": [*const.OPTION_RANGES, "pv_forecast_mode"], "sources": list(const.DEFAULT_SOURCES),
@@ -76,7 +84,8 @@ doc["options"]["step"]["init"] = {"title": "Deye EMS",
         "solcast": "Solcast — połączenie i ustawienia", "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}
 doc["options"]["step"]["solcast"] = {"title": "Solcast wewnątrz EMS", "menu_options": {
     "solcast_manual": "Połącz / zmień ustawienia", "solcast_import": "Importuj dostępne ustawienia z HA",
-    "solcast_disable": "Wyłącz pobieranie przez EMS", "sidebar": "Panel boczny", "entity_prefix": "Prefiks encji Deye"}}
+    "solcast_disable": "Wyłącz pobieranie przez EMS", "sidebar": "Panel boczny", "entity_prefix": "Prefiks encji Deye", "topology": "Topologia i moc falownika"}}
+doc["options"]["abort"]["invalid_topology"] = "Wybierz poprawną topologię instalacji."
 COMPONENT.joinpath("translations").mkdir(exist_ok=True)
 for path in (COMPONENT/"strings.json", COMPONENT/"translations/pl.json"):
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2)+"\n", encoding="utf-8", newline="\n")

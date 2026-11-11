@@ -1,6 +1,7 @@
 # Kandydat 1.0.7 — sprawdzenia offline
 
-- 354 testy Python PASS i60 testów panelu PASS; paczkaZIP zbudowana i sprawdzona, w tym16 nowych scenariuszy harmonogramu, histerezy i integracji runtime. Dawne testy modułu rampy zachowano jako regresje wspólnej ścieżki bezpieczeństwa; runtime używa nowej polityki półgodzinnej.
+- 364 testy Python PASS i61 testów panelu PASS; paczkaZIP zbudowana i sprawdzona, w tym16 scenariuszy harmonogramu, histerezy i integracji runtime. Dawne testy modułu rampy zachowano jako regresje wspólnej ścieżki bezpieczeństwa; runtime używa nowej polityki półgodzinnej.
+- Dziesięć testów topologiiCT obejmujeCT=0 z eksportem portuGRID doCWU, poprawny import, jawny wybór trybu, braki/starość/restored/jednostki/kierunki i przesunięcie czasowe pomiarów, fazowe ukrycie ujemnego bilansu, profil pełnego zużycia z historii i brak samegoLOAD jako zastępstwa, unieważnienie kontekstu, wspólny limit10kW oraz blokadę zmian wactive. Test panelu odróżniaCT0 odGRID−2kW i pełnego obciążenia5kW.
 - Siedem nowych testów prefiksu: generowanie nazw z zachowaniem domen, walidacja wejścia, podgląd bez zapisu, ręczna korekta i zachowanie innych źródeł, ponowna blokada przy aktywacji, pierwsza konfiguracja i komunikaty błędnych wartości.
 - Cztery nowe testy diagnostyki aktywacji sprawdzają wszystkie wymagane tryby, łączne raportowanie braku encji i stanów restored/unavailable, mapowanie innej instancji oraz brak poleceń przy blokadzie.
 - Pięć nowych testów panelu bocznego: trwałość preferencji i zachowanie motywu, odrzucenie błędnego zapisu, formularz przy aktywnym sterowaniu bez zmiany options, brak odświeżenia po błędzie zapisu oraz zachowanie trasy i bramki administratora przy ukryciu wpisu.

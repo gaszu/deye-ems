@@ -27,6 +27,15 @@
   },
   "options": {
     "step": {
+      "topology": {
+        "title": "Topologia i moc falownika",
+        "description": "Wybierz miejsce pomiaru wymiany z siecią. Dla CWU między GRID a CT wybierz Zero Export To CT i w Źródłach przypisz osobno CT oraz port GRID (sumy i fazy). Oba kierunki dodatnie oznaczają pobór z sieci/do falownika. LOAD musi mierzyć samo wyjście LOAD/UPS. Moc znamionowa dotyczy całego falownika, łącznie domu i CWU. Wspólny limit jest limitem modelu; nie zapisuje ustawień mocy urządzenia. Brak zgodnych pomiarów blokuje sterowanie. Zmiana wymaga obserwacji, a wznowienie jest ręczne.",
+        "data": {
+          "topology": "Układ instalacji",
+          "inverter_max_power_kw": "Moc falownika — łącznie",
+          "combined_output_limit_kw": "Wspólny limit modelowy LOAD i odbiorów przed GRID"
+        }
+      },
       "entity_prefix": {
         "title": "Prefiks encji Deye",
         "description": "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Prefiks nie zmienia encji BMS, Solcast ani pompy.",
@@ -38,6 +47,7 @@
         "title": "Parametry silnika",
         "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.",
         "data": {
+          "combined_output_limit_kw": "Wspólny limit modelowy LOAD i odbiorów przed GRID",
           "min_soc_percent": "Minimalny bezpieczny SoC",
           "capacity_kwh": "Pojemność magazynu",
           "pv_peak_kwp": "Zainstalowana moc PV",
@@ -59,13 +69,17 @@
         "title": "Pomiary i sterowanie",
         "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
         "data": {
+          "ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
+          "ct_grid_l1_power": "Wymiana z siecią na CT — L1",
+          "ct_grid_l2_power": "Wymiana z siecią na CT — L2",
+          "ct_grid_l3_power": "Wymiana z siecią na CT — L3",
           "soc": "soc",
           "voltage": "voltage",
           "bms_charge_current": "bms charge current",
           "bms_blocking_charge": "bms blocking charge",
           "battery_power": "battery power",
-          "grid_power": "Pobór / eksport z sieci (GRID)",
-          "load_power": "Całe zużycie modelowanego domu (LOAD)",
+          "grid_power": "Port GRID falownika (+ do falownika, − z falownika)",
+          "load_power": "Wyjście LOAD/UPS — bez odbiorów między GRID a CT",
           "grid_current_number": "grid current number",
           "max_charge_current_number": "max charge current number",
           "pv_today": "pv today",
@@ -166,7 +180,8 @@
           "solcast_import": "Importuj dostępne ustawienia z HA",
           "solcast_disable": "Wyłącz pobieranie przez EMS",
           "sidebar": "Panel boczny",
-          "entity_prefix": "Prefiks encji Deye"
+          "entity_prefix": "Prefiks encji Deye",
+          "topology": "Topologia i moc falownika"
         }
       }
     },
@@ -185,7 +200,8 @@
       "no_solcast_to_import": "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie.",
       "solcast_import_incomplete": "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką.",
       "sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.",
-      "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA."
+      "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA.",
+      "invalid_topology": "Wybierz poprawną topologię instalacji."
     }
   }
 }
