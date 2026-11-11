@@ -19,7 +19,9 @@
     },
     "error": {
       "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
-      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_."
+      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_.",
+      "reserve_below_low_soc": "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy.",
+      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
     },
     "abort": {
       "already_configured": "Integracja Deye EMS jest już skonfigurowana."
@@ -69,6 +71,7 @@
         "title": "Pomiary i sterowanie",
         "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
         "data": {
+          "battery_low_soc": "Battery low SOC — próg falownika (odczyt, rezerwa EMS co najmniej +5 p.p.)",
           "ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
           "ct_grid_l1_power": "Wymiana z siecią na CT — L1",
           "ct_grid_l2_power": "Wymiana z siecią na CT — L2",
@@ -192,7 +195,9 @@
       "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
       "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia.",
       "sidebar_save_failed": "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie.",
-      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_."
+      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_.",
+      "reserve_below_low_soc": "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy.",
+      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",

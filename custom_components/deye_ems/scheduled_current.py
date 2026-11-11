@@ -48,7 +48,7 @@ def update_policy(g, previous):
     now, soc, target = g.get("now_ts"), g.get("soc"), g.get("target_soc")
     key = g.get("policy_deadline")
     valid = (_finite(now) and now > 0 and _finite(soc) and 0 <= soc <= 100
-             and g.get("soc_valid") is True and _finite(target) and 40 <= target <= 95
+             and g.get("soc_valid") is True and _finite(target) and 5 <= target <= 95
              and isinstance(key, str) and bool(key))
     previous = previous if isinstance(previous, dict) else {"invalid": True}
     known = previous == {} or (previous.get("version") == 1

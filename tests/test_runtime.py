@@ -98,6 +98,8 @@ class Harness:
                 value, unit = (1800 if key in ("grid_power", "load_power") else 600), "W"
             if key == "soc":
                 value, unit = 50, "%"
+            if key == "battery_low_soc":
+                value, unit = 10, "%"
             if key == "voltage":
                 value, unit = 54, "V"
             if key in ("bms_charge_current", "max_charge_current_number"):

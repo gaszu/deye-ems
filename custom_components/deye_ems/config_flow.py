@@ -14,6 +14,13 @@ from .solcast import validate_config
 from .solcast_import import import_existing_options
 from .appearance import DATA_APPEARANCE
 from . import async_update_panel
+from .soc_policy import reserve_bound_from_state
+
+
+def _flow_reserve_bound(flow, sources):
+    hass = getattr(flow, "hass", None)
+    state = hass.states.get(sources.get("battery_low_soc")) if hass is not None else None
+    return reserve_bound_from_state(state)
 
 
 def _deye_prefix_sources(prefix):
@@ -39,7 +46,11 @@ def _schema(values, keys):
     fields = {}
     for key in keys:
         low, high, step, unit = OPTION_RANGES[key]
+        if key == "min_soc_percent":
+            low = values.get("min_soc_lower_bound") or 40
         value = values.get(key, DEFAULT_OPTIONS[key])
+        if key == "min_soc_percent":
+            value = max(value, low)
         marker = vol.Optional(key) if value is None else vol.Required(key, default=value)
         fields[marker] = selector.NumberSelector(
             selector.NumberSelectorConfig(min=low, max=high, step=step,
@@ -84,10 +95,14 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         errors = {}
+        bound = _flow_reserve_bound(self, DEFAULT_SOURCES)
         if user_input is not None:
             errors = _errors(user_input)
             try:
                 prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix", "deye_inverter_"))
+                bound = _flow_reserve_bound(self, {**DEFAULT_SOURCES, **mapping})
+                if user_input.get("min_soc_percent", 40) < (bound if bound is not None else 40):
+                    errors["min_soc_percent"] = "reserve_below_low_soc"
             except ValueError:
                 errors["entity_prefix"] = "invalid_entity_prefix"
             if not errors:
@@ -97,7 +112,7 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     **DEFAULT_OPTIONS, **user_input, "entity_prefix": prefix,
                     "sources": {**DEFAULT_SOURCES, **mapping}})
         return self.async_show_form(step_id="user", errors=errors, data_schema=_schema(
-            user_input or DEFAULT_OPTIONS, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
+            {**(user_input or DEFAULT_OPTIONS), "min_soc_lower_bound": bound}, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
                 "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]).extend({
                     vol.Optional("entity_prefix", default=(user_input or {}).get("entity_prefix", "deye_inverter_")):
                         selector.TextSelector()}),
@@ -319,12 +334,21 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_parameters(self, user_input=None):
         values = {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
+        sources = {**DEFAULT_SOURCES, **self.config_entry.data.get("sources", {}),
+                   **self.config_entry.options.get("sources", {})}
+        bound = _flow_reserve_bound(self, sources)
+        values["min_soc_lower_bound"] = bound
         errors = {}
         if user_input is not None:
             if (self._mapping_locked() and "combined_output_limit_kw" in user_input
                     and user_input["combined_output_limit_kw"] != values["combined_output_limit_kw"]):
                 return self.async_abort(reason="stop_before_mapping")
             errors = _errors({**values, **user_input})
+            proposed = user_input.get("min_soc_percent", values["min_soc_percent"])
+            if proposed < (bound if bound is not None else 40):
+                errors["min_soc_percent"] = "reserve_below_low_soc"
+            if bound is None and proposed != values["min_soc_percent"]:
+                errors["min_soc_percent"] = "battery_low_soc_unavailable"
             if not errors:
                 return self.async_create_entry(title="", data={**dict(self.config_entry.options), **user_input})
         return self.async_show_form(step_id="parameters", errors=errors,
@@ -349,7 +373,7 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=options)
         fields = {}
         for key, entity in values.items():
-            domain = "number" if key in ("grid_current_number", "max_charge_current_number") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
+            domain = "number" if key in ("grid_current_number", "max_charge_current_number", "battery_low_soc") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
             fields[vol.Optional(key, description={"suggested_value": entity})] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=domain))
         draft = getattr(self, "_source_mapping_draft", {})

@@ -4,23 +4,23 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.6
+## Instalacja wersji 1.0.7
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.6** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.7** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.6.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.6/deye-ems-1.0.6.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.6.md).
+Alternatywnie pobierz [deye-ems-1.0.7.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.7/deye-ems-1.0.7.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.7.md).
 
 ## Konfiguracja
 
 | Ustawienie | Wartość początkowa produktu |
 |---|---:|
-| Minimalny bezpieczny SoC | 40%, regulowane 40–90% |
+| Minimalny bezpieczny SoC | 40%, od Battery low SOC +5p.p. do90% |
 | Pojemność baterii | 66 kWh |
 | Zainstalowana moc PV | Do wpisania, w kWp |
 | Moc falownika łącznie / na fazę | 12 kW / 5 kW, osobne pola |
@@ -76,6 +76,6 @@ node tests/test_frontend.cjs
 python build_release.py
 ```
 
-## Kandydat1.0.7: układ z CT i odbiorami przed falownikiem
+## Wersja1.0.7: układ z CT i odbiorami przed falownikiem
 
 Opcjonalna topologia **LOAD + odbiory między GRID a CT** zachowujeZero Export To CT. Odróżnia wymianę z siecią mierzoną naCT od portuGRID falownika. Do zużycia i prognozy dodaje bilansCT−GRID do natywnegoLOAD, bez podwójnego liczenia CWU. Wspólna moc znamionowa dotyczy całego falownika. Konfiguracja wymaga oddzielnych sum i faz obu pomiarów, obserwacji i jawnego wznowienia; pełne wymagania są w[INSTALL.md](INSTALL.md). Brak wdrożenia i potwierdzenia pomiarów sprzętowych.

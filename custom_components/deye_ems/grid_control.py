@@ -178,9 +178,10 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     soc, target, hours = g.get("soc"), g.get("target_soc"), g.get("remaining_h")
     capacity = g.get("capacity_kwh", 66)
     minimum = g.get("minimum_soc_percent", 40)
+    lower_bound = g.get("minimum_soc_lower_bound", 40)
     soc_ok = (g.get("soc_valid") is True
-              and all(_number(v) for v in (soc, target, hours, capacity, minimum))
-              and 0 <= soc <= 100 and 40 <= minimum <= 90
+              and all(_number(v) for v in (soc, target, hours, capacity, minimum, lower_bound))
+              and 0 <= soc <= 100 and 5 <= lower_bound <= minimum <= 90
               and minimum <= target <= 95 and 0 < hours <= 24
               and 1 <= capacity <= 1000)
     allowed = (g.get("cheap_window") is True and soc_ok

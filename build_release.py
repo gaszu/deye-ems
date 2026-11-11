@@ -16,6 +16,7 @@ data_pl.update({key: key.replace("_", " ") for key in const.DEFAULT_SOURCES})
 data_pl["entity_prefix"] = "Prefiks encji Deye"
 data_pl["topology"] = "Układ instalacji"
 data_pl.update({"ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
+    "battery_low_soc": "Battery low SOC — próg falownika (odczyt, rezerwa EMS co najmniej +5 p.p.)",
     "grid_power": "Port GRID falownika — suma (+ do falownika, − z falownika)",
     "load_power": "Wyjście LOAD/UPS — bez odbiorów między GRID a CT"})
 for phase in (1, 2, 3):
@@ -79,6 +80,8 @@ doc["options"]["abort"].update({"sidebar_saved": "Zapisano widoczność panelu. 
 doc["options"]["error"]["sidebar_save_failed"] = "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie."
 for section in ("config", "options"):
     doc[section]["error"]["invalid_entity_prefix"] = "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_."
+    doc[section]["error"]["reserve_below_low_soc"] = "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy."
+    doc[section]["error"]["battery_low_soc_unavailable"] = "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
 doc["options"]["step"]["init"] = {"title": "Deye EMS",
     "menu_options": {"parameters": "Parametry i bezpieczny SoC", "sources": "Encje pomiarowe i sterujące",
         "solcast": "Solcast — połączenie i ustawienia", "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}

@@ -28,6 +28,7 @@ from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_r
 from .planner import plan_energy
 from .slot_meter import update_slot_measurements
 from .topology import ct_load_balance
+from .soc_policy import reserve_lower_bound
 
 _LOGGER = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -91,7 +92,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "load_profiles": {}, "ledger": {}, "plan": {}, "observed_owners": {},
                         "slot_measurements": {}, "safety_raise": {},
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
-                        "grid_dispatch": {}, "current_policy": {}, "metering_context": {}}
+                        "grid_dispatch": {}, "current_policy": {}, "metering_context": {}, "soc_floor_guard": {}}
         self._last_save_ts = 0
         self._last_error = None
         # Evidence of an accepted service call, never a physical charging ACK.
@@ -120,7 +121,21 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         config = self._options.get("solcast", {})
         public["solcast_configured"] = self._solcast_configured()
         public["solcast_site_count"] = len(config.get("resource_ids", []))
+        bound = self._soc_lower_bound()
+        public.update(min_soc_lower_bound=bound, min_soc_bound_valid=bound is not None,
+                      effective_min_soc_percent=self._effective_min_soc())
         return self._redact(public)
+
+    def _soc_lower_bound(self):
+        low = self._measurement("battery_low_soc", self._now(), unit="%", low=0, high=85)
+        return reserve_lower_bound(low) if low is not None else None
+
+    def _effective_min_soc(self):
+        bound = self._soc_lower_bound()
+        if bound is None:
+            retained = _number(self._memory.get("soc_floor_guard", {}).get("lower_bound"))
+            bound = max(40, retained if retained is not None and 5 <= retained <= 90 else 40)
+        return max(self._options["min_soc_percent"], bound)
 
     @property
     def effective_loads(self):
@@ -232,7 +247,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if key == "sources":
                 value = {**self._sources, **value}
             candidate = {**self._options, key: value}
-            if candidate["min_soc_percent"] + candidate["reserve_margin_soc_percent"] > candidate["grid_max_soc_percent"]:
+            if key == "min_soc_percent":
+                bound = self._soc_lower_bound()
+                if bound is None or value < bound:
+                    raise ValueError("Rezerwa musi wynosić co najmniej Battery low SOC + 5 p.p.; wymagany poprawny odczyt encji.")
+            if max(candidate["min_soc_percent"], self._soc_lower_bound() or 40) + candidate["reserve_margin_soc_percent"] > candidate["grid_max_soc_percent"]:
                 raise ValueError("Minimum SoC plus reserve must not exceed the grid target ceiling")
             await self._cancel_planning()
             self._planning_revision += 1
@@ -509,6 +528,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 bms_valid and all(v is not None for v in powers.values())}
         inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
         inputs["topology"] = self._options["topology"]
+        mode_state = self._state("work_mode")
+        inputs["inverter_work_mode"] = (mode_state.state if mode_state is not None
+            and not mode_state.attributes.get("restored", False) and mode_state.state not in _BAD else None)
         inputs["grid_port_power"] = powers["grid_power"]
         inputs["topology_error"] = None
         inputs["load_and_grid_output_w"] = None
@@ -540,6 +562,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                               total_load_with_outside_w=None, topology_error="invalid_ct_grid_balance")
             # CT phase regulation is not inferred from the Load-mode switch.
             inputs["grid_charge_balanced"] = False
+        bound = self._soc_lower_bound()
+        inputs.update(min_soc_lower_bound=bound, effective_min_soc_percent=self._effective_min_soc())
+        if bound is None or self._effective_min_soc() + self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
+            inputs["telemetry_valid"] = False
+            inputs["grid_charge_balanced"] = None
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):
@@ -619,6 +646,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                    for slot, clock in enumerate(clocks, 1))
 
     def _preflight(self, *, retake=False):
+        if self._soc_lower_bound() is None:
+            raise ValueError("Wymagany poprawny odczyt Battery low SOC; sprawdź przypisanie encji i jednostkę %.")
+        if self._effective_min_soc() + self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
+            raise ValueError("Rezerwa Battery low SOC + 5 p.p. wraz z buforem przekracza maksymalny cel ładowania.")
         if self._options["topology"] not in ("load_only", "load_with_external_ct"):
             raise ValueError("Unknown metering topology")
         if self._owner_conflicts(ignore_missing=retake):
@@ -695,6 +726,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 history.get("possible_at"), history.get("not_sent_at")))
 
     async def _service(self, entity_id, action, value=None):
+        if (self._soc_lower_bound() is None and entity_id != self._sources["grid_current_number"]
+                and action != "turn_off"):
+            self._last_error = "battery_low_soc_unavailable"
+            return False
         conflicts = self._owner_conflicts()
         if conflicts and self.mode == "active":
             self._memory["mode"] = "shadow"
@@ -713,7 +748,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs = self._read_inputs(now)
         winter, night, afternoon, _, active_slot = self._window(now)
         target, emergency, _ = self._target(now)
-        floor = self._options["min_soc_percent"]
+        floor = self._effective_min_soc()
         allowed = (night or afternoon) and (winter or emergency or
                    inputs["soc"] is not None and inputs["soc"] < floor)
         cap = calculate_grid_charge_cap(self._grid_input(inputs, now, target, emergency))
@@ -921,7 +956,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             await self._gc(slot, False)
 
     async def _repair_floor(self, now):
-        floor = self._options["min_soc_percent"]
+        floor = self._effective_min_soc()
         for slot in range(1, 7):
             key = f"tou_soc_{slot}"
             value = self._measurement(key, now, unit="%", low=0, high=100)
@@ -984,7 +1019,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "emergency_allowed": emergency, "safety_only": safety_only,
                 "soc_valid": inputs["soc_valid"], "soc": inputs["soc"], "target_soc": target,
                 "remaining_h": (deadline.timestamp() - now.timestamp()) / 3600,
-                "minimum_soc_percent": self._options["min_soc_percent"],
+                "minimum_soc_percent": self._effective_min_soc(),
+                "minimum_soc_lower_bound": self._soc_lower_bound(),
                 "capacity_kwh": self._options["capacity_kwh"],
                 "bms_cap_a": inputs["bms_cap_a"], "telemetry_valid": inputs["telemetry_valid"],
                 "load_w": inputs["load_power"], "grid_w": inputs["grid_power"],
@@ -1050,7 +1086,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     async def _run_driver(self, inputs, control, target, emergency, now):
         winter, night, afternoon, _, active_slot = self._window(now)
-        floor = self._options["min_soc_percent"]
+        floor = self._effective_min_soc()
         if control.get("write"):
             await self._grid_attempt(control["next_a"], now.timestamp(), force=control.get("safety", False))
         times = ("00:00:00", "04:00:00", "07:00:00", "13:00:00",
@@ -1397,7 +1433,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             rated = min(rated, self._options["combined_output_limit_kw"])
         config["charge_max_kw"] = min(config["charge_max_kw"], rated)
         config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
-        config.update({"minimum_soc_percent": self._options["min_soc_percent"],
+        config.update({"minimum_soc_percent": self._effective_min_soc(),
+                  "minimum_soc_lower_bound": self._soc_lower_bound() if self._soc_lower_bound() is not None else 40,
                   "margin_soc_percent": self._options["reserve_margin_soc_percent"],
                   "grid_import_max_kw": self._options["grid_import_limit_kw"],
                   "inverter_max_kw": rated, "grid_export_max_kw": min(9, rated)})
@@ -1454,7 +1491,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if not isinstance(record, dict):
                 continue
             value, deadline = _number(record.get("soc_percent")), _stamp(record.get("deadline"))
-            if (key in deadlines and value is not None and self._options["min_soc_percent"] <= value <= 95
+            if (key in deadlines and value is not None and self._effective_min_soc() <= value <= 95
                     and deadline == deadlines[key] and record.get("unreachable") is False
                     and record.get("source") == "own_deterministic_planner" and self._pv_metadata_matches(record)):
                 self._memory["target_cache"][key] = {**record, "soc_percent": value,
@@ -1470,7 +1507,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             saved = {}
         value = _number(saved.get("soc_percent"))
         deadline, accepted = _stamp(saved.get("deadline")), _stamp(saved.get("generated_at"))
-        floor = self._options["min_soc_percent"]
+        floor = self._effective_min_soc()
         minimum_target = min(95, floor + self._options["reserve_margin_soc_percent"])
         generated = datetime.fromtimestamp(accepted, _TZ) if accepted is not None else None
         summer_normal = not winter and value == floor and saved.get("emergency") is False
@@ -1520,7 +1557,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if generated is None or not 0 <= now.timestamp()-generated <= 300 or not isinstance(record, dict):
             return None
         value = _number(record.get("soc_percent"))
-        if (value is None or not self._options["min_soc_percent"] <= value <= 95 or
+        if (value is None or not self._effective_min_soc() <= value <= 95 or
                 _stamp(record.get("deadline")) != self._deadlines(now)[key] or
                 record.get("source") != "own_deterministic_planner" or not self._pv_metadata_matches(record)):
             return None
@@ -1543,6 +1580,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if self._stopped:
                 return self.data
             now = self._now()
+            bound = self._soc_lower_bound()
+            guard = self._memory["soc_floor_guard"]
+            if bound is not None and bound != guard.get("lower_bound"):
+                self._memory["soc_floor_guard"] = {"lower_bound": bound}
+                if guard.get("lower_bound") is not None:
+                    self._memory["plan"] = {}
+                    self._memory["target_cache"] = {}
+                    self._memory["safety_raise"] = {}
+                    self._plan_due = 0
             context = {"topology": self._options["topology"], "sources": self._sources,
                        "combined_output_limit_kw": self._options["combined_output_limit_kw"]}
             previous_context = self._memory["metering_context"]
@@ -1564,7 +1610,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 self._last_error = "ownership_conflict"
                 await self._save()
             active = self.mode == "active"
-            floor = self._options["min_soc_percent"]
+            floor = self._effective_min_soc()
             safety = self._controller(self._grid_input(inputs, now, floor, False, safety_only=True))
             modes_ok = self._hardware_modes_ok()
             if active and not modes_ok:

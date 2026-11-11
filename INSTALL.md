@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 1.0.6
+# Instalacja i obsługa Deye EMS 1.0.7
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i nie wymaga EMHASS ani zewnętrznego solvera. Użytkownik wybiera źródła danych i parametry właściwe dla swojej instalacji.
 
@@ -8,14 +8,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v1.0.6**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v1.0.7**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/ha-deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-1.0.6.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.6/deye-ems-1.0.6.zip).
+1. Pobierz [deye-ems-1.0.7.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.7/deye-ems-1.0.7.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -73,13 +73,13 @@ Przed usunięciem integracji jawnie wybierz obserwację i sprawdź odczyty urzą
 
 [README](README.md) · [Specyfikacja](SPECIFICATION.md) · [Przejście i powrót](MIGRATION.md) · [Testy](VALIDATION.md)
 
-## Panel boczny — kandydat 1.0.7
+## Panel boczny — wersja 1.0.7
 
 W ustawieniach integracji wybierz **Deye EMS → Konfiguruj → Panel boczny → Pokaż Deye EMS w panelu bocznym** i zapisz. Zmiana jest dostępna także przy aktywnym sterowaniu; nie przeładowuje sterownika ani nie zmienia jego trybu. Jest zapisana oddzielnie od ustawień energetycznych.
 
 Panel jest dostępny tylko administratorom. Bezpośredni adres to `/deye-ems` na Twojej instancji, także przy wyłączonej widoczności wpisu. Jeżeli osobisty profil HA ukrywa tę pozycję, przywróć ją również w edycji menu bocznego. Samo pobranie plików z HACS wymaga restartu HA i dodania integracji w Urządzenia i usługi.
 
-Ta opcja jest częścią kandydata1.0.7; nie występuje w wydanej1.0.6.
+Opcja jest dostępna od1.0.7.
 
 ## Blokada włączenia sterowania: tryby falownika
 
@@ -94,15 +94,15 @@ Przed aktywacją EMS sprawdza odczyty encji wybranych w **Konfiguruj → Źród�
 
 Nazwy encji na innej instancji mogą być inne — przypisz jej właściwe encje. Brak encji, stan `unavailable` albo `restored` również blokują aktywację. EMS nie przełącza sam tych trybów. Dopasowanie trybów musi odpowiadać topologii i planowanemu sposobowi pracy instalacji.
 
-W wersji1.0.6 komunikat brzmi `Inverter modes do not match the EMS model`. Kandydat1.0.7 wymienia konkretne encje, odczyty i oczekiwane stany.
+W wersji1.0.6 komunikat brzmi `Inverter modes do not match the EMS model`. Wersja1.0.7 wymienia konkretne encje, odczyty i oczekiwane stany.
 
-## Prefiks encji Deye — kandydat1.0.7
+## Prefiks encji Deye — wersja1.0.7
 
 Prefiks można wpisać przy dodawaniu integracji lub w **Deye EMS → Konfiguruj → Prefiks encji Deye**. Wpisz część nazwy bez domeny, np. `deye_dom_`. Daje to m.in. `sensor.deye_dom_load_power`, `select.deye_dom_system_work_mode` oraz `number.deye_dom_maximum_battery_grid_charge_current`. Końcowe podkreślenie jest uzupełniane automatycznie.
 
 Zmiana przypisań wymaga obserwacji. Kreator w istniejącej integracji pokazuje znalezione i brakujące encje, a następnie pełny formularz przypisań do sprawdzenia i ręcznej korekty. Dopiero zapis formularza zapisuje przypisania i prefiks. Anulowanie nie zmienia konfiguracji. Prefiks dotyczy wyłącznie encji falownika Deye: nie przepisuje nazw BMS, Solcast ani odbiorników. Prefiks pomaga dobrać nazwy; nie zmienia trybu fizycznego falownika ani nie dodaje obsługi Zero Export To CT. Po zmianie przypisań wznowienie sterowania wymaga jawnego działania użytkownika.
 
-## Dom pod LOAD, CWU między GRID a CT — kandydat1.0.7
+## Dom pod LOAD, CWU między GRID a CT — wersja1.0.7
 
 W obserwacji wybierz **Konfiguruj → Topologia i moc falownika → Dom pod LOAD i odbiory między GRID a CT**. Wpisz moc znamionową urządzenia (np.10kW) i wspólny limit modelu (np.10kW); limit obejmuje cały falownik, a nie osobno LOAD i port GRID. To parametry obliczeń, nie zapis ograniczenia mocy do urządzenia. Ograniczenia fizyczne zapewnia konfiguracja i znamionowa moc falownika.
 
@@ -113,3 +113,13 @@ Moc odbiorów między CT a GRID = CT − GRID. Przykład: CT0W i GRID−2000W oz
 Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRID muszą mieścić się w10s. Wymagana jest zgodność sum i faz (tolerancja większa z300W i10% sumy) oraz nieujemny bilans odbiorów między CT a GRID (do200W tolerancji). Sterowanie nie zakłada bilansowania faz CT na podstawie przełącznika dotyczącego LOAD: zwiększenia prądu stosują zachowawczy model fazowy. Tryb wymagany w tej topologii to **Zero Export To CT**; EMS nie przełącza go sam.
 
 Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga ręcznego wznowienia. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
+
+## Rezerwa SoC — dolna granica z Battery low SOC
+
+Minimalną rezerwę EMS można ustawić od aktualnej nastawy `number.deye_inverter_battery_low_soc` powiększonej o5punktów procentowych do90%. To bieżąca wartość progu falownika, a nie atrybut `min` encji. Przykład: Battery low SOC10% → rezerwa EMS od15%. Ułamkowy próg jest zaokrąglany w górę do pełnego procenta. Domyślna rezerwa EMS pozostaje40%, ale nie jest już dolnym limitem formularza.
+
+Encja jest wybierana wŹródłach i obsługiwana przez prefiksDeye. Limit obowiązuje w panelu, konfiguracji HA, encji liczbowej, walidacji backendu, planowaniu i nastawach TOU. Zwiększenie progu falownika automatycznie podnosi skuteczną rezerwę ponad niższe zapisane życzenie użytkownika. Nowy cel musi także mieścić rezerwę i bufor do maksymalnego celu ładowania.
+
+Brak, restored, niepoprawna jednostka lub wartość encji blokują zmianę rezerwy i aktywację. Przy utracie odczytu w czasie pracy EMS zeruje ładowanie z sieci i wyłączaGC, nie obniżaTOU i zachowuje konserwatywną poprzednią granicę. Nie zmienia samej nastawy Battery low SOC. Wspierany odczyt0–85% zapewnia miejsce na5p.p. zapasu przy maksymalnej rezerwie90%.
+
+Wybór LOAD/CT jest dostępny bezpośrednio w panelu w sekcji **Pomiar i sterowanie**. Selektor konfiguruje model EMS, a odczyt fizycznego trybu falownika jest pokazany oddzielnie. Zapis wymaga obserwacji, nie zmienia sam nastawy trybu falownika i nie wznawia sterowania.

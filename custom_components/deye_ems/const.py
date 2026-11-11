@@ -27,7 +27,7 @@ DEFAULT_OPTIONS = {
 
 OPTION_RANGES = {
     "combined_output_limit_kw": (.1, 1000, .1, "kW"),
-    "min_soc_percent": (40, 90, 1, "%"),
+    "min_soc_percent": (5, 90, 1, "%"),
     "capacity_kwh": (1, 1000, .1, "kWh"),
     "pv_peak_kwp": (.1, 1000, .1, "kWp"),
     "pv_forecast_reference_kwp": (.1, 1000, .1, "kWp"),
@@ -60,6 +60,7 @@ OPTION_LABELS = {
     "grid_max_soc_percent": "Maksymalny cel doładowania z sieci",
 }
 DEFAULT_SOURCES = {
+    "battery_low_soc": "number.deye_inverter_battery_low_soc",
     "ct_grid_power": "sensor.deye_inverter_external_ct_power",
     "ct_grid_l1_power": "sensor.deye_inverter_external_ct_l1_power",
     "ct_grid_l2_power": "sensor.deye_inverter_external_ct_l2_power",
