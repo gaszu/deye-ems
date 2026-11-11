@@ -23,6 +23,23 @@ def ct_harness():
 
 
 class CTTopology(unittest.IsolatedAsyncioTestCase):
+    async def test_saved_ct_selection_survives_coordinator_reload_and_activation(self):
+        h = ct_harness()
+        h.entry.options = {**h.entry.options, "topology": "load_only"}
+        h.co._options["topology"] = "load_only"
+        await h.co.async_set_option("topology", "load_with_external_ct")
+        self.assertEqual(h.entry.options["topology"], "load_with_external_ct")
+        await h.co.async_shutdown()
+        h.co = fixtures.Coordinator(h.hass, h.entry, store=h.store, clock=lambda: h.now,
+                                    statistics_provider=h.statistics)
+        await h.co.async_initialize()
+        h.co._plan_due = h.now.timestamp()+10000
+        await h.co.async_request_refresh()
+        self.assertEqual(h.co.options["topology"], "load_with_external_ct")
+        self.assertEqual(h.co._hardware_mode_issues(), [])
+        await h.co.async_set_mode("active")
+        self.assertEqual(h.co.mode, "active")
+
     def test_inverter_exports_to_cwu_while_ct_reports_zero_import(self):
         h = ct_harness()
         inputs = h.co._read_inputs(h.now)

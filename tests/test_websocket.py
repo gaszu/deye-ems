@@ -66,8 +66,14 @@ class API:
     @staticmethod
     def websocket_command(schema):
         def decorate(func):
-            func.schema = schema
-            return func
+            @wraps(func)
+            def validated(hass, connection, msg):
+                allowed = schema.get("value")
+                if "value" in msg and isinstance(allowed, tuple) and not isinstance(msg["value"], allowed):
+                    raise ValueError("invalid WebSocket value type")
+                return func(hass, connection, msg)
+            validated.schema = schema
+            return validated
         return decorate
 
     @staticmethod
@@ -127,6 +133,25 @@ def coordinator():
 
 
 class WebSocketTests(unittest.IsolatedAsyncioTestCase):
+    async def test_topology_strings_pass_wire_validation_and_reach_coordinator(self):
+        for value in ("load_only", "load_with_external_ct"):
+            module, _ = load_module()
+            co = coordinator()
+            hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+            module["command"](hass, connection, {"id": 10, "type": "deye_ems/command",
+                "command": "option", "key": "topology", "value": value})
+            await hass.drain()
+            co.async_set_option.assert_awaited_once_with("topology", value)
+            self.assertEqual(connection.errors, [])
+
+    def test_object_values_remain_rejected_before_dispatch(self):
+        module, _ = load_module()
+        hass, connection = Hass(coordinator()), Connection(SimpleNamespace(is_admin=True))
+        with self.assertRaises(ValueError):
+            module["command"](hass, connection, {"id": 11, "type": "deye_ems/command",
+                "command": "option", "key": "topology", "value": {"unexpected": True}})
+        self.assertEqual(hass.scheduled, 0)
+
     def test_dynamic_soc_limits_reach_panel_without_private_options(self):
         module, _ = load_module()
         co = coordinator()

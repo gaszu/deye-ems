@@ -40,7 +40,7 @@ async def status(hass, connection, msg):
     vol.Optional("original_energy_entity"): str, vol.Optional("channel"): dict,
     vol.Optional("expected_loads_revision"): str,
     vol.Optional("enabled"): bool,
-    vol.Optional("key"): str, vol.Optional("value"): vol.Any(float, int)})
+    vol.Optional("key"): str, vol.Optional("value"): vol.Any(float, int, str)})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def command(hass, connection, msg):

@@ -39,7 +39,7 @@ function fixture(previousElements = []) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-7");
+  const Panel = registry.get("deye-ems-panel-1-0-8");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -60,8 +60,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-7"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.7/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-8"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.8/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
@@ -225,6 +225,27 @@ test("panel offers LOAD and CT selection and saves only the explicit EMS option"
   assert.equal(calls[0].command,"option");
   assert.equal(calls[0].key,"topology");
   assert.equal(calls[0].value,"load_with_external_ct");
+});
+
+test("failed topology save distinguishes the retained draft from the saved LOAD model",async()=>{
+  const {panel}=fixture();
+  panel.payload.options.topology="load_only";
+  panel.drafts.topology="load_with_external_ct";
+  panel._hass.callWS=async()=>{throw Error("expected float or int at 'value'");};
+  await panel.command({command:"option",key:"topology",value:"load_with_external_ct"},"topology");
+  assert.equal(panel.shadowRoot.getElementById("topology").value,"load_with_external_ct");
+  assert.match(panel.shadowRoot.innerHTML,/Zapisany tryb EMS: Zero Export To Load/);
+  assert.match(panel.shadowRoot.innerHTML,/Niezapisana zmiana/);
+});
+
+test("successful topology save shows the confirmed CT model and clears its draft",async()=>{
+  const {panel}=fixture();
+  panel.drafts.topology="load_with_external_ct";
+  panel._hass.callWS=async()=>({...panel.payload,options:{...panel.payload.options,topology:"load_with_external_ct"}});
+  await panel.command({command:"option",key:"topology",value:"load_with_external_ct"},"topology");
+  assert.equal(panel.drafts.topology,undefined);
+  assert.match(panel.shadowRoot.innerHTML,/Zapisany tryb EMS: Zero Export To CT/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Niezapisana zmiana/);
 });
 
 test("active mode prevents topology save even if a disabled button event is forced",()=>{
