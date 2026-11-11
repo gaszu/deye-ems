@@ -1,7 +1,7 @@
 {
   "domain": "deye_ems",
   "name": "Deye EMS",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "codeowners": ["@gaszu"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "panel_custom", "recorder"],

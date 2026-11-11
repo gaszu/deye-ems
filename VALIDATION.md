@@ -1,3 +1,8 @@
+# Wersja 1.0.9 — sprawdzenia offline
+
+- 378 testów Python i 68 testów panelu PASS. Limit przyłącza 16 kW przy falowniku 10 kW jest zapisywany i przekazywany do regulatora oraz planera; ograniczenie mocy falownika pozostaje niezależne. Porównanie CT przy 14 kW potwierdza różną decyzję dla przyłącza 10 i 16 kW.
+- Edycja limitu łącznego i fazowego jest widoczna w głównym panelu w LOAD i CT, bez duplikowania pól.
+
 # Wersja 1.0.8 — sprawdzenia offline
 
 - 376 testów Python i 67 testów panelu PASS. Regresje obejmują tekstową wartość CT w schemacie WebSocket, odrzucenie obiektu jako wartości, trwały zapis i przeładowanie modelu CT oraz aktywację z poprawnymi pomiarami syntetycznymi.

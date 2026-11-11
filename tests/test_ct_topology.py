@@ -23,6 +23,27 @@ def ct_harness():
 
 
 class CTTopology(unittest.IsolatedAsyncioTestCase):
+    async def test_connection_limit_can_exceed_inverter_rating_without_raising_converter_cap(self):
+        h = ct_harness()
+        await h.co.async_set_option("grid_import_limit_kw", 16)
+        await h.co.async_set_option("grid_phase_limit_kw", 7)
+        h.set("grid_power", 13500, "W")
+        h.set("ct_grid_power", 14000, "W")
+        for i in (1, 2, 3):
+            h.set(f"grid_l{i}_power", 4500, "W")
+            h.set(f"ct_grid_l{i}_power", 14000/3, "W")
+        inputs = h.co._read_inputs(h.now)
+        self.assertTrue(inputs["telemetry_valid"])
+        g = h.co._grid_input(inputs, h.now, 85, False)
+        cap = runtime.calculate_grid_charge_cap(g)
+        self.assertEqual(g["total_limit_w"], 16000)
+        self.assertEqual(g["conversion_total_limit_w"], 10000)
+        self.assertTrue(cap["grid_within_limits"])
+        self.assertGreater(cap["cap_a"], 0)
+        low = runtime.calculate_grid_charge_cap({**g, "total_limit_w": 10000})
+        self.assertFalse(low["grid_within_limits"])
+        self.assertLess(low["cap_a"], cap["cap_a"])
+
     async def test_saved_ct_selection_survives_coordinator_reload_and_activation(self):
         h = ct_harness()
         h.entry.options = {**h.entry.options, "topology": "load_only"}
