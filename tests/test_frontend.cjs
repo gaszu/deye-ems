@@ -39,13 +39,13 @@ function fixture(previousElements = []) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-6");
+  const Panel = registry.get("deye-ems-panel-1-0-7");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -60,8 +60,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-6"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.6/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-7"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.7/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
@@ -189,6 +189,66 @@ test("whole-home card uses only the native total LOAD regardless of receiver met
   panel.payload.data.inputs.total_load_with_outside_w=3300;
   assert.equal(panel.kw("load_power"),2.8);
   assert.equal(panel.kw("grid_power"),0);
+});
+
+test("reserve editor uses Battery low SOC margin rather than a fixed forty percent",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.options,{min_soc_percent:15,min_soc_lower_bound:15,
+    min_soc_bound_valid:true,effective_min_soc_percent:15});
+  panel.render();
+  assert.match(panel.shadowRoot.innerHTML,/data-key="min_soc_percent" type="number" min="15"/);
+  assert.match(panel.shadowRoot.innerHTML,/Battery low SOC \+ 5 p.p./);
+  panel.payload.options.min_soc_lower_bound=25;
+  panel.payload.options.effective_min_soc_percent=25;
+  panel.render();
+  assert.equal(panel.shadowRoot.querySelector('input[data-key="min_soc_percent"]').value,"25");
+});
+
+test("missing low-SOC readback disables the reserve save button",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.options,{min_soc_bound_valid:false,min_soc_lower_bound:null});
+  panel.render();
+  assert.match(panel.shadowRoot.innerHTML,/brak poprawnego odczytu Battery low SOC/);
+  assert.match(panel.shadowRoot.innerHTML,/data-save="min_soc_percent" disabled/);
+});
+
+test("panel offers LOAD and CT selection and saves only the explicit EMS option",()=>{
+  const {panel}=fixture();const calls=[];
+  panel.command=async args=>{calls.push(args);};
+  const select=panel.shadowRoot.getElementById("topology");
+  assert.equal(select.value,"load_only");
+  select.value="load_with_external_ct";
+  select.events.change({target:select});
+  assert.equal(calls.length,0);
+  panel.shadowRoot.getElementById("topology-save").events.click();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].command,"option");
+  assert.equal(calls[0].key,"topology");
+  assert.equal(calls[0].value,"load_with_external_ct");
+});
+
+test("active mode prevents topology save even if a disabled button event is forced",()=>{
+  const {panel}=fixture();const calls=[];
+  panel.payload.mode="active";panel.render();
+  panel.command=async args=>{calls.push(args);};
+  assert.equal(panel.shadowRoot.getElementById("topology").disabled,true);
+  panel.shadowRoot.getElementById("topology-save").events.click();
+  assert.equal(calls.length,0);
+});
+
+test("CT topology separates zero utility exchange from GRID export feeding an external branch",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",grid_power:0,
+    load_power:5000,raw_load_power:3000,outside_load_w:2000,grid_port_power:-2000});
+  panel.payload.options.inverter_max_power_kw=10;
+  panel.render();
+  assert.equal(panel.kw("grid_power"),0);
+  assert.equal(panel.kw("grid_port_power"),-2);
+  assert.equal(panel.kw("load_power"),5);
+  assert.match(panel.shadowRoot.innerHTML,/Sieć mierzona na CT/);
+  assert.match(panel.shadowRoot.innerHTML,/port GRID falownika: -2/);
+  panel.payload.data.inputs.telemetry_valid=false;
+  assert.equal(panel.kw("grid_port_power"),null);
 });
 
 test("rejects snapshots over thirty seconds old and future timestamps",()=>{

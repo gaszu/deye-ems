@@ -127,6 +127,18 @@ def coordinator():
 
 
 class WebSocketTests(unittest.IsolatedAsyncioTestCase):
+    def test_dynamic_soc_limits_reach_panel_without_private_options(self):
+        module, _ = load_module()
+        co = coordinator()
+        co.options.update(min_soc_lower_bound=15, min_soc_bound_valid=True,
+                          effective_min_soc_percent=15)
+        payload = module["_payload"](co)
+        self.assertEqual(payload["options"]["min_soc_lower_bound"], 15)
+        self.assertTrue(payload["options"]["min_soc_bound_valid"])
+        self.assertEqual(payload["options"]["effective_min_soc_percent"], 15)
+        self.assertNotIn("api_key", payload["options"])
+        self.assertNotIn("solcast", payload["options"])
+
     def test_handlers_declare_admin_check_before_async_response(self):
         tree = ast.parse((ROOT / "websocket.py").read_text(encoding="utf-8"))
         for node in tree.body:
@@ -241,7 +253,8 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         payload = module["_payload"](co)
         self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance"})
         self.assertEqual(payload["appearance"], {"theme": ""})
-        self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]))
+        self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]) | {
+            "effective_min_soc_percent", "min_soc_bound_valid", "min_soc_lower_bound"})
         self.assertEqual(payload["options"]["min_soc_percent"], 50)
         self.assertEqual(payload["sources"]["soc"], "sensor.test_soc")
         serialized = json.dumps(payload)

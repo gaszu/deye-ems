@@ -15,6 +15,9 @@ exec((ROOT/"const.py").read_text(encoding="utf-8"), C)
 spec = importlib.util.spec_from_file_location("offline_solcast", ROOT/"solcast.py")
 SOLCAST = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(SOLCAST)
+spec = importlib.util.spec_from_file_location("offline_soc_policy", ROOT/"soc_policy.py")
+SOC_POLICY = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(SOC_POLICY)
 spec = importlib.util.spec_from_file_location("offline_solcast_import", ROOT/"solcast_import.py")
 IMPORTER = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(IMPORTER)
@@ -54,6 +57,7 @@ class Coordinator:
 class Installation(unittest.IsolatedAsyncioTestCase):
     def flow(self):
         return load("config_flow.py", {**C, "__name__":"offline_flow",
+            "reserve_bound_from_state": SOC_POLICY.reserve_bound_from_state,
             "uuid4": uuid4, "validate_config": SOLCAST.validate_config,
             "import_existing_options": IMPORTER.import_existing_options,
             "er": SimpleNamespace(async_get=lambda h:None, async_entries_for_config_entry=lambda r,e:[

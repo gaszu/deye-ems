@@ -16,7 +16,9 @@ def _payload(coordinator, appearance=None):
     return {"entry_id": coordinator.entry.entry_id, "mode": coordinator.mode, "data": coordinator.data or {},
         "appearance": appearance.appearance if appearance is not None else {"theme": ""},
         "effective_loads": coordinator.effective_loads, "loads_revision": coordinator.loads_revision,
-        "options": {k: coordinator.options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
+        "options": {**{k: coordinator.options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
+                    **{k: coordinator.options.get(k) for k in (
+                        "min_soc_lower_bound", "min_soc_bound_valid", "effective_min_soc_percent")}},
         "sources": {**DEFAULT_SOURCES, **coordinator.options.get("sources", {})}}
 
 

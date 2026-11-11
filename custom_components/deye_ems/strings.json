@@ -12,12 +12,16 @@
           "inverter_max_power_kw": "Moc falownika — łącznie",
           "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "grid_import_limit_kw": "Maksymalny import łącznie",
-          "grid_phase_limit_kw": "Maksymalny import na fazę"
+          "grid_phase_limit_kw": "Maksymalny import na fazę",
+          "entity_prefix": "Prefiks encji Deye"
         }
       }
     },
     "error": {
-      "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel."
+      "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
+      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_.",
+      "reserve_below_low_soc": "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy.",
+      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
     },
     "abort": {
       "already_configured": "Integracja Deye EMS jest już skonfigurowana."
@@ -25,10 +29,27 @@
   },
   "options": {
     "step": {
+      "topology": {
+        "title": "Topologia i moc falownika",
+        "description": "Wybierz miejsce pomiaru wymiany z siecią. Dla CWU między GRID a CT wybierz Zero Export To CT i w Źródłach przypisz osobno CT oraz port GRID (sumy i fazy). Oba kierunki dodatnie oznaczają pobór z sieci/do falownika. LOAD musi mierzyć samo wyjście LOAD/UPS. Moc znamionowa dotyczy całego falownika, łącznie domu i CWU. Wspólny limit jest limitem modelu; nie zapisuje ustawień mocy urządzenia. Brak zgodnych pomiarów blokuje sterowanie. Zmiana wymaga obserwacji, a wznowienie jest ręczne.",
+        "data": {
+          "topology": "Układ instalacji",
+          "inverter_max_power_kw": "Moc falownika — łącznie",
+          "combined_output_limit_kw": "Wspólny limit modelowy LOAD i odbiorów przed GRID"
+        }
+      },
+      "entity_prefix": {
+        "title": "Prefiks encji Deye",
+        "description": "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Prefiks nie zmienia encji BMS, Solcast ani pompy.",
+        "data": {
+          "entity_prefix": "Prefiks encji Deye"
+        }
+      },
       "parameters": {
         "title": "Parametry silnika",
         "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.",
         "data": {
+          "combined_output_limit_kw": "Wspólny limit modelowy LOAD i odbiorów przed GRID",
           "min_soc_percent": "Minimalny bezpieczny SoC",
           "capacity_kwh": "Pojemność magazynu",
           "pv_peak_kwp": "Zainstalowana moc PV",
@@ -48,15 +69,20 @@
       },
       "sources": {
         "title": "Pomiary i sterowanie",
-        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.",
+        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
         "data": {
+          "battery_low_soc": "Battery low SOC — próg falownika (odczyt, rezerwa EMS co najmniej +5 p.p.)",
+          "ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
+          "ct_grid_l1_power": "Wymiana z siecią na CT — L1",
+          "ct_grid_l2_power": "Wymiana z siecią na CT — L2",
+          "ct_grid_l3_power": "Wymiana z siecią na CT — L3",
           "soc": "soc",
           "voltage": "voltage",
           "bms_charge_current": "bms charge current",
           "bms_blocking_charge": "bms blocking charge",
           "battery_power": "battery power",
-          "grid_power": "Pobór / eksport z sieci (GRID)",
-          "load_power": "Całe zużycie modelowanego domu (LOAD)",
+          "grid_power": "Port GRID falownika (+ do falownika, − z falownika)",
+          "load_power": "Wyjście LOAD/UPS — bez odbiorów między GRID a CT",
           "grid_current_number": "grid current number",
           "max_charge_current_number": "max charge current number",
           "pv_today": "pv today",
@@ -133,6 +159,13 @@
           "source_entry": "Obecna integracja Solcast"
         }
       },
+      "sidebar": {
+        "title": "Panel boczny",
+        "description": "Pokaż lub ukryj Deye EMS w menu bocznym administratorów. Panel zawsze otworzysz pod adresem /deye-ems swojej instancji. Zapis nie przeładowuje sterownika ani nie zmienia sterowania. Jeżeli wpis został ukryty w osobistym profilu HA, przywróć go również w edycji menu bocznego.",
+        "data": {
+          "sidebar_visible": "Pokaż Deye EMS w panelu bocznym"
+        }
+      },
       "init": {
         "title": "Deye EMS",
         "menu_options": {
@@ -148,7 +181,10 @@
         "menu_options": {
           "solcast_manual": "Połącz / zmień ustawienia",
           "solcast_import": "Importuj dostępne ustawienia z HA",
-          "solcast_disable": "Wyłącz pobieranie przez EMS"
+          "solcast_disable": "Wyłącz pobieranie przez EMS",
+          "sidebar": "Panel boczny",
+          "entity_prefix": "Prefiks encji Deye",
+          "topology": "Topologia i moc falownika"
         }
       }
     },
@@ -157,13 +193,20 @@
       "duplicate_load": "Ten licznik energii jest już dodany.",
       "pv_reference_required": "Wpisz moc referencyjną profilu przed włączeniem skalowania.",
       "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
-      "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia."
+      "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia.",
+      "sidebar_save_failed": "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie.",
+      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_.",
+      "reserve_below_low_soc": "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy.",
+      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
       "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki.",
       "no_solcast_to_import": "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie.",
-      "solcast_import_incomplete": "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką."
+      "solcast_import_incomplete": "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką.",
+      "sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.",
+      "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA.",
+      "invalid_topology": "Wybierz poprawną topologię instalacji."
     }
   }
 }

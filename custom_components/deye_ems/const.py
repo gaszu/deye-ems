@@ -1,9 +1,11 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "1.0.6"
+VERSION = "1.0.7"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button"]
 
 DEFAULT_OPTIONS = {
+    "topology": "load_only",
+    "combined_output_limit_kw": 10.0,
     "capacity_kwh": 66.0,
     "pv_peak_kwp": None,
     "pv_forecast_reference_kwp": None,
@@ -24,7 +26,8 @@ DEFAULT_OPTIONS = {
 }
 
 OPTION_RANGES = {
-    "min_soc_percent": (40, 90, 1, "%"),
+    "combined_output_limit_kw": (.1, 1000, .1, "kW"),
+    "min_soc_percent": (5, 90, 1, "%"),
     "capacity_kwh": (1, 1000, .1, "kWh"),
     "pv_peak_kwp": (.1, 1000, .1, "kWp"),
     "pv_forecast_reference_kwp": (.1, 1000, .1, "kWp"),
@@ -40,6 +43,7 @@ OPTION_RANGES = {
     "grid_max_soc_percent": (45, 95, 1, "%"),
 }
 OPTION_LABELS = {
+    "combined_output_limit_kw": "Wspólny limit modelowy LOAD i odbiorów przed GRID",
     "min_soc_percent": "Minimalny bezpieczny SoC",
     "capacity_kwh": "Pojemność magazynu",
     "pv_peak_kwp": "Zainstalowana moc PV",
@@ -56,6 +60,11 @@ OPTION_LABELS = {
     "grid_max_soc_percent": "Maksymalny cel doładowania z sieci",
 }
 DEFAULT_SOURCES = {
+    "battery_low_soc": "number.deye_inverter_battery_low_soc",
+    "ct_grid_power": "sensor.deye_inverter_external_ct_power",
+    "ct_grid_l1_power": "sensor.deye_inverter_external_ct_l1_power",
+    "ct_grid_l2_power": "sensor.deye_inverter_external_ct_l2_power",
+    "ct_grid_l3_power": "sensor.deye_inverter_external_ct_l3_power",
     "soc": "sensor.yambms_1_battery_soc",
     "voltage": "sensor.yambms_1_total_voltage",
     "bms_charge_current": "sensor.yambms_1_max_charge_current",

@@ -129,7 +129,7 @@ def _ordinary_history(g, now):
     return possible, not_sent
 
 
-def calculate_grid_charge(g: dict) -> dict:
+def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     """Propose a bounded setting; persist its ledger before attempting a write.
 
     Required snapshot fields are described by the cap function and integration
@@ -178,9 +178,10 @@ def calculate_grid_charge(g: dict) -> dict:
     soc, target, hours = g.get("soc"), g.get("target_soc"), g.get("remaining_h")
     capacity = g.get("capacity_kwh", 66)
     minimum = g.get("minimum_soc_percent", 40)
+    lower_bound = g.get("minimum_soc_lower_bound", 40)
     soc_ok = (g.get("soc_valid") is True
-              and all(_number(v) for v in (soc, target, hours, capacity, minimum))
-              and 0 <= soc <= 100 and 40 <= minimum <= 90
+              and all(_number(v) for v in (soc, target, hours, capacity, minimum, lower_bound))
+              and 0 <= soc <= 100 and 5 <= lower_bound <= minimum <= 90
               and minimum <= target <= 95 and 0 < hours <= 24
               and 1 <= capacity <= 1000)
     allowed = (g.get("cheap_window") is True and soc_ok
@@ -220,6 +221,8 @@ def calculate_grid_charge(g: dict) -> dict:
     if not (ledger_ok or first_attempt):
         result["reason"] = "ledger_missing_or_future"
         return result
+    if ordinary_policy is not None:
+        return ordinary_policy(g, result)
     unconfirmed = ledger_ok and abs(current - attempted_a) >= .01
     if possible is not None and now - possible < ORDINARY_INTERVAL_SECONDS:
         result["reason"] = "awaiting_readback" if unconfirmed else "ramp_wait"

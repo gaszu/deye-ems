@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 DEFAULTS = {
     "timezone": "Europe/Warsaw", "capacity_kwh": 66.0,
     "minimum_soc_percent": 40.0, "margin_soc_percent": 5.0,
+    "minimum_soc_lower_bound": 40.0,
     "winter_weather_soc_percent": 75.0,
     "grid_max_soc_percent": 95.0, "charge_max_kw": 5.3,
     "grid_current_max_a": 108.0,
@@ -85,7 +86,7 @@ def _settings(raw):
     if cfg["pv_forecast_mode"] not in ("whole_system", "specific_profile"):
         raise ValueError("invalid_pv_forecast_mode")
     if not (1 <= cfg["capacity_kwh"] <= 1000
-            and 40 <= cfg["minimum_soc_percent"] <= 90
+            and 5 <= cfg["minimum_soc_lower_bound"] <= cfg["minimum_soc_percent"] <= 90
             and cfg["minimum_soc_percent"] < cfg["grid_max_soc_percent"] <= 95
             and 0 <= cfg["margin_soc_percent"] <= 20
             and 45 <= cfg["winter_weather_soc_percent"] <= 95
@@ -382,7 +383,8 @@ def plan_energy(inputs: dict) -> dict:
             safe_config = {}
             raw_config = inputs.get("config", {})
             if isinstance(raw_config, dict):
-                for name, lo, hi in (("minimum_soc_percent", 40, 90),
+                for name, lo, hi in (("minimum_soc_percent", 5, 90),
+                                     ("minimum_soc_lower_bound", 5, 90),
                                      ("winter_weather_soc_percent", 45, 95),
                                      ("margin_soc_percent", 0, 20),
                                      ("pv_peak_kwp", .1, 1000),

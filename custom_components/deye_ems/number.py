@@ -22,7 +22,20 @@ class DeyeEMSNumber(DeyeEMSEntity, NumberEntity):
 
     @property
     def native_value(self):
+        if self.key == "min_soc_percent":
+            return self.coordinator.options["effective_min_soc_percent"]
         return self.coordinator.options.get(self.key, DEFAULT_OPTIONS[self.key])
+
+    @property
+    def native_min_value(self):
+        if self.key == "min_soc_percent":
+            return self.coordinator.options.get("min_soc_lower_bound") or 40
+        return self._attr_native_min_value
+
+    @property
+    def available(self):
+        return super().available and (self.key != "min_soc_percent" or
+                                     self.coordinator.options.get("min_soc_bound_valid", False))
 
     async def async_set_native_value(self, value):
         await self.coordinator.async_set_option(self.key, value)

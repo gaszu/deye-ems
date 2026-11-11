@@ -1,3 +1,14 @@
+# Wersja 1.0.7 — sprawdzenia offline
+
+- 373 testy Python PASS i65 testów panelu PASS; paczkaZIP zbudowana i sprawdzona, w tym16 scenariuszy harmonogramu, histerezy i integracji runtime. Dawne testy modułu rampy zachowano jako regresje wspólnej ścieżki bezpieczeństwa; runtime używa nowej polityki półgodzinnej.
+- Osiem testów dynamicznej rezerwy obejmuje zapis15%/odrzucenie14% przyLowSOC10%, wzrost skutecznej granicy iTOU, przekazanie jej do regulatora i planera, utratę odczytu i blokadę aktywacji, zachowanie poprzedniej granicy, natywne formularze, ułamkowy próg i prefiks oraz walidację solvera. Dwa testy panelu sprawdzają zmianę HTMLmin i blokadę przy braku odczytu.
+- Dziesięć testów topologiiCT obejmujeCT=0 z eksportem portuGRID doCWU, poprawny import, jawny wybór trybu, braki/starość/restored/jednostki/kierunki i przesunięcie czasowe pomiarów, fazowe ukrycie ujemnego bilansu, profil pełnego zużycia z historii i brak samegoLOAD jako zastępstwa, unieważnienie kontekstu, wspólny limit10kW oraz blokadę zmian wactive. Test panelu odróżniaCT0 odGRID−2kW i pełnego obciążenia5kW.
+- Siedem nowych testów prefiksu: generowanie nazw z zachowaniem domen, walidacja wejścia, podgląd bez zapisu, ręczna korekta i zachowanie innych źródeł, ponowna blokada przy aktywacji, pierwsza konfiguracja i komunikaty błędnych wartości.
+- Cztery nowe testy diagnostyki aktywacji sprawdzają wszystkie wymagane tryby, łączne raportowanie braku encji i stanów restored/unavailable, mapowanie innej instancji oraz brak poleceń przy blokadzie.
+- Pięć nowych testów panelu bocznego: trwałość preferencji i zachowanie motywu, odrzucenie błędnego zapisu, formularz przy aktywnym sterowaniu bez zmiany options, brak odświeżenia po błędzie zapisu oraz zachowanie trasy i bramki administratora przy ukryciu wpisu.
+- Testy granic pierwszej minuty :00/:30, braku narastających ponowień, kwantyzacji i martwej strefy, natychmiastowej ochrony, restartu i trwałości zatrzasku SoC.
+- Atrapy HA i usług oraz syntetyczne pomiary nie dowodzą reakcji fizycznego falownika. Nie wdrożono tego kandydata do HA.
+
 # Sprawdzenia wersji 1.0.6
 
 - **322/322 testów Python PASS** i **60/60 testów panelu PASS**.
@@ -71,3 +82,5 @@ python build_release.py
 ```
 
 Pełne warunki działania opisuje [SPECIFICATION.md](SPECIFICATION.md), instalację [INSTALL.md](INSTALL.md), a zasady przejścia i powrotu [MIGRATION.md](MIGRATION.md). Wynik testów syntetycznych nie zastępuje sprawdzenia własnych mapowań, pomiarów i reakcji urządzenia.
+
+Dodatkowy test API potwierdza przekazanie trzech jawnych pól dynamicznej rezerwy bez prywatnych opcji. Dwa testy selektora LOAD/CT w panelu sprawdzają zapis tylko po przycisku oraz blokadę zapisu wactive.
