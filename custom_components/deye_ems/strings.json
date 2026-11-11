@@ -12,12 +12,14 @@
           "inverter_max_power_kw": "Moc falownika — łącznie",
           "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "grid_import_limit_kw": "Maksymalny import łącznie",
-          "grid_phase_limit_kw": "Maksymalny import na fazę"
+          "grid_phase_limit_kw": "Maksymalny import na fazę",
+          "entity_prefix": "Prefiks encji Deye"
         }
       }
     },
     "error": {
-      "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel."
+      "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
+      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_."
     },
     "abort": {
       "already_configured": "Integracja Deye EMS jest już skonfigurowana."
@@ -25,6 +27,13 @@
   },
   "options": {
     "step": {
+      "entity_prefix": {
+        "title": "Prefiks encji Deye",
+        "description": "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Prefiks nie zmienia encji BMS, Solcast ani pompy.",
+        "data": {
+          "entity_prefix": "Prefiks encji Deye"
+        }
+      },
       "parameters": {
         "title": "Parametry silnika",
         "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.",
@@ -48,7 +57,7 @@
       },
       "sources": {
         "title": "Pomiary i sterowanie",
-        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.",
+        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
         "data": {
           "soc": "soc",
           "voltage": "voltage",
@@ -156,7 +165,8 @@
           "solcast_manual": "Połącz / zmień ustawienia",
           "solcast_import": "Importuj dostępne ustawienia z HA",
           "solcast_disable": "Wyłącz pobieranie przez EMS",
-          "sidebar": "Panel boczny"
+          "sidebar": "Panel boczny",
+          "entity_prefix": "Prefiks encji Deye"
         }
       }
     },
@@ -166,7 +176,8 @@
       "pv_reference_required": "Wpisz moc referencyjną profilu przed włączeniem skalowania.",
       "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
       "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia.",
-      "sidebar_save_failed": "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie."
+      "sidebar_save_failed": "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie.",
+      "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",

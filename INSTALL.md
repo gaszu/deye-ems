@@ -95,3 +95,9 @@ Przed aktywacją EMS sprawdza odczyty encji wybranych w **Konfiguruj → Źród�
 Nazwy encji na innej instancji mogą być inne — przypisz jej właściwe encje. Brak encji, stan `unavailable` albo `restored` również blokują aktywację. EMS nie przełącza sam tych trybów. Dopasowanie trybów musi odpowiadać topologii i planowanemu sposobowi pracy instalacji.
 
 W wersji1.0.6 komunikat brzmi `Inverter modes do not match the EMS model`. Kandydat1.0.7 wymienia konkretne encje, odczyty i oczekiwane stany.
+
+## Prefiks encji Deye — kandydat1.0.7
+
+Prefiks można wpisać przy dodawaniu integracji lub w **Deye EMS → Konfiguruj → Prefiks encji Deye**. Wpisz część nazwy bez domeny, np. `deye_dom_`. Daje to m.in. `sensor.deye_dom_load_power`, `select.deye_dom_system_work_mode` oraz `number.deye_dom_maximum_battery_grid_charge_current`. Końcowe podkreślenie jest uzupełniane automatycznie.
+
+Zmiana przypisań wymaga obserwacji. Kreator w istniejącej integracji pokazuje znalezione i brakujące encje, a następnie pełny formularz przypisań do sprawdzenia i ręcznej korekty. Dopiero zapis formularza zapisuje przypisania i prefiks. Anulowanie nie zmienia konfiguracji. Prefiks dotyczy wyłącznie encji falownika Deye: nie przepisuje nazw BMS, Solcast ani odbiorników. Prefiks pomaga dobrać nazwy; nie zmienia trybu fizycznego falownika ani nie dodaje obsługi Zero Export To CT. Po zmianie przypisań wznowienie sterowania wymaga jawnego działania użytkownika.

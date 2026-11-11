@@ -16,6 +16,23 @@ from .appearance import DATA_APPEARANCE
 from . import async_update_panel
 
 
+def _deye_prefix_sources(prefix):
+    """Build explicit Deye mappings only; never rewrite BMS, PV or pump IDs."""
+    if not isinstance(prefix, str):
+        raise ValueError("invalid_entity_prefix")
+    prefix = prefix.strip().lower().rstrip("_")
+    if (not prefix or len(prefix) > 100
+            or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in prefix)):
+        raise ValueError("invalid_entity_prefix")
+    prefix += "_"
+    mapping = {}
+    for key, entity in DEFAULT_SOURCES.items():
+        domain, name = entity.split(".", 1)
+        if name.startswith("deye_inverter_"):
+            mapping[key] = f"{domain}.{prefix}{name[len('deye_inverter_'):]}"
+    return prefix, mapping
+
+
 def _schema(values, keys):
     fields = {}
     for key in keys:
@@ -67,14 +84,21 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             errors = _errors(user_input)
+            try:
+                prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix", "deye_inverter_"))
+            except ValueError:
+                errors["entity_prefix"] = "invalid_entity_prefix"
             if not errors:
                 await self.async_set_unique_id("deye_ems_local")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title="Deye EMS", data={
-                    **DEFAULT_OPTIONS, **user_input, "sources": dict(DEFAULT_SOURCES)})
+                    **DEFAULT_OPTIONS, **user_input, "entity_prefix": prefix,
+                    "sources": {**DEFAULT_SOURCES, **mapping}})
         return self.async_show_form(step_id="user", errors=errors, data_schema=_schema(
             user_input or DEFAULT_OPTIONS, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
-                "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]),
+                "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]).extend({
+                    vol.Optional("entity_prefix", default=(user_input or {}).get("entity_prefix", "deye_inverter_")):
+                        selector.TextSelector()}),
             description_placeholders={"mode": "shadow"})
 
     @staticmethod
@@ -89,7 +113,24 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return runtime is not None and runtime.mode == "active"
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["sidebar", "parameters", "solcast", "sources", "add_load", "remove_load"])
+        return self.async_show_menu(step_id="init", menu_options=["sidebar", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
+
+    async def async_step_entity_prefix(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        errors = {}
+        if user_input is not None:
+            try:
+                prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix"))
+                self._source_prefix_draft = prefix
+                self._source_mapping_draft = mapping
+                return await self.async_step_sources()
+            except ValueError:
+                errors["base"] = "invalid_entity_prefix"
+        value = (user_input or {}).get("entity_prefix",
+            self.config_entry.options.get("entity_prefix", "deye_inverter_"))
+        return self.async_show_form(step_id="entity_prefix", errors=errors,
+            data_schema=vol.Schema({vol.Required("entity_prefix", default=value): selector.TextSelector()}))
 
     async def async_step_sidebar(self, user_input=None):
         manager = self.hass.data.get(DATA_APPEARANCE)
@@ -277,14 +318,25 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         if self._mapping_locked():
             return self.async_abort(reason="stop_before_mapping")
         values = {**DEFAULT_SOURCES, **self.config_entry.data.get("sources", {}),
-                  **self.config_entry.options.get("sources", {})}
+                  **self.config_entry.options.get("sources", {}),
+                  **getattr(self, "_source_mapping_draft", {})}
         if user_input is not None:
             # Empty selections intentionally disable a source; no credential is needed.
             values.update(user_input)
-            return self.async_create_entry(title="", data={**dict(self.config_entry.options), "sources": values})
+            options = {**dict(self.config_entry.options), "sources": values}
+            if hasattr(self, "_source_prefix_draft"):
+                options["entity_prefix"] = self._source_prefix_draft
+            return self.async_create_entry(title="", data=options)
         fields = {}
         for key, entity in values.items():
             domain = "number" if key in ("grid_current_number", "max_charge_current_number") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
             fields[vol.Optional(key, description={"suggested_value": entity})] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=domain))
-        return self.async_show_form(step_id="sources", data_schema=vol.Schema(fields))
+        draft = getattr(self, "_source_mapping_draft", {})
+        missing = [entity for entity in draft.values() if self.hass.states.get(entity) is None]
+        preview = (f"Prefiks: {self._source_prefix_draft}. Znaleziono {len(draft)-len(missing)}/{len(draft)} encji. "
+                   + ("Brak: " + ", ".join(missing) if missing else "Wszystkie proponowane encje istnieją.")
+                   + " Sprawdź i popraw przypisania przed zapisaniem. Istnienie encji nie potwierdza zgodności trybu ani pomiarów."
+                   if draft else "Ręczny wybór encji. Prefiks Deye ustawisz w osobnej pozycji menu konfiguracji.")
+        return self.async_show_form(step_id="sources", data_schema=vol.Schema(fields),
+                                    description_placeholders={"prefix_preview": preview})

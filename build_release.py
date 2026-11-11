@@ -12,6 +12,7 @@ const = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(const)
 
 data_pl = dict(const.OPTION_LABELS)
+data_pl["entity_prefix"] = "Prefiks encji Deye"
 data_pl.update({key: key.replace("_", " ") for key in const.DEFAULT_SOURCES})
 data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika energii",
     "asymmetric_phase_feeding": "Bilansowanie faz GRID w Deye — przełącznik stanu",
@@ -30,6 +31,7 @@ data_pl.update({"name": "Nazwa odbiornika", "energy_entity": "Encja licznika ene
     "accept_manual_calibration": "Rozumiem zakres importu współczynników i brak kontynuacji poprzedniego samouczenia",
     "source_entry": "Obecna integracja Solcast"})
 descriptions = {
+    "entity_prefix": ("Prefiks encji Deye", "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Prefiks nie zmienia encji BMS, Solcast ani pompy."),
     "user": ("Deye EMS — własny silnik", "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później."),
     "parameters": ("Parametry silnika", "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor."),
     "sources": ("Pomiary i sterowanie", "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji."),
@@ -39,7 +41,8 @@ descriptions = {
     "solcast_import": ("Import dostępnych ustawień Solcast", "Klucz, limit konta i wykluczenia są kopiowane lokalnie w HA. Kreator odczytuje bieżące współczynniki z sensora korekt przypisanego do wybranej integracji. Przenosi ich stan, bez pełnej historii i mechanizmu dalszego samouczenia. Prognozy sensorów HA są już skorygowane — nie korygujemy ich ponownie. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta."),
 }
 step_fields = {
-    "user": ["min_soc_percent", "capacity_kwh", "pv_peak_kwp", "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"],
+    "user": ["min_soc_percent", "capacity_kwh", "pv_peak_kwp", "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw", "entity_prefix"],
+    "entity_prefix": ["entity_prefix"],
     "parameters": [*const.OPTION_RANGES, "pv_forecast_mode"], "sources": list(const.DEFAULT_SOURCES),
     "add_load": ["name", "energy_entity", "power_entity"],
     "remove_load": ["load_id"],
@@ -48,6 +51,7 @@ step_fields = {
 }
 steps = {key: {"title": title, "description": description, "data": {k: data_pl[k] for k in step_fields[key]}}
     for key, (title, description) in descriptions.items()}
+steps["sources"]["description"] += "\n\n{prefix_preview}"
 doc = {"title": "Deye EMS",
     "config": {"step": {"user": steps["user"]},
         "error": {"invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel."},
@@ -65,12 +69,14 @@ doc["options"]["abort"]["solcast_import_incomplete"] = "Brak kompletnego, popraw
 doc["options"]["step"]["sidebar"] = {"title": "Panel boczny", "description": "Pokaż lub ukryj Deye EMS w menu bocznym administratorów. Panel zawsze otworzysz pod adresem /deye-ems swojej instancji. Zapis nie przeładowuje sterownika ani nie zmienia sterowania. Jeżeli wpis został ukryty w osobistym profilu HA, przywróć go również w edycji menu bocznego.", "data": {"sidebar_visible": "Pokaż Deye EMS w panelu bocznym"}}
 doc["options"]["abort"].update({"sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.", "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA."})
 doc["options"]["error"]["sidebar_save_failed"] = "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie."
+for section in ("config", "options"):
+    doc[section]["error"]["invalid_entity_prefix"] = "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_."
 doc["options"]["step"]["init"] = {"title": "Deye EMS",
     "menu_options": {"parameters": "Parametry i bezpieczny SoC", "sources": "Encje pomiarowe i sterujące",
         "solcast": "Solcast — połączenie i ustawienia", "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}
 doc["options"]["step"]["solcast"] = {"title": "Solcast wewnątrz EMS", "menu_options": {
     "solcast_manual": "Połącz / zmień ustawienia", "solcast_import": "Importuj dostępne ustawienia z HA",
-    "solcast_disable": "Wyłącz pobieranie przez EMS", "sidebar": "Panel boczny"}}
+    "solcast_disable": "Wyłącz pobieranie przez EMS", "sidebar": "Panel boczny", "entity_prefix": "Prefiks encji Deye"}}
 COMPONENT.joinpath("translations").mkdir(exist_ok=True)
 for path in (COMPONENT/"strings.json", COMPONENT/"translations/pl.json"):
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2)+"\n", encoding="utf-8", newline="\n")
