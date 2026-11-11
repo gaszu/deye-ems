@@ -463,6 +463,25 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured[0]["charge_max_kw"], 4)
         self.assertEqual(captured[0]["discharge_max_kw"], 4)
 
+    async def test_connection_limit_above_twelve_reaches_load_controller_and_planner(self):
+        h = Harness(options={"inverter_max_power_kw": 10})
+        await h.co.async_set_option("grid_import_limit_kw", 16)
+        await h.co.async_set_option("grid_phase_limit_kw", 7)
+        inputs = h.co._read_inputs(h.now)
+        g = h.co._grid_input(inputs, h.now, 75, False)
+        self.assertEqual(g["total_limit_w"], 16000)
+        self.assertEqual(g["phase_limit_w"], 7000)
+        self.assertEqual(g["conversion_total_limit_w"], 10000)
+        captured = []
+        planner = h.co._planner
+        def calculate(value):
+            captured.append(deepcopy(value["config"]))
+            return planner(value)
+        h.co._planner = calculate
+        await h.co._make_plan(h.now, inputs)
+        self.assertEqual(captured[0]["grid_import_max_kw"], 16)
+        self.assertEqual(captured[0]["inverter_max_kw"], 10)
+
 
 class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
     def rows(self, now, value):

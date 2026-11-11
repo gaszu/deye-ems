@@ -39,7 +39,7 @@ function fixture(previousElements = []) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-8");
+  const Panel = registry.get("deye-ems-panel-1-0-9");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -60,8 +60,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-8"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.8/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-9"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.9/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
@@ -74,7 +74,7 @@ test("renders four simple primary facts and leaves technical settings collapsed"
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);
   assert.equal(panel.shadowRoot.querySelector("details").open,false);
   const beforeAdvanced=html.split("<details>")[0];
-  assert.equal((beforeAdvanced.match(/<input /g)||[]).length,3);
+  assert.equal((beforeAdvanced.match(/<input /g)||[]).length,5);
   assert.match(beforeAdvanced,/data-key="min_soc_percent"/);
   assert.match(beforeAdvanced,/data-key="capacity_kwh"/);
   assert.match(beforeAdvanced,/data-key="pv_peak_kwp"/);
@@ -210,6 +210,19 @@ test("missing low-SOC readback disables the reserve save button",()=>{
   panel.render();
   assert.match(panel.shadowRoot.innerHTML,/brak poprawnego odczytu Battery low SOC/);
   assert.match(panel.shadowRoot.innerHTML,/data-save="min_soc_percent" disabled/);
+});
+
+test("connection limits are visible for both topologies and permit sixteen kilowatts",()=>{
+  for(const topology of ["load_only","load_with_external_ct"]){
+    const {panel}=fixture();panel.payload.options.topology=topology;panel.render();
+    const basic=panel.shadowRoot.innerHTML.split("<details>")[0];
+    assert.match(basic,/Przyłącze sieciowe/);
+    assert.match(basic,/data-key="grid_import_limit_kw" type="number" min="1" max="30"/);
+    assert.match(basic,/data-key="grid_phase_limit_kw" type="number" min="0.5" max="15"/);
+    const input=panel.shadowRoot.querySelector('input[data-key="grid_import_limit_kw"]');
+    input.value="16";assert.equal(input.reportValidity(),true);
+    assert.equal((panel.shadowRoot.innerHTML.match(/data-key="grid_import_limit_kw"/g)||[]).length,1);
+  }
 });
 
 test("panel offers LOAD and CT selection and saves only the explicit EMS option",()=>{

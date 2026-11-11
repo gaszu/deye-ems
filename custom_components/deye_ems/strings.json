@@ -11,8 +11,8 @@
           "pv_peak_kwp": "Zainstalowana moc PV",
           "inverter_max_power_kw": "Moc falownika — łącznie",
           "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
-          "grid_import_limit_kw": "Maksymalny import łącznie",
-          "grid_phase_limit_kw": "Maksymalny import na fazę",
+          "grid_import_limit_kw": "Limit importu przyłącza — łącznie",
+          "grid_phase_limit_kw": "Limit importu przyłącza — na fazę",
           "entity_prefix": "Prefiks encji Deye"
         }
       }
@@ -54,8 +54,8 @@
           "capacity_kwh": "Pojemność magazynu",
           "pv_peak_kwp": "Zainstalowana moc PV",
           "pv_forecast_reference_kwp": "Moc instalacji referencyjnej prognozy",
-          "grid_import_limit_kw": "Maksymalny import łącznie",
-          "grid_phase_limit_kw": "Maksymalny import na fazę",
+          "grid_import_limit_kw": "Limit importu przyłącza — łącznie",
+          "grid_phase_limit_kw": "Limit importu przyłącza — na fazę",
           "inverter_max_power_kw": "Moc falownika — łącznie",
           "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "reserve_margin_soc_percent": "Dodatkowy bufor prognozy",
