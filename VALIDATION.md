@@ -1,3 +1,9 @@
+# Wersja 1.0.8 — sprawdzenia offline
+
+- 376 testów Python i 67 testów panelu PASS. Regresje obejmują tekstową wartość CT w schemacie WebSocket, odrzucenie obiektu jako wartości, trwały zapis i przeładowanie modelu CT oraz aktywację z poprawnymi pomiarami syntetycznymi.
+- Panel odróżnia niezapisany szkic CT od zapisanego LOAD po błędzie oraz pokazuje zapisane CT po poprawnej odpowiedzi API.
+- Sprawdzenia offline nie są potwierdzeniem instalacji ani fizycznej reakcji falownika.
+
 # Wersja 1.0.7 — sprawdzenia offline
 
 - 373 testy Python PASS i65 testów panelu PASS; paczkaZIP zbudowana i sprawdzona, w tym16 scenariuszy harmonogramu, histerezy i integracji runtime. Dawne testy modułu rampy zachowano jako regresje wspólnej ścieżki bezpieczeństwa; runtime używa nowej polityki półgodzinnej.
