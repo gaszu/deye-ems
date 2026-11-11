@@ -31,12 +31,22 @@ async def async_setup_entry(hass, entry):
         async_register(hass)
         hass.data[DOMAIN + "_static"] = True
     if not hass.data.get(DOMAIN + "_panel"):
-        await panel_custom.async_register_panel(hass,
-            frontend_url_path=PANEL_PATH, webcomponent_name="deye-ems-panel-" + VERSION.replace(".", "-"),
-            sidebar_title="Deye EMS", sidebar_icon="mdi:solar-power",
-            module_url=f"/deye_ems_static/deye-ems-panel.js?v={VERSION}",
-            require_admin=True, config_panel_domain=DOMAIN)
-        hass.data[DOMAIN + "_panel"] = True
+        await async_update_panel(hass)
+
+
+async def async_update_panel(hass):
+    """Refresh navigation only; leave the coordinator and all actuators alone."""
+    manager = hass.data[DATA_APPEARANCE]
+    if hass.data.get(DOMAIN + "_panel"):
+        frontend.async_remove_panel(hass, PANEL_PATH)
+        hass.data.pop(DOMAIN + "_panel", None)
+    await panel_custom.async_register_panel(hass,
+        frontend_url_path=PANEL_PATH, webcomponent_name="deye-ems-panel-" + VERSION.replace(".", "-"),
+        sidebar_title="Deye EMS" if getattr(manager, "sidebar_visible", True) else None,
+        sidebar_icon="mdi:solar-power",
+        module_url=f"/deye_ems_static/deye-ems-panel.js?v={VERSION}",
+        require_admin=True, config_panel_domain=DOMAIN)
+    hass.data[DOMAIN + "_panel"] = True
 
 
 async def _async_options_changed(hass, entry):

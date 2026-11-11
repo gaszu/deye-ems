@@ -19,6 +19,18 @@ class AppearanceManager:
         self._store = store if store is not None else Store(hass, 1, STORAGE_KEY)
         self._lock = asyncio.Lock()
         self._theme = ""
+        self._sidebar_visible = True
+
+    @property
+    def sidebar_visible(self):
+        return self._sidebar_visible
+
+    def _preferences(self, *, theme=None, sidebar_visible=None):
+        visible = self._sidebar_visible if sidebar_visible is None else sidebar_visible
+        result = {"theme": self._theme if theme is None else theme}
+        if not visible:
+            result["sidebar_visible"] = False
+        return result
 
     @property
     def appearance(self):
@@ -33,6 +45,8 @@ class AppearanceManager:
                 # from starting. Do not overwrite an unreadable stored value.
                 return
             if isinstance(saved, dict):
+                if isinstance(saved.get("sidebar_visible"), bool):
+                    self._sidebar_visible = saved["sidebar_visible"]
                 theme = saved.get("theme")
                 # Keep a previously selected name across a temporarily absent
                 # theme during startup/reload. The panel inherits HA if missing.
@@ -46,7 +60,17 @@ class AppearanceManager:
             if theme and theme not in frontend.async_get_theme_names(self._hass):
                 raise ValueError("Wybrany motyw nie jest dostępny w Home Assistant.")
             try:
-                await self._store.async_save({"theme": theme})
+                await self._store.async_save(self._preferences(theme=theme))
             except Exception as error:
                 raise HomeAssistantError("Nie udało się zapisać wyglądu panelu.") from error
             self._theme = theme
+
+    async def async_set_sidebar_visible(self, visible):
+        async with self._lock:
+            if not isinstance(visible, bool):
+                raise ValueError("Wybierz widoczność panelu bocznego.")
+            try:
+                await self._store.async_save(self._preferences(sidebar_visible=visible))
+            except Exception as error:
+                raise HomeAssistantError("Nie udało się zapisać widoczności panelu.") from error
+            self._sidebar_visible = visible

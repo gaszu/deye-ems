@@ -62,15 +62,18 @@ doc = {"title": "Deye EMS",
             "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki."}}}
 doc["options"]["abort"]["no_solcast_to_import"] = "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie."
 doc["options"]["abort"]["solcast_import_incomplete"] = "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką."
+doc["options"]["step"]["sidebar"] = {"title": "Panel boczny", "description": "Pokaż lub ukryj Deye EMS w menu bocznym administratorów. Panel zawsze otworzysz pod adresem /deye-ems swojej instancji. Zapis nie przeładowuje sterownika ani nie zmienia sterowania. Jeżeli wpis został ukryty w osobistym profilu HA, przywróć go również w edycji menu bocznego.", "data": {"sidebar_visible": "Pokaż Deye EMS w panelu bocznym"}}
+doc["options"]["abort"].update({"sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.", "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA."})
+doc["options"]["error"]["sidebar_save_failed"] = "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie."
 doc["options"]["step"]["init"] = {"title": "Deye EMS",
     "menu_options": {"parameters": "Parametry i bezpieczny SoC", "sources": "Encje pomiarowe i sterujące",
         "solcast": "Solcast — połączenie i ustawienia", "add_load": "Dodaj dodatkowe zużycie", "remove_load": "Usuń dodatkowe zużycie"}}
 doc["options"]["step"]["solcast"] = {"title": "Solcast wewnątrz EMS", "menu_options": {
     "solcast_manual": "Połącz / zmień ustawienia", "solcast_import": "Importuj dostępne ustawienia z HA",
-    "solcast_disable": "Wyłącz pobieranie przez EMS"}}
+    "solcast_disable": "Wyłącz pobieranie przez EMS", "sidebar": "Panel boczny"}}
 COMPONENT.joinpath("translations").mkdir(exist_ok=True)
 for path in (COMPONENT/"strings.json", COMPONENT/"translations/pl.json"):
-    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2)+"\n", encoding="utf-8", newline="\n")
 ROOT.joinpath("hacs.json").write_text(json.dumps({"name":"Deye EMS","homeassistant":"2026.11.0","render_readme":True}, indent=2)+"\n",encoding="utf-8")
 
 manifest = json.loads((COMPONENT/"manifest.json").read_text(encoding="utf-8"))

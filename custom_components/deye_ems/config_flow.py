@@ -5,12 +5,15 @@ from uuid import uuid4
 import probatio as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers import entity_registry as er
 
 from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OPTION_RANGES
 from .solcast import validate_config
 from .solcast_import import import_existing_options
+from .appearance import DATA_APPEARANCE
+from . import async_update_panel
 
 
 def _schema(values, keys):
@@ -86,7 +89,24 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return runtime is not None and runtime.mode == "active"
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["parameters", "solcast", "sources", "add_load", "remove_load"])
+        return self.async_show_menu(step_id="init", menu_options=["sidebar", "parameters", "solcast", "sources", "add_load", "remove_load"])
+
+    async def async_step_sidebar(self, user_input=None):
+        manager = self.hass.data.get(DATA_APPEARANCE)
+        if manager is None:
+            return self.async_abort(reason="panel_not_ready")
+        errors = {}
+        if user_input is not None:
+            try:
+                await manager.async_set_sidebar_visible(user_input.get("sidebar_visible"))
+                await async_update_panel(self.hass)
+                # No config-entry options update: this must not restart control.
+                return self.async_abort(reason="sidebar_saved")
+            except (HomeAssistantError, ValueError):
+                errors["base"] = "sidebar_save_failed"
+        return self.async_show_form(step_id="sidebar", errors=errors,
+            data_schema=vol.Schema({vol.Required("sidebar_visible", default=manager.sidebar_visible):
+                                   selector.BooleanSelector()}))
 
     def _solcast_values(self):
         return dict(getattr(self, "_solcast_draft", None) or self.config_entry.options.get(

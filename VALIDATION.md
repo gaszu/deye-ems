@@ -1,6 +1,7 @@
 # Kandydat 1.0.7 — sprawdzenia offline
 
-- 338 testów Python PASS i60 testów panelu PASS; paczkaZIP zbudowana i sprawdzona, w tym16 nowych scenariuszy harmonogramu, histerezy i integracji runtime. Dawne testy modułu rampy zachowano jako regresje wspólnej ścieżki bezpieczeństwa; runtime używa nowej polityki półgodzinnej.
+- 343 testy Python PASS i60 testów panelu PASS; paczkaZIP zbudowana i sprawdzona, w tym16 nowych scenariuszy harmonogramu, histerezy i integracji runtime. Dawne testy modułu rampy zachowano jako regresje wspólnej ścieżki bezpieczeństwa; runtime używa nowej polityki półgodzinnej.
+- Pięć nowych testów panelu bocznego: trwałość preferencji i zachowanie motywu, odrzucenie błędnego zapisu, formularz przy aktywnym sterowaniu bez zmiany options, brak odświeżenia po błędzie zapisu oraz zachowanie trasy i bramki administratora przy ukryciu wpisu.
 - Testy granic pierwszej minuty :00/:30, braku narastających ponowień, kwantyzacji i martwej strefy, natychmiastowej ochrony, restartu i trwałości zatrzasku SoC.
 - Atrapy HA i usług oraz syntetyczne pomiary nie dowodzą reakcji fizycznego falownika. Nie wdrożono tego kandydata do HA.
 

@@ -133,6 +133,13 @@
           "source_entry": "Obecna integracja Solcast"
         }
       },
+      "sidebar": {
+        "title": "Panel boczny",
+        "description": "Pokaż lub ukryj Deye EMS w menu bocznym administratorów. Panel zawsze otworzysz pod adresem /deye-ems swojej instancji. Zapis nie przeładowuje sterownika ani nie zmienia sterowania. Jeżeli wpis został ukryty w osobistym profilu HA, przywróć go również w edycji menu bocznego.",
+        "data": {
+          "sidebar_visible": "Pokaż Deye EMS w panelu bocznym"
+        }
+      },
       "init": {
         "title": "Deye EMS",
         "menu_options": {
@@ -148,7 +155,8 @@
         "menu_options": {
           "solcast_manual": "Połącz / zmień ustawienia",
           "solcast_import": "Importuj dostępne ustawienia z HA",
-          "solcast_disable": "Wyłącz pobieranie przez EMS"
+          "solcast_disable": "Wyłącz pobieranie przez EMS",
+          "sidebar": "Panel boczny"
         }
       }
     },
@@ -157,13 +165,16 @@
       "duplicate_load": "Ten licznik energii jest już dodany.",
       "pv_reference_required": "Wpisz moc referencyjną profilu przed włączeniem skalowania.",
       "invalid_solcast": "Sprawdź klucz, identyfikatory oraz limity i mnożniki. Mnożników godzinowych musi być dokładnie 24, każdy od 0 do 2.",
-      "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia."
+      "import_calibration_required": "Sprawdź zaimportowany stan korekt i potwierdź brak przeniesienia poprzedniego mechanizmu samouczenia.",
+      "sidebar_save_failed": "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
       "stop_before_mapping": "Najpierw zatrzymaj sterowanie i wybierz obserwację. Następnie zmień przypisania lub odbiorniki.",
       "no_solcast_to_import": "Brak skonfigurowanej integracji solcast_solar. Wybierz ręczne połączenie.",
-      "solcast_import_incomplete": "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką."
+      "solcast_import_incomplete": "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką.",
+      "sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.",
+      "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA."
     }
   }
 }

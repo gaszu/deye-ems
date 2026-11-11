@@ -72,3 +72,11 @@ Zaktualizuj przez Marketplace albo podmień katalog integracji z ZIP i wykonaj w
 Przed usunięciem integracji jawnie wybierz obserwację i sprawdź odczyty urządzenia. Gdy EMS nadal ma wyłączną kontrolę, przejście z active do shadow próbuje wyłączyć Grid Charge i ustawić 0 A. Samo wyładowanie kodu nie wysyła poleceń sprzętowych; ostatnie ustawienia mogą pozostać w urządzeniu.
 
 [README](README.md) · [Specyfikacja](SPECIFICATION.md) · [Przejście i powrót](MIGRATION.md) · [Testy](VALIDATION.md)
+
+## Panel boczny — kandydat 1.0.7
+
+W ustawieniach integracji wybierz **Deye EMS → Konfiguruj → Panel boczny → Pokaż Deye EMS w panelu bocznym** i zapisz. Zmiana jest dostępna także przy aktywnym sterowaniu; nie przeładowuje sterownika ani nie zmienia jego trybu. Jest zapisana oddzielnie od ustawień energetycznych.
+
+Panel jest dostępny tylko administratorom. Bezpośredni adres to `/deye-ems` na Twojej instancji, także przy wyłączonej widoczności wpisu. Jeżeli osobisty profil HA ukrywa tę pozycję, przywróć ją również w edycji menu bocznego. Samo pobranie plików z HACS wymaga restartu HA i dodania integracji w Urządzenia i usługi.
+
+Ta opcja jest częścią kandydata1.0.7; nie występuje w wydanej1.0.6.
