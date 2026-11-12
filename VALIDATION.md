@@ -1,3 +1,10 @@
+# Wersja 1.0.14 — stała sekcja układu instalacji
+
+- **419 testów Python i 85 testów panelu PASS.** Niezależny przegląd ponownie uruchomił wszystkie 85 testów panelu.
+- Osiem nowych scenariuszy panelu obejmuje stałą widoczność obu układów, zapisany wybór zamiast szkicu, niezgodny snapshot, nieznaną konfigurację, stare i nieprawidłowe odczyty, zachowanie rzeczywistego zera oraz nieobliczany bilans poza LOAD.
+- Sprawdzono osobno odczyt trybu falownika, niezgodność z zapisaną topologią, brak aktualnego odczytu i bezpieczne wyświetlanie błędu bilansu. Surowy kod błędu nie jest treścią ostrzeżenia.
+- Podgląd przeglądarki na danych syntetycznych potwierdził sekcję LOAD w jasnym motywie i LOAD i CT w ciemnym. Testy nie zmieniały topologii produkcyjnej ani parametrów sterowania i nie potwierdzają fizycznej reakcji falownika.
+
 # Wersja 1.0.13 — dynamiczny limit i port GRID
 
 - **419 testów Python i77 testów panelu PASS.** Dodano12scenariuszy pure,17runtime,6planera,3interfejsu encji i2panelu. Pozostałe scenariusze zachowują regresje harmonogramu, histerezy, trwałego rejestru i sterowania GC.

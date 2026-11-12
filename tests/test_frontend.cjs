@@ -39,15 +39,15 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-13");
+  const Panel = registry.get("deye-ems-panel-1-0-14");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
-      inputs:{soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,load_power:2800,current_a:27,battery_power:-1400},
+      inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
       plan:{status:"ok",quality:"valid",generated_at:new Date(NOW).toISOString(),targets:{night:{soc_percent:80,deadline:"2026-11-11T07:00:00+01:00"},peak:{soc_percent:65,deadline:"2026-11-11T16:00:00+01:00"}},rows:[]}}};
   panel.render();
@@ -61,8 +61,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-13"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.13/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-14"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.14/);
 });
 
 function apiUsage(panel,changes={}){
@@ -403,8 +403,9 @@ test("active mode prevents topology save even if a disabled button event is forc
 
 test("CT topology separates zero utility exchange from GRID export feeding an external branch",()=>{
   const {panel}=fixture();
+  panel.payload.options.topology="load_with_external_ct";
   Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",grid_power:0,
-    load_power:5000,raw_load_power:3000,outside_load_w:2000,grid_port_power:-2000});
+    load_power:5000,raw_load_power:3000,outside_load_w:2000,outside_power_valid:true,grid_port_power:-2000});
   panel.payload.options.inverter_max_power_kw=10;
   panel.render();
   assert.equal(panel.kw("grid_power"),0);
@@ -414,6 +415,170 @@ test("CT topology separates zero utility exchange from GRID export feeding an ex
   assert.match(panel.shadowRoot.innerHTML,/port GRID falownika: -2/);
   panel.payload.data.inputs.telemetry_valid=false;
   assert.equal(panel.kw("grid_port_power"),null);
+});
+
+function topologySection(panel){
+  const basic=panel.shadowRoot.innerHTML.split("<details>")[0];
+  return basic.split('<section aria-label="Układ instalacji">')[1]?.split("</section>")[0];
+}
+
+test("LOAD topology information stays visible in the main panel and does not invent external consumption",()=>{
+  const {panel,calls}=fixture();
+  Object.assign(panel.payload.options,{inverter_max_power_kw:12});
+  Object.assign(panel.payload.data.inputs,{outside_load_w:0,outside_power_valid:true});
+  panel.render();
+  const section=topologySection(panel);
+  assert.match(section,/<h2>Układ LOAD<\/h2>/);
+  assert.match(section,/LOAD: 2,8 kW/);
+  assert.match(section,/odbiory między GRID a CT: nieobliczane w układzie LOAD/);
+  assert.doesNotMatch(section,/odbiory między GRID a CT: 0 kW|Sieć na CT:/);
+  assert.match(section,/port GRID falownika: 0 kW/);
+  assert.match(section,/Dom w modelu EMS: 2,8 kW · Sieć na porcie GRID: 0 kW/);
+  assert.match(section,/Moc znamionowa falownika 12 kW jest wspólna dla wyjścia LOAD i oddawania przez port GRID/);
+  assert.match(panel.shadowRoot.innerHTML,/dom: pomiar LOAD/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/dom: wszystkie wybrane obwody/);
+  assert.equal(calls.length,0);
+});
+
+test("CT topology shows native LOAD external branch total home and utility exchange before advanced details",()=>{
+  const {panel,calls}=fixture();
+  panel.payload.options.topology="load_with_external_ct";
+  panel.payload.options.inverter_max_power_kw=12;
+  Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",raw_load_power:2000,
+    outside_load_w:25000,outside_power_valid:true,grid_port_power:-12000,load_power:27000,grid_power:13000});
+  panel.render();
+  const section=topologySection(panel);
+  assert.match(section,/<h2>Układ LOAD i CT<\/h2>/);
+  assert.match(section,/LOAD: 2 kW · odbiory między GRID a CT: 25 kW · port GRID falownika: -12 kW/);
+  assert.match(section,/Dom w modelu EMS: 27 kW · Sieć na CT: 13 kW/);
+  assert.match(section,/O wymianie z siecią decyduje pomiar CT/);
+  assert.match(section,/pozostałą moc bezpośrednio z sieci; ta część nie przechodzi przez falownik/);
+  assert.equal(calls.length,0);
+});
+
+test("saved topology heading survives stale missing and invalid snapshots without showing old readings",()=>{
+  for(const topology of ["load_only","load_with_external_ct"]){
+    for(const corrupt of [
+      p=>{p.data.updated_at=new Date(NOW-30001).toISOString();},
+      p=>{p.data.updated_at=new Date(NOW+1).toISOString();},
+      p=>{delete p.data.updated_at;},
+      p=>{delete p.data.inputs;},
+      p=>{p.data.inputs.telemetry_valid=false;},
+      p=>{p.data.inputs.topology=topology==="load_only"?"load_with_external_ct":"load_only";}
+    ]){
+      const {panel}=fixture();
+      panel.payload.options.topology=topology;
+      Object.assign(panel.payload.data.inputs,{topology,raw_load_power:9000,grid_port_power:-4000,
+        outside_load_w:4000,outside_power_valid:true,grid_power:5000,load_power:13000});
+      corrupt(panel.payload);panel.render();
+      const section=topologySection(panel);
+      assert.match(section,new RegExp('<h2>'+(topology==="load_only"?'Układ LOAD':'Układ LOAD i CT')+'</h2>'));
+      assert.match(section,/LOAD: — kW/);
+      assert.match(section,/port GRID falownika: — kW/);
+      assert.match(section,/Dom w modelu EMS: — kW/);
+      assert.doesNotMatch(section,/LOAD: 9 kW|port GRID falownika: -4 kW|Dom w modelu EMS: 13 kW/);
+      assert.match(section,/notice warning/);
+    }
+  }
+});
+
+test("an unsaved topology draft cannot relabel the saved installation or current measurements",()=>{
+  for(const topology of ["load_only","load_with_external_ct"]){
+    const {panel}=fixture();
+    panel.payload.options.topology=topology;
+    panel.payload.data.inputs.topology=topology;
+    panel.drafts.topology=topology==="load_only"?"load_with_external_ct":"load_only";
+    panel.render();
+    const section=topologySection(panel);
+    assert.match(section,new RegExp('<h2>'+(topology==="load_only"?'Układ LOAD':'Układ LOAD i CT')+'</h2>'));
+    assert.match(section,/LOAD: 2,8 kW/);
+    assert.equal(panel.shadowRoot.getElementById("topology").value,panel.drafts.topology);
+    assert.match(panel.shadowRoot.innerHTML,/Niezapisana zmiana/);
+  }
+});
+
+test("unknown saved topology remains unknown even when a snapshot or draft names LOAD or CT",()=>{
+  for(const topology of [undefined,null,"unexpected"]){
+    const {panel}=fixture();
+    panel.payload.options.topology=topology;
+    panel.drafts.topology="load_with_external_ct";
+    panel.render();
+    const section=topologySection(panel);
+    assert.match(section,/<h2>Układ instalacji<\/h2>/);
+    assert.doesNotMatch(section,/<h2>Układ LOAD/);
+    assert.match(section,/Nie rozpoznano zapisanego układu instalacji/);
+    assert.match(section,/LOAD: — kW/);
+    assert.match(section,/Wymiana z siecią: — kW/);
+  }
+});
+
+test("topology section distinguishes saved configuration from fresh actual inverter mode and flags disagreement",()=>{
+  for(const [topology,expected,other] of [
+    ["load_only","Zero Export To Load","Zero Export To CT"],
+    ["load_with_external_ct","Zero Export To CT","Zero Export To Load"]
+  ]){
+    const {panel}=fixture();
+    panel.payload.options.topology=topology;
+    Object.assign(panel.payload.data.inputs,{topology,inverter_work_mode:expected});
+    panel.render();
+    let section=topologySection(panel);
+    assert.ok(section.includes('Zapisany układ EMS: '+expected+' · odczyt trybu falownika: '+expected));
+    assert.doesNotMatch(section,/Niezgodność trybu falownika/);
+    for(const actual of [other,"Selling First"]){
+      Object.assign(panel.payload.data.inputs,{inverter_work_mode:actual,telemetry_valid:false});
+      panel.render();section=topologySection(panel);
+      assert.ok(section.includes('odczyt trybu falownika: '+actual));
+      assert.match(section,/Niezgodność trybu falownika z zapisanym układem EMS/);
+      assert.ok(section.includes('Wymagany tryb: '+expected));
+      assert.match(section,new RegExp('<h2>'+(topology==="load_only"?'Układ LOAD':'Układ LOAD i CT')+'</h2>'));
+    }
+  }
+});
+
+test("stale or missing actual modes remain unknown and fresh topology errors produce a safe warning",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.inputs,{inverter_work_mode:"Zero Export To CT",topology_error:"private_balance_detail"});
+  panel.render();
+  let section=topologySection(panel);
+  assert.match(section,/Błąd pomiarów układu/);
+  assert.doesNotMatch(section,/private_balance_detail/);
+  panel.payload.data.updated_at=new Date(NOW-30001).toISOString();
+  panel.render();section=topologySection(panel);
+  assert.match(section,/odczyt trybu falownika: brak aktualnego odczytu/);
+  assert.doesNotMatch(section,/odczyt trybu falownika: Zero Export To CT|Niezgodność trybu falownika|Błąd pomiarów układu/);
+  panel.payload.data.updated_at=new Date(NOW).toISOString();
+  panel.payload.data.inputs.topology_error=null;
+  for(const actual of [undefined,null,""," ","unknown","unavailable"]){
+    panel.payload.data.inputs.inverter_work_mode=actual;panel.render();section=topologySection(panel);
+    assert.match(section,/odczyt trybu falownika: brak poprawnego odczytu/);
+    assert.doesNotMatch(section,/Niezgodność trybu falownika/);
+  }
+  panel.payload.data.inputs.inverter_work_mode='<img src=x onerror="alert(1)">';
+  panel.render();section=topologySection(panel);
+  assert.match(section,/odczyt trybu falownika: &lt;img/);
+  assert.doesNotMatch(section,/<img/);
+});
+
+test("topology readouts retain true zero and reject missing malformed or unvalidated readings",()=>{
+  const {panel}=fixture();
+  panel.payload.options.topology="load_with_external_ct";
+  Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",raw_load_power:0,
+    grid_port_power:0,outside_load_w:0,outside_power_valid:true,load_power:0,grid_power:0});
+  panel.render();
+  let section=topologySection(panel);
+  assert.match(section,/LOAD: 0 kW · odbiory między GRID a CT: 0 kW · port GRID falownika: 0 kW/);
+  assert.match(section,/Dom w modelu EMS: 0 kW · Sieć na CT: 0 kW/);
+  for(const value of [undefined,null,"unknown","",Infinity,NaN,true]){
+    for(const key of ["raw_load_power","grid_port_power","outside_load_w","load_power","grid_power"])
+      panel.payload.data.inputs[key]=value;
+    panel.render();section=topologySection(panel);
+    assert.match(section,/LOAD: — kW · odbiory między GRID a CT: — kW · port GRID falownika: — kW/);
+    assert.match(section,/Dom w modelu EMS: — kW · Sieć na CT: — kW/);
+  }
+  Object.assign(panel.payload.data.inputs,{outside_load_w:0,outside_power_valid:false});
+  panel.render();section=topologySection(panel);
+  assert.match(section,/odbiory między GRID a CT: — kW/);
+  assert.match(section,/Brak poprawnego bilansu CT i portu GRID/);
 });
 
 test("rejects snapshots over thirty seconds old and future timestamps",()=>{

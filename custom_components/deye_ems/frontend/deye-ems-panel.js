@@ -1,5 +1,5 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-13";
+const PANEL_TAG = "deye-ems-panel-1-0-14";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -80,6 +80,37 @@ class DeyeEMSPanel extends HTMLElement {
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
   kw(key){const v=this.measurement(key);return v===null?null:v/1000;}
+  topologyKw(key){
+    const topology=this.payload?.options?.topology,input=this.payload?.data?.inputs;
+    if(!["load_only","load_with_external_ct"].includes(topology)||input?.topology!==topology)return null;
+    if(key==="outside_load_w"&&(topology!=="load_with_external_ct"||input.outside_power_valid!==true))return null;
+    return this.kw(key);
+  }
+  topologyHtml(){
+    const o=this.payload?.options||{},input=this.payload?.data?.inputs,topology=o.topology;
+    const ct=topology==="load_with_external_ct",load=topology==="load_only",known=ct||load;
+    const fresh=this.snapshotFresh(),savedMode=ct?"Zero Export To CT":load?"Zero Export To Load":null;
+    const rawMode=input?.inverter_work_mode,actualMode=fresh&&typeof rawMode==="string"&&rawMode.trim()&&!['unknown','unavailable'].includes(rawMode.trim().toLowerCase())?rawMode.trim():null;
+    const mismatch=known&&actualMode!==null&&actualMode!==savedMode;
+    const topologyError=fresh&&Boolean(input?.topology_error);
+    const heading=ct?"Układ LOAD i CT":load?"Układ LOAD":"Układ instalacji";
+    const outside=ct?num(this.topologyKw("outside_load_w"))+" kW":load?"nieobliczane w układzie LOAD":"nieustalone";
+    const exchange=ct?"Sieć na CT":load?"Sieć na porcie GRID":"Wymiana z siecią";
+    let notice="";
+    if(!known)notice="Nie rozpoznano zapisanego układu instalacji. Pomiary nie są przypisane do układu LOAD ani CT.";
+    else if(!fresh)notice="Brak aktualnego odczytu układu. Pomiary wymagają aktualizacji z ostatnich 30 sekund.";
+    else if(!input||input.topology!==topology)notice="Brak odczytu zgodnego z zapisanym układem. Oczekiwanie na aktualizację pomiarów.";
+    else if(input.telemetry_valid!==true)notice="Brak poprawnych pomiarów układu. Nieprawidłowe odczyty są pokazane jako —.";
+    else if(ct&&input.outside_power_valid!==true)notice="Brak poprawnego bilansu CT i portu GRID. Moc odbiorów między GRID a CT jest nieznana.";
+    return '<section aria-label="Układ instalacji"><h2>'+heading+'</h2><p>Zapisany układ EMS: '+esc(savedMode??"nierozpoznany")+' · odczyt trybu falownika: '+esc(actualMode??(fresh?"brak poprawnego odczytu":"brak aktualnego odczytu"))+'.</p>'+
+      '<p>LOAD: '+num(this.topologyKw("raw_load_power"))+' kW · odbiory między GRID a CT: '+outside+' · port GRID falownika: '+num(this.topologyKw("grid_port_power"))+' kW.</p>'+
+      '<p>Dom w modelu EMS: '+num(this.topologyKw("load_power"))+' kW · '+exchange+': '+num(this.topologyKw("grid_power"))+' kW.</p>'+
+      '<p class="legend">Dodatnia moc GRID oznacza pobór, ujemna — wypływ z falownika. '+(ct?'O wymianie z siecią decyduje pomiar CT. Dom obejmuje LOAD i odbiory między GRID a CT.':load?'Wymiana z siecią jest mierzona na porcie GRID. Dom obejmuje pomiar LOAD; odbiory poza LOAD nie są wyliczane.':'Źródło wymiany z siecią i zakres pomiaru domu wymagają rozpoznania zapisanego układu.')+'</p>'+
+      '<p class="legend">Moc znamionowa falownika '+num(numeric(o.inverter_max_power_kw))+' kW jest wspólna dla wyjścia LOAD i oddawania przez port GRID.'+(ct?' Odbiory między GRID a CT mogą pobrać pozostałą moc bezpośrednio z sieci; ta część nie przechodzi przez falownik.':'')+'</p>'+
+      (notice?'<p class="notice warning">'+notice+'</p>':'')+
+      (mismatch?'<p class="notice warning">Niezgodność trybu falownika z zapisanym układem EMS. Wymagany tryb: '+esc(savedMode)+'. Sprawdź konfigurację przed uruchomieniem sterowania.</p>':'')+
+      (topologyError?'<p class="notice warning">Błąd pomiarów układu. Bilans LOAD, portu GRID i CT wymaga sprawdzenia.</p>':'')+'</section>';
+  }
   panelThemeNames(){return Object.keys(this._hass?.themes?.themes||{}).sort((a,b)=>a.localeCompare(b));}
   savedPanelTheme(){return typeof this.payload?.appearance?.theme==="string"?this.payload.appearance.theme:"";}
   applyPanelTheme(){
@@ -453,7 +484,7 @@ class DeyeEMSPanel extends HTMLElement {
     const deyeLimitValid=fresh&&d.inputs?.grid_charge_limit_valid===true;
     const deyeLimit=deyeLimitValid?numeric(d.inputs.deye_grid_charge_limit_a):null;
     const deyeSetting=deyeLimitValid?numeric(d.inputs.deye_max_charge_current_a):null;
-    const ctTopology=fresh&&d.inputs?.topology==="load_with_external_ct";
+    const ctTopology=o.topology==="load_with_external_ct",loadTopology=o.topology==="load_only";
     const selectedTopology=this.drafts.topology??o.topology??"load_only";
     const savedTopologyLabel=o.topology==="load_with_external_ct"?"Zero Export To CT":o.topology==="load_only"?"Zero Export To Load":"brak odczytu";
     const points=rows.map((r,i)=>(i/(Math.max(rows.length-1,1))*960).toFixed(1)+","+(220-Number(r.soc_percent||0)*2).toFixed(1)).join(" ");
@@ -477,10 +508,10 @@ class DeyeEMSPanel extends HTMLElement {
       '</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
       (this.error?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
-      card("Sieć / dom",num(this.kw("grid_power"))+' / '+num(this.kw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":"Sieć: + pobór, − eksport · dom: wszystkie wybrane obwody")+
+      card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Wybrany cel SoC",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
       card("Tryb",active?"Aktywny":"Obserwacja","",active?"Sterowanie falownikiem":"Planowanie bez poleceń do falownika")+'</div>'+
-      (ctTopology?'<section><h2>Układ LOAD i CT</h2><p>LOAD: '+num(this.kw("raw_load_power"))+' kW · odbiory między GRID a CT: '+num(this.kw("outside_load_w"))+' kW · port GRID falownika: '+num(this.kw("grid_port_power"))+' kW.</p><p class="legend">Ujemna moc portu GRID oznacza wypływ z falownika. O wymianie z siecią decyduje pomiar CT. Moc znamionowa falownika '+num(o.inverter_max_power_kw)+' kW jest wspólna dla LOAD i odbiorów poza LOAD.</p></section>':'')+
+      this.topologyHtml()+
       (!fresh?'<div class="notice warning">Brak aktualnego odczytu silnika. Pomiary wymagają aktualizacji z ostatnich 30 sekund.</div>':'')+
       '<div class="notice">'+esc(statusText)+(active?'':' · Obliczenia bez poleceń do falownika.')+'</div>'+
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
@@ -501,11 +532,11 @@ class DeyeEMSPanel extends HTMLElement {
       '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary>'+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
-      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+(ctTopology?'CT':'GRID')+' L1 / L2 / L3: '+num(this.kw("grid_l1_power"))+' / '+num(this.kw("grid_l2_power"))+' / '+num(this.kw("grid_l3_power"))+' kW · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe zmiany o :00 i :30: wyliczona nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
+      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+(ctTopology?'CT':loadTopology?'GRID':'Sieć')+' L1 / L2 / L3: '+num(this.topologyKw("grid_l1_power"))+' / '+num(this.topologyKw("grid_l2_power"))+' / '+num(this.topologyKw("grid_l3_power"))+' kW · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe zmiany o :00 i :30: wyliczona nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
       '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.13.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.14.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
     if(details)details.open=detailsOpen;
     this.bindLoads();
