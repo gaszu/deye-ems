@@ -2,6 +2,14 @@
 
 Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zachowanie; rozszerzenia i strojenie będą opisywane w następnych wersjach.
 
+## Priorytet PV w regulatorze — rozszerzenie 1.0.16
+
+- `C = max(-battery_power, 0)` jest zmierzonym ładowaniem DC. `G = max(grid_port_power, suma faz portu GRID, 0)` jest dodatnim dopływem AC do falownika. Kredyt nadwyżki lokalnej wynosi `max(C - G - 200 W, 0)`. Odjęcie całego G przy sprawności 1 jest zachowawcze; nie przypisuje strat prostowania do PV i uwzględnia GRID zasilający dom przez bypass. CT, całkowita produkcja PV i nastawa prądu nie zastępują tych pomiarów.
+- Kredyt pomniejsza wymagane tempo ładowania DC przed podzieleniem przez napięcie. Poniżej rezerwy żądane tempo łączne podnoszone jest do budżetu Deye/BMS, a dopiero potem odejmowany jest kredyt PV. Zwykły harmonogram zapisów i zatrzask SoC pozostają zachowane; pokrycie potrzeby przez PV nie oznacza osiągnięcia celu SoC.
+- Ścisłe limity nastawy zachowują Deye−5%, ogólny limit Deye/BMS, zakres encji oraz istniejące budżety mocy i faz. Zmierzone przekroczenie łącznej mocy baterii ponad budżet prądu razy napięcie, po tolerancji 200 W, może jedynie zmniejszyć nastawę. Różnica nastawy i rzeczywistej mocy nie daje prawa do zwiększenia.
+- Bateria i natywny GRID mają niezależne encje, poprawne jednostki, nieprzywrócone odczyty do 30 s i rozbieżność znaczników nie większą niż 10 s. Błąd unieważnia telemetrię ładowania. Potrzeba jest ponownie sprawdzana bezpośrednio przed zwiększeniem prądu i włączeniem GC, po oczekującym zapisie rejestru próby.
+- Szacunek dotyczy nadwyżki po zasileniu odbiorów. Nie jest dokładnym licznikiem udziału źródeł; inne lokalne źródło DC również może uczestniczyć w bilansie. Obserwowany teraz wkład PV nie jest gwarancją produkcji do końca slotu. Regulator aktualizuje obliczenia z kolejnymi pomiarami.
+
 ## Instalacja i niezależność
 
 - Instalowalna integracja Home Assistant 2026.11+, publiczny kod `gaszu/ha-deye-ems`, własne repozytorium Marketplace/HACS i paczka ZIP.

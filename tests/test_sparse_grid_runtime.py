@@ -201,6 +201,9 @@ class SparseGridRuntime(unittest.IsolatedAsyncioTestCase):
         for outcome in ("accepted", "uncertain", "not_sent"):
             with self.subTest(outcome=outcome):
                 h = setup()
+                # This SoC needs 65 A to the deadline, so the original command
+                # satisfies the live-demand guard before its ACK is lost.
+                h.set("soc", 40, "%")
                 h.set("grid_current_number", 42, "A")
                 h.set("tou_gc_6", "on")
                 h.co._memory["ledger"][SOURCES["grid_current_number"]] = {

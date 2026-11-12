@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 1.0.15
+# Instalacja i obsługa Deye EMS 1.0.16
 
 W sekcji „Przyłącze sieciowe” wpisz dozwolony import całej instalacji oraz jednej fazy. Są to parametry przyłącza, niezależne od mocy falownika. Zakres wynosi 1–30 kW łącznie i 0,5–15 kW na fazę. Obowiązują w LOAD i CT; w CT pomiar obejmuje również odbiory przed portem GRID. Regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Aktualizacja zachowuje dotychczasowe wartości.
 
@@ -10,14 +10,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v1.0.15**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v1.0.16**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/ha-deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-1.0.15.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.15/deye-ems-1.0.15.zip).
+1. Pobierz [deye-ems-1.0.16.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.16/deye-ems-1.0.16.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -123,6 +123,12 @@ Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga 
 ## Automatyczna moc ładowania — od 1.0.15
 
 Nie wpisuje się już „Modelowego limitu ładowania”. Prognoza korzysta z ogólnego limitu prądu Deye, BMS, napięcia baterii i mocy falownika, ze wspólnym budżetem dla PV i sieci. Dla sieci dodatkowo obowiązują Deye−5%, zakres nastawy i dostępna moc. Przypisania niezależnego limitu Deye i sterowanej nastawy GRID pozostają rozdzielone. Dawna encja modelowego limitu jest wyłączana z zachowaniem historii; ustawienie modelowego rozładowania pozostaje osobne.
+
+## Priorytet PV w bieżącym sterowaniu — od 1.0.16
+
+Istniejące przypisania **battery_power** i natywnego **grid_power** oraz faz GRID służą do oszacowania nadwyżki lokalnej pomniejszającej potrzebę ładowania z sieci. Bateria ma znak minus podczas ładowania; port GRID ma znak plus przy dopływie do falownika. Nie przypisuj CT zamiast portu GRID ani jednej encji do obu pomiarów. Wymagane są niezależne, poprawne odczyty W do 30 s, rozbieżne czasowo najwyżej o 10 s. Brak poprawnych danych blokuje ładowanie sieciowe zamiast przyjmować PV równe zero.
+
+Panel pokazuje zachowawczy szacunek nadwyżki i potrzebę doładowania po stronie baterii. Nie są to odczyty dokładnej produkcji PV ani AC importu. Pokrycie potrzeby przez PV może zatrzymać doładowanie bez osiągnięcia celu SoC; wznowienie nadal respektuje harmonogram zapisów i stabilizację pomiarów. Fizyczne ładowanie z PV pozostaje sterowane przez falownik.
 
 ## Rezerwa SoC — dolna granica z Battery low SOC
 

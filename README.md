@@ -4,17 +4,17 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.15
+## Instalacja wersji 1.0.16
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.15** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.16** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.15.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.15/deye-ems-1.0.15.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.15.md).
+Alternatywnie pobierz [deye-ems-1.0.16.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.16/deye-ems-1.0.16.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.16.md).
 
 ## Konfiguracja
 
@@ -65,6 +65,8 @@ Import przez port GRID jest ograniczany do skonfigurowanej mocy znamionowej falo
 Od wersji 1.0.15 prognoza nie używa ręcznego „Modelowego limitu ładowania”. Wspólna moc ładowania z PV i sieci wynika z mniejszego z aktualnych limitów prądu Deye i BMS, pomnożonego przez napięcie baterii, oraz mocy falownika. Ładowanie z sieci ma dodatkowo limit Deye−5%, zakres sterowanej nastawy i zapas mocy na prognozowany dom. PV i sieć korzystają z jednego budżetu baterii. Brak poprawnych danych uniemożliwia poprawną projekcję; blokada BMS daje zerową moc ładowania. Limity są ponownie odczytywane po pobraniu historii i prognozy, a regulator wykonawczy niezależnie sprawdza je przed zapisem do urządzenia.
 
 Dawna wartość `charge_max_kw` pozostaje zachowana w zapisanej konfiguracji dla możliwości powrotu, ale nie wpływa na obliczenia. Jej encja number jest wyłączana przez integrację z zachowaniem historii. Parametr modelowego rozładowania pozostaje osobny.
+
+Od 1.0.16 również bieżący regulator odejmuje oszacowaną nadwyżkę PV/lokalnego DC od potrzebnego tempa doładowania z sieci. Używa rzeczywistej mocy baterii i natywnego portu GRID, po uwzględnieniu zasilania domu; nie odejmuje całej produkcji PV ani importu CT. Szacunek jest zachowawczy, z tolerancją 200 W, i nie jest dokładnym licznikiem udziału źródeł. Panel pokazuje go obok pozostałej potrzeby ładowania po stronie baterii. Pokrycie całej potrzeby przez PV wyłącza doładowanie sieciowe bez oznaczania celu SoC jako osiągniętego. Zwykłe korekty zachowują terminy :00/:30, a ograniczenia i wyłączenie ładowania działają natychmiastowo. Przy SoC poniżej rezerwy maksymalizowane jest bezpieczne ładowanie łączne, z PV pomniejszającym udział sieci.
 
 Chronione okno wyłącza doładowanie baterii z sieci; nie oznacza twardego zerowania CT. Przy dużym odbiorniku między CT a GRID falownik może pokrywać część jego zużycia w granicach dostępnej mocy PV/baterii i rezerwy SoC, a pozostała moc płynie bezpośrednio z sieci. Moc falownika jest wspólna z LOAD. Taki import CT nie jest sam w sobie ładowaniem baterii ani przekroczeniem mocy portu GRID.
 

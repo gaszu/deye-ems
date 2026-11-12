@@ -1,3 +1,12 @@
+# Wersja 1.0.16 — PV w bieżącej regulacji prądu
+
+- **466 testów Python i 91 testów panelu PASS.** Niezależna próba 74 testów regulatora i granicy runtime przeszła poprawnie.
+- Osiemnaście nowych scenariuszy regulatora obejmuje noc bez PV, częściowe i pełne pokrycie potrzeby ładowania, bypass LOAD, zewnętrzny odbiór 25 kW, niezależność od CT i nastawy, brak danych, tolerancje 200 W, łączne przeciążenie baterii, priorytet powodów ochronnych, odzyskiwanie rezerwy oraz harmonogram i zatrzask SoC.
+- Jedenaście testów runtime sprawdza jednostki, restored, przyszłe i stare odczyty, granice 30 s i 10 s, aliasy źródeł, prawidłowe zero, rozdzielenie CT i portu GRID oraz zachowanie rejestru prób. Wzrost PV podczas zapisu Store blokuje nieaktualne zwiększenie prądu i włączenie GC. Sterowanie nie odpytuje Solcast ani historii.
+- Pięć nowych testów panelu obejmuje dane tylko do odczytu, poprawne zero, brak/błąd/stary odczyt oraz rozdzielenie danych serwera od surowych encji, CT i nastawy. Moc jest opisana jako szacunek po stronie baterii.
+- Dwie wcześniejsze próby utraty ACK zachowują pierwotne sprawdzenia; ich początkowy SoC zapewnia rzeczywistą potrzebę przygotowanej nastawy również po dodaniu kontroli ostatniej chwili.
+- Testy awarii wykonano offline. Szacunek PV jest zachowawczy; bieżący wkład nie gwarantuje produkcji do końca slotu. Nie wymuszano produkcji PV, przeciążenia ani reakcji sprzętu na produkcji.
+
 # Wersja 1.0.15 — sprzętowy budżet ładowania w prognozie
 
 - **437 testów Python i 86 testów panelu PASS.** Niezależna pełna próba Python potwierdziła 437/437 PASS, a niezależne sprawdzenie panelu 86/86 PASS.

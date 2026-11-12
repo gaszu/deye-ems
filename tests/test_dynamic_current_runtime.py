@@ -220,6 +220,9 @@ class DynamicCurrentRuntime(unittest.IsolatedAsyncioTestCase):
 
     async def test_unconfirmed_higher_setting_blocks_gc_after_deye_limit_drop(self):
         h = roomy()
+        # A genuine reserve-recovery demand permits the initial high command;
+        # the test then isolates cancellation of its unconfirmed register.
+        h.set("soc", 30, "%")
         h.set("grid_current_number", 42, "A")
         h.set("tou_gc_6", "on")
         h.set("tou_soc_6", 85, "%")

@@ -39,7 +39,7 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-15");
+  const Panel = registry.get("deye-ems-panel-1-0-16");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -61,8 +61,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-15"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.15/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-16"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.16/);
 });
 
 function apiUsage(panel,changes={}){
@@ -100,6 +100,68 @@ test("retired model charging power is not editable or rendered from persisted le
   }
   assert.doesNotMatch(source,/\bcharge_max_kw\b/);
   assert.equal(calls.length,0);
+});
+
+test("PV priority diagnostics show validated battery-side powers without controls or extra requests",()=>{
+  const {panel,calls}=fixture();
+  Object.assign(panel.payload.data.control,{pv_surplus_credit_w:2300,net_grid_need_w:1700});
+  panel.render();
+  const html=panel.pvPriorityHtml();
+  assert.match(html,/szacunek zachowawczy:<\/b> 2,3 kW/);
+  assert.match(html,/potrzeba doładowania z sieci:<\/b> 1,7 kW/);
+  assert.match(html,/mocy po stronie baterii/);
+  assert.match(html,/nie jest osobnym pomiarem energii PV/);
+  assert.match(html,/przed ograniczeniami sprzętowymi/);
+  const visible=panel.shadowRoot.innerHTML.split("<details>")[0];
+  assert.match(visible,/aria-label="Priorytet PV"/);
+  assert.doesNotMatch(html,/<input|<button/);
+  assert.equal(calls.length,0);
+});
+
+test("PV priority preserves genuine zero and never renders malformed diagnostics as measured zero",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.control,{pv_surplus_credit_w:0,net_grid_need_w:0});
+  assert.equal((panel.pvPriorityHtml().match(/<\/b> 0 kW/g)||[]).length,2);
+  for(const value of [undefined,null,true,false,"2300","",-1,NaN,Infinity]){
+    Object.assign(panel.payload.data.control,{pv_surplus_credit_w:value,net_grid_need_w:value});
+    const html=panel.pvPriorityHtml();
+    assert.equal((html.match(/<\/b> — kW/g)||[]).length,2,String(value));
+    assert.doesNotMatch(html,/<\/b> 0 kW/);
+  }
+});
+
+test("PV priority hides stale future and telemetry-invalid powers",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.control,{pv_surplus_credit_w:2300,net_grid_need_w:1700});
+  for(const updated of [new Date(NOW-30001).toISOString(),new Date(NOW+1).toISOString(),null,"malformed"]){
+    panel.payload.data.updated_at=updated;
+    assert.equal((panel.pvPriorityHtml().match(/<\/b> — kW/g)||[]).length,2);
+  }
+  panel.payload.data.updated_at=new Date(NOW).toISOString();
+  panel.payload.data.inputs.telemetry_valid=false;
+  assert.equal((panel.pvPriorityHtml().match(/<\/b> — kW/g)||[]).length,2);
+  panel.payload.data.inputs.telemetry_valid=true;
+  assert.match(panel.pvPriorityHtml(),/<\/b> 2,3 kW/);
+});
+
+test("PV priority uses runtime attribution without substituting CT raw PV or a register-derived power",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.control,{pv_surplus_credit_w:2300,net_grid_need_w:1700});
+  const initial=panel.pvPriorityHtml();
+  panel.payload.options.topology="load_with_external_ct";
+  Object.assign(panel.payload.data.inputs,{grid_power:25000,grid_port_power:12000,battery_power:-9000,current_a:190,pv_power:20000});
+  panel._hass.states["sensor.raw_pv"]={state:"20000",attributes:{unit_of_measurement:"W"}};
+  assert.equal(panel.pvPriorityHtml(),initial);
+  delete panel.payload.data.control.pv_surplus_credit_w;
+  delete panel.payload.data.control.net_grid_need_w;
+  assert.equal((panel.pvPriorityHtml().match(/<\/b> — kW/g)||[]).length,2);
+});
+
+test("PV-covered charge need is distinct from a reached SoC target",()=>{
+  const {panel}=fixture();
+  panel.payload.data.control.reason="pv_covers_charge_need";panel.render();
+  assert.match(panel.shadowRoot.innerHTML,/PV pokrywa potrzebę ładowania/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Cel SoC osiągnięty|Cel osiągnięty — wznowienie/);
 });
 
 test("automatic Deye ceiling shows a missing value when invalid or stale",()=>{

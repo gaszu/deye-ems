@@ -31,6 +31,7 @@ def snapshot(**changes):
                 load_w=2000., load_phases_w=[1000., 600., 400.],
                 grid_w=2000., grid_phases_w=[1000., 600., 400.],
                 battery_voltage_v=54., current_a=0.,
+                battery_power_w=0., battery_total_cap_a=200.,
                 last_attempt_ts=400., last_attempt_a=0.,
                 ordinary_history_known=True, ordinary_last_possible_ts=400.,
                 ordinary_last_not_sent_ts=None, grid_charge_active=True,
@@ -123,7 +124,7 @@ class GridChargeScenarios(unittest.TestCase):
         below = calculate_grid_charge(g)
         self.assertTrue(below["write"])
         self.assertEqual(below["next_a"], 20)
-        self.assertEqual(below["need_a"], below["cap_a"])
+        self.assertGreaterEqual(below["need_a"], below["cap_a"])
         g.update(soc=50, current_a=28, last_attempt_a=28)
         at_floor = calculate_grid_charge(g)
         self.assertEqual(at_floor["next_a"], 0)

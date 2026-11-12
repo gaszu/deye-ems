@@ -22,7 +22,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OWNER_ENTITIES, OPTION_RANGES
-from .grid_control import calculate_grid_charge_cap, calculate_grid_charge_increase_cap
+from .grid_control import (calculate_grid_charge_cap, calculate_grid_charge_increase_cap,
+                           calculate_grid_charge as calculate_grid_charge_demand)
 from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready,
                                 DEADBAND_A, QUANTUM_A)
 from .planner import plan_energy
@@ -600,6 +601,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if bound is None or self._effective_min_soc() + self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
             inputs["telemetry_valid"] = False
             inputs["grid_charge_balanced"] = None
+        # A solar/local charging credit must compare the same physical instant.
+        # Use the inverter GRID port, never utility CT (which includes bypass
+        # loads). _measurement already validates availability, units and age.
+        charge_keys = ("battery_power", "grid_power", "grid_l1_power", "grid_l2_power", "grid_l3_power")
+        reports = [_stamp(getattr(self._state(key), "last_reported", None) or
+                          getattr(self._state(key), "last_updated", None)) for key in charge_keys]
+        charge_ids = [self._sources.get(key) for key in charge_keys]
+        inputs["charge_power_valid"] = (battery is not None and all(v is not None for v in powers.values())
+            and all(charge_ids) and len(set(charge_ids)) == len(charge_ids)
+            and all(at is not None and 0 <= now.timestamp() - at <= 30 for at in reports)
+            and max(reports) - min(reports) <= 10)
+        if not inputs["charge_power_valid"]:
+            inputs["telemetry_valid"] = False
+            inputs["grid_charge_balanced"] = None
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):
@@ -784,8 +799,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         floor = self._effective_min_soc()
         allowed = (night or afternoon) and (winter or emergency or
                    inputs["soc"] is not None and inputs["soc"] < floor)
-        cap = calculate_grid_charge_cap(self._grid_input(inputs, now, target, emergency))
+        live_grid = self._grid_input(inputs, now, target, emergency)
+        cap = calculate_grid_charge_cap(live_grid)
+        live_need = calculate_grid_charge_demand(live_grid)["need_a"]
+        rounded_need = math.ceil(live_need / QUANTUM_A) * QUANTUM_A
         if entity_id == self._sources["grid_current_number"] and value > 0:
+            if (live_need <= 0 or inputs["current_a"] is not None
+                    and value > inputs["current_a"] and value > rounded_need):
+                self._last_error = "last_moment_charge_need_guard"
+                return False
             context = self._current_grid_attempt
             if (context is not None and not context["ordinary"]
                     and (inputs["current_a"] is None or value > inputs["current_a"])):
@@ -831,6 +853,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if not (entity_id == self._sources[f"tou_gc_{active_slot}"] and active_slot not in (3, 5)
                     and allowed and self._hardware_modes_ok() and self._clocks_ok(now) and inputs["soc_valid"]
                     and inputs["soc"] < target and
+                    live_need > 0 and requested <= rounded_need and
                     self._settled_grid(inputs, now, requested) and requested <= cap["cap_a"] and requested <= start_cap
                     and (pending is None or pending <= start_cap) and
                     setting is not None and abs(setting - target) < 2 and
@@ -1067,6 +1090,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "grid_port_load_w": inputs["raw_load_power"],
                 "grid_port_load_phases_w": [inputs[f"raw_load_l{i}_power"] for i in (1, 2, 3)],
                 "battery_voltage_v": inputs["voltage"], "current_a": inputs["current_a"],
+                "battery_power_w": inputs.get("battery_power"),
+                "battery_total_cap_a": (min(inputs["bms_cap_a"], inputs["deye_max_charge_current_a"])
+                    if inputs["telemetry_valid"] and inputs.get("bms_valid") is True
+                    and inputs.get("grid_charge_limit_valid") is True
+                    and inputs.get("bms_cap_a") is not None and inputs.get("deye_max_charge_current_a") is not None else None),
                 "grid_charge_balanced": inputs.get("grid_charge_balanced"),
                 "last_attempt_ts": ledger.get("at", 0), "last_attempt_a": ledger.get("a", 0),
                 "total_limit_w": self._options["grid_import_limit_kw"] * 1000,
@@ -1158,10 +1186,13 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         active_gc = self._state(f"tou_gc_{active_slot}")
         observed_grid = self._grid_input(observed, self._now(), target, emergency)
         cap = calculate_grid_charge_cap(observed_grid)
+        observed_need = calculate_grid_charge_demand(observed_grid)["need_a"]
+        observed_rounded_need = math.ceil(observed_need / QUANTUM_A) * QUANTUM_A
         pending_a = observed_grid["pending_current_a"]
         potential_hard_safe = pending_a is None or pending_a <= cap["hard_current_cap_a"]
         potential_plan_safe = pending_a is None or pending_a <= cap["cap_a"]
-        ready = (ready and cap["grid_within_limits"] and observed["soc_valid"]
+        ready = (ready and observed_need > 0 and control.get("next_a", 0) <= observed_rounded_need
+                 and cap["grid_within_limits"] and observed["soc_valid"]
                  and not self._memory["current_policy"].get("stopped", True)
                  and potential_hard_safe and potential_plan_safe
                  and observed["soc"] < target and observed["current_a"] is not None
@@ -1172,7 +1203,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # A safe current ramp must not pulse an already enabled charger OFF for
         # ten seconds every thirty seconds. Initial enabling still requires the
         # exact requested setting to settle; continuing is a separate decision.
-        continuing = (active_gc is not None and active_gc.state == "on" and permitted and
+        continuing = (active_gc is not None and active_gc.state == "on" and permitted and observed_need > 0 and
                       not self._memory["current_policy"].get("stopped", True) and
                       potential_hard_safe and
                       observed["telemetry_valid"] and observed["soc_valid"] and

@@ -11,6 +11,9 @@ a sudden loss of PV cannot create additional charging headroom.
 ``load_w`` and ``load_phases_w`` are native LOAD measurements. Optional
 ``outside_load_w`` is additional demand outside LOAD: added once to the total
 and conservatively once to each candidate phase budget, never to measured GRID.
+Measured battery charging minus all positive native GRID import gives a
+conservative credit for local/PV surplus. It is not an exact PV-source meter.
+The current register is never treated as actual grid charging power.
 """
 from __future__ import annotations
 
@@ -21,6 +24,10 @@ ORDINARY_INTERVAL_SECONDS = 600
 ORDINARY_RETRY_BACKOFF_SECONDS = 60
 ORDINARY_DEADBAND_A = 5
 ORDINARY_MAX_STEP_A = 20
+# Measurement attribution and aggregate feedback cross independent W/V
+# sensors. These deadbands do not relax any configured current/GRID cap.
+PV_CREDIT_TOLERANCE_W = 200
+BATTERY_POWER_TOLERANCE_W = 200
 
 
 def _number(value):
@@ -41,6 +48,7 @@ def calculate_grid_charge_cap(g: dict) -> dict:
                   inverter_port_excess_w=None, connection_grid_excess_w=None,
                   inverter_port_within_limits=False,
                   hard_current_cap_a=0, feedback_cap_a=0,
+                  battery_charge_excess_a=None, pv_surplus_credit_w=None,
                   grid_excess_w=None, grid_within_limits=False,
                   phase_model="balanced" if balanced else "conservative",
                   telemetry_ok=False, reason="telemetry_invalid", power_per_a_w=0.0)
@@ -48,8 +56,10 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     loads, grids = g.get("load_phases_w"), g.get("grid_phases_w")
     port, port_load = g.get("grid_port_w"), g.get("grid_port_load_w")
     ports, port_loads = g.get("grid_port_phases_w"), g.get("grid_port_load_phases_w")
+    battery = g.get("battery_power_w")
+    battery_total = g.get("battery_total_cap_a")
     if not (g.get("telemetry_valid") is True and all(_number(v) for v in values)
-            and all(_number(v) for v in (port, port_load))
+            and all(_number(v) for v in (port, port_load, battery, battery_total))
             and _vector(loads) and _vector(grids) and _vector(ports) and _vector(port_loads)):
         return result
     load, grid, voltage, current = values
@@ -59,6 +69,7 @@ def calculate_grid_charge_cap(g: dict) -> dict:
             and -60000 <= port <= 60000 and -200 <= port_load <= 60000
             and all(-30000 <= v <= 30000 for v in ports)
             and all(-200 <= v <= 30000 for v in port_loads)
+            and -60000 <= battery <= 60000 and 0 <= battery_total <= 1000
             and 40 <= voltage <= 65 and 0 <= current <= 1000):
         return result
     total = g.get("total_limit_w", 12000)
@@ -106,10 +117,26 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     port_cap = math.floor(max(port_budget, 0) / per_amp)
     converter_cap = math.floor(min(converter_total, (3 if balanced else 1) * converter_phase) / per_amp)
     deye_cap, actuator_cap, bms_cap = (math.floor(v) for v in (deye, actuator, bms))
-    hard_cap = min(deye_cap, actuator_cap, bms_cap, converter_cap)
+    total_battery_cap = min(battery_total, bms)
+    hard_cap = min(deye_cap, actuator_cap, bms_cap, converter_cap,
+                   math.floor(total_battery_cap))
     feedback_cap = math.floor(max(current - excess / per_amp, 0)) if excess > 0 else hard_cap
+    charging_w = max(-battery, 0)
+    # Positive GRID can feed LOAD directly and free PV for the battery. Credit
+    # only charging that remains after subtracting every possible imported W,
+    # at unity conversion. Never subtract register A*V or use utility CT here.
+    pv_credit = max(charging_w - max(port, sum(ports), 0) - PV_CREDIT_TOLERANCE_W, 0)
+    # This diagnostic is actionable excess beyond the power-measurement
+    # deadband. The register's hard current caps above remain exact.
+    battery_excess_a = max(charging_w - total_battery_cap * voltage - BATTERY_POWER_TOLERANCE_W, 0) / voltage
+    if battery_excess_a > 0:
+        # A physical aggregate overcurrent authorizes reduction only. An
+        # inactive/zero register cannot acquire current from battery feedback.
+        battery_feedback = max(current - math.ceil(battery_excess_a), 0)
+        feedback_cap = min(feedback_cap, math.floor(battery_feedback))
     cap = max(0, min(hard_cap, load_cap, port_cap, feedback_cap))
     reason = ("bms_blocked" if bms < 1 else
+              "battery_charge_headroom" if battery_excess_a > 0 else
               "inverter_grid_headroom" if port_excess > grid_excess else
               "grid_headroom" if grid_excess > 0 else
               "deye_charge_cap" if deye_cap <= min(actuator_cap, bms_cap, converter_cap, load_cap, port_cap) else
@@ -123,6 +150,8 @@ def calculate_grid_charge_cap(g: dict) -> dict:
                 converter_cap_a=max(0, converter_cap),
                 inverter_port_planning_cap_a=port_cap,
                 hard_current_cap_a=max(0, hard_cap),
+                battery_charge_excess_a=round(battery_excess_a, 6),
+                pv_surplus_credit_w=round(pv_credit, 6),
                 grid_excess_w=round(excess, 6), grid_within_limits=excess == 0,
                 connection_grid_excess_w=round(grid_excess, 6),
                 inverter_port_excess_w=round(port_excess, 6),
@@ -219,7 +248,8 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
         return dict(cap, need_a=0, next_a=candidate,
                     write=change and (not same_attempt or age >= 10), safety=True,
                     reason="safety_" + cap["reason"] if change else "safety_hold",
-                    unreachable=False, gap_kwh=0, projected_soc=None)
+                    unreachable=False, gap_kwh=0, projected_soc=None,
+                    total_charge_pace_w=None, net_grid_need_w=None)
     soc, target, hours = g.get("soc"), g.get("target_soc"), g.get("remaining_h")
     capacity = g.get("capacity_kwh", 66)
     minimum = g.get("minimum_soc_percent", 40)
@@ -236,15 +266,22 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     storage_eta = g.get("charge_storage_efficiency", .95)
     power_valid = (_number(voltage) and 40 <= voltage <= 65
                    and _number(storage_eta) and .5 <= storage_eta <= 1)
-    need = math.ceil(gap * 1000 / hours / voltage / storage_eta) if allowed and power_valid else 0
-    if allowed and soc < minimum:
-        need = max(need, cap["cap_a"])
+    total_pace = gap * 1000 / hours / storage_eta if allowed and power_valid else 0
+    if allowed and power_valid and cap["telemetry_ok"] and soc < minimum:
+        # Reserve recovery requests the maximum safe TOTAL battery charge;
+        # local/PV contribution still displaces grid inside that budget.
+        total_pace = max(total_pace, min(g["battery_total_cap_a"], g["bms_cap_a"]) * voltage)
+    net_need = (max(total_pace - cap["pv_surplus_credit_w"], 0)
+                if cap["telemetry_ok"] else None)
+    need = math.ceil(net_need / voltage) if allowed and power_valid and net_need is not None else 0
     wanted = min(cap["cap_a"], need)
     projected = (min(100, soc + cap["cap_a"] * voltage / 1000 * hours * storage_eta / (capacity / 100))
                  if soc_ok and power_valid else None)
     result = dict(cap, need_a=need, next_a=current, write=False, safety=False,
                   unreachable=bool(allowed and need > cap["cap_a"]),
-                  gap_kwh=round(gap, 6), projected_soc=round(projected, 3) if projected is not None else None)
+                  gap_kwh=round(gap, 6), projected_soc=round(projected, 3) if projected is not None else None,
+                  total_charge_pace_w=round(total_pace, 6) if power_valid and soc_ok else None,
+                  net_grid_need_w=round(net_need, 6) if net_need is not None and power_valid and soc_ok else None)
     # No charge, a failed snapshot and lower load/BMS limits take precedence
     # over all time/ramp gates. Identical failed writes are retried, not flooded.
     force_zero = not allowed or need == 0 or not cap["telemetry_ok"] or not pending_ok
@@ -260,6 +297,9 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
                       reason=("pending_current_invalid" if not pending_ok else
                               "telemetry_invalid" if not cap["telemetry_ok"] else
                               "window_or_policy_blocked" if not allowed else
+                              cap["reason"] if need == 0 and gap > 0 and
+                                  (cap["cap_a"] == 0 or cap["battery_charge_excess_a"] > 0) else
+                              "pv_covers_charge_need" if need == 0 and gap > 0 and cap["pv_surplus_credit_w"] > 0 else
                               "target_reached" if need == 0 else cap["reason"]))
         return result
     history = _ordinary_history(g, now)

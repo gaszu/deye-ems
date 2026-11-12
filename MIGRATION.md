@@ -2,6 +2,10 @@
 
 Instalacja Deye EMS nie wyłącza innych regulatorów. Poniższa procedura jest ogólną instrukcją dla operatora instalacji.
 
+## Powrót z 1.0.16 do 1.0.15
+
+Zachowaj prywatną kopię ustawień i paczkę 1.0.15. Przejdź do obserwacji, potwierdź zerowy prąd sieciowy i wyłączone GC, zainstaluj 1.0.15, sprawdź konfigurację i uruchom HA ponownie. Wersja 1.0.16 nie zmienia schematu ustawień ani rejestru encji względem 1.0.15. Po sprawdzeniu pomiarów, planu i zachowania ustawień jawnie przywróć wcześniejszy tryb. W 1.0.15 pozostaje dynamiczny model prognozy, a bieżący regulator nie odejmuje jeszcze lokalnej nadwyżki od potrzeby ładowania sieciowego.
+
 ## Powrót z 1.0.15 do 1.0.14
 
 Przed aktualizacją zachowaj prywatną kopię ustawień i informację, czy dawna encja number o unique_id kończącym się `_charge_max_kw` była włączona. Wersja 1.0.15 wyłącza ją przez rejestr integracji, ale zachowuje historię i zapisaną wartość opcji.
