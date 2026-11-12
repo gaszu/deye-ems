@@ -2,6 +2,12 @@
 
 Instalacja Deye EMS nie wyłącza innych regulatorów. Poniższa procedura jest ogólną instrukcją dla operatora instalacji.
 
+## Powrót z 1.0.15 do 1.0.14
+
+Przed aktualizacją zachowaj prywatną kopię ustawień i informację, czy dawna encja number o unique_id kończącym się `_charge_max_kw` była włączona. Wersja 1.0.15 wyłącza ją przez rejestr integracji, ale zachowuje historię i zapisaną wartość opcji.
+
+Aby wrócić, przejdź do obserwacji, sprawdź zerową nastawę prądu sieci i wyłączone Grid Charge, zainstaluj 1.0.14 przez Marketplace, sprawdź konfigurację i uruchom HA ponownie. Jeżeli dawna encja była wcześniej włączona, a aktualizacja wyłączyła ją przez integrację, włącz ponownie wyłącznie tę własną encję w rejestrze HA i przeładuj wpis zgodnie z komunikatem HA. Nie przywracaj encji wyłączonej wcześniej przez użytkownika. Sprawdź ustawienia, pomiary i plan przed jawnym wznowieniem wcześniejszego trybu. W 1.0.14 zapisana wartość `charge_max_kw` ponownie uczestniczy w prognozie.
+
 ## Przygotowanie
 
 1. Zapisz odtwarzalną kopię Home Assistant oraz ustawień dotychczasowego EMS. Zachowaj ją prywatnie.

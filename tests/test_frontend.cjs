@@ -39,7 +39,7 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-14");
+  const Panel = registry.get("deye-ems-panel-1-0-15");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -61,8 +61,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-14"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.14/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-15"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.15/);
 });
 
 function apiUsage(panel,changes={}){
@@ -84,6 +84,21 @@ test("automatic Deye current ceiling is read-only and independent of the control
   assert.match(html,/ustawiony w Deye: 200 A/);
   assert.doesNotMatch(html,/data-key="grid_current_max_a"|data-save="grid_current_max_a"/);
   assert.match(html,/Moc portu GRID falownika: 4 kW/);
+  assert.equal(calls.length,0);
+});
+
+test("retired model charging power is not editable or rendered from persisted legacy options",()=>{
+  const {panel,calls}=fixture();
+  const inputKeys=()=>panel.shadowRoot.querySelectorAll("input[data-key]").map(input=>input.dataset.key);
+  for(const value of [5.3,0.1,999,"malformed"]){
+    panel.payload.options.charge_max_kw=value;panel.render();
+    assert.equal(inputKeys().includes("charge_max_kw"),false);
+    assert.equal(inputKeys().includes("discharge_max_kw"),true);
+    assert.doesNotMatch(panel.shadowRoot.innerHTML,/Modelowy limit ładowania|data-key="charge_max_kw"/);
+    assert.match(panel.shadowRoot.innerHTML,/Prognoza SoC wyznacza moc ładowania z aktualnych limitów Deye i BMS oraz napięcia baterii/);
+    assert.match(panel.shadowRoot.innerHTML,/PV i sieci korzysta ze wspólnego budżetu baterii/);
+  }
+  assert.doesNotMatch(source,/\bcharge_max_kw\b/);
   assert.equal(calls.length,0);
 });
 

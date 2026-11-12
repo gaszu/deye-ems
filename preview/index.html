@@ -10,7 +10,7 @@
   .demo label {display:block;margin-top:8px}.demo select {padding:6px 10px;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px}
 </style>
 <div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.<label>Tryb profilu w podglądzie <select id="preview-theme-mode"><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label><label>Przykładowy układ <select id="preview-topology"><option value="load_only">LOAD</option><option value="load_with_external_ct">LOAD i CT</option></select></label></div>
-<deye-ems-panel-1-0-14 id="preview"></deye-ems-panel-1-0-14>
+<deye-ems-panel-1-0-15 id="preview"></deye-ems-panel-1-0-15>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -20,7 +20,7 @@
   const deadline=night.toISOString();
   const example={entry_id:"preview-entry",appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,inverter_max_power_kw:12,reserve_margin_soc_percent:5,
-    winter_weather_soc_percent:75,charge_max_kw:5.3,topology:"load_only",
+    winter_weather_soc_percent:75,topology:"load_only",
     discharge_max_kw:10,grid_max_soc_percent:95,
     extra_loads:[]},sources:{},data:{
     solcast:{status:"ok",api_configured:true,api_enabled:true,quota:{utc:{day:new Date().toISOString().slice(0,10),used:3},limit:10}},

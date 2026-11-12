@@ -1,3 +1,11 @@
+# Wersja 1.0.15 — sprzętowy budżet ładowania w prognozie
+
+- **437 testów Python i 86 testów panelu PASS.** Niezależna pełna próba Python potwierdziła 437/437 PASS, a niezależne sprawdzenie panelu 86/86 PASS.
+- Dziewięć nowych testów planera sprawdza ignorowanie dawnego limitu 5,3 kW, niezależne limity baterii i sieci, napięcie, moc falownika, brakujące/błędne dane, rzeczywiste zero, wspólny budżet PV i sieci, bilans energii i zachowanie chronionych okien. Nieprawidłowy limit nie podnosi skonfigurowanego maksymalnego SoC w fallbacku.
+- Osiem nowych testów runtime sprawdza aktualne ograniczenia odczytane po wolnym pobraniu prognozy, dokładny ogólny limit Deye względem zaokrąglonego limitu sieci, blokadę BMS, utratę pomiarów, błędne mapowania i metadane, ignorowanie dawnej opcji oraz zachowanie pojemności i rezerwy. Sprawności AC/DC i magazynowania przekazane planerowi odpowiadają regulatorowi.
+- Testy interfejsu obejmują wyłączenie wyłącznie własnych dawnych encji number bez usuwania historii, zachowanie wcześniejszych decyzji użytkownika i brak starego pola mimo obecności dawnej opcji w konfiguracji. Parametr rozładowania pozostaje dostępny.
+- Scenariusze awarii i przekroczeń wykonano offline. Model używa prognozowanego zużycia i aktualnego limitu sprzętowego; nie przewiduje zmian BMS na 48 godzin ani rzeczywistego przyszłego obciążenia faz. Testy nie potwierdzają fizycznej reakcji falownika.
+
 # Wersja 1.0.14 — stała sekcja układu instalacji
 
 - **419 testów Python i 85 testów panelu PASS.** Niezależny przegląd ponownie uruchomił wszystkie 85 testów panelu.

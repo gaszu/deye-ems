@@ -466,7 +466,9 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         await h.co._make_plan(h.now, inputs)
         self.assertEqual(captured[0]["inverter_max_kw"], 4)
         self.assertEqual(captured[0]["grid_import_max_kw"], 12)
-        self.assertEqual(captured[0]["charge_max_kw"], 4)
+        self.assertNotIn("charge_max_kw", captured[0])
+        self.assertEqual(captured[0]["battery_charge_max_a"], 108)
+        self.assertEqual(captured[0]["grid_current_max_a"], 108)
         self.assertEqual(captured[0]["discharge_max_kw"], 4)
 
     async def test_connection_limit_above_twelve_reaches_load_controller_and_planner(self):

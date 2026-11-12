@@ -60,7 +60,6 @@
           "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "reserve_margin_soc_percent": "Dodatkowy bufor prognozy",
           "winter_weather_soc_percent": "Zimowy cel przy słabej prognozie PV",
-          "charge_max_kw": "Modelowy limit ładowania baterii",
           "discharge_max_kw": "Modelowy limit rozładowania baterii",
           "grid_max_soc_percent": "Maksymalny cel doładowania z sieci",
           "pv_forecast_mode": "Sposób interpretacji prognozy PV"

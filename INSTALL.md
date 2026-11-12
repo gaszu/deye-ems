@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 1.0.14
+# Instalacja i obsługa Deye EMS 1.0.15
 
 W sekcji „Przyłącze sieciowe” wpisz dozwolony import całej instalacji oraz jednej fazy. Są to parametry przyłącza, niezależne od mocy falownika. Zakres wynosi 1–30 kW łącznie i 0,5–15 kW na fazę. Obowiązują w LOAD i CT; w CT pomiar obejmuje również odbiory przed portem GRID. Regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Aktualizacja zachowuje dotychczasowe wartości.
 
@@ -10,14 +10,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v1.0.14**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v1.0.15**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/ha-deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-1.0.14.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.14/deye-ems-1.0.14.zip).
+1. Pobierz [deye-ems-1.0.15.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.15/deye-ems-1.0.15.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -119,6 +119,10 @@ Moc odbiorów między CT a GRID = CT − GRID. Przykład: CT0W i GRID−2000W oz
 Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRID muszą mieścić się w10s. Wymagana jest zgodność sum i faz (tolerancja większa z300W i10% sumy) oraz nieujemny bilans odbiorów między CT a GRID (do200W tolerancji). Sterowanie nie zakłada bilansowania faz CT na podstawie przełącznika dotyczącego LOAD: zwiększenia prądu stosują zachowawczy model fazowy. Tryb wymagany w tej topologii to **Zero Export To CT**; EMS nie przełącza go sam.
 
 Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga ręcznego wznowienia. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** pozostaje zawsze widoczna na głównym ekranie i opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
+
+## Automatyczna moc ładowania — od 1.0.15
+
+Nie wpisuje się już „Modelowego limitu ładowania”. Prognoza korzysta z ogólnego limitu prądu Deye, BMS, napięcia baterii i mocy falownika, ze wspólnym budżetem dla PV i sieci. Dla sieci dodatkowo obowiązują Deye−5%, zakres nastawy i dostępna moc. Przypisania niezależnego limitu Deye i sterowanej nastawy GRID pozostają rozdzielone. Dawna encja modelowego limitu jest wyłączana z zachowaniem historii; ustawienie modelowego rozładowania pozostaje osobne.
 
 ## Rezerwa SoC — dolna granica z Battery low SOC
 

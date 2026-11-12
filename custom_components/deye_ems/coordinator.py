@@ -1468,7 +1468,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                          "pv_p50_kw": point.get("p50"), "load_kw": profile[when.hour]})
         config = {key: self._options.get(key) for key in (
                     "capacity_kwh", "winter_weather_soc_percent",
-                    "charge_max_kw", "discharge_max_kw", "grid_max_soc_percent",
+                    "discharge_max_kw", "grid_max_soc_percent",
                     "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode")}
         rated = self._options.get("inverter_max_power_kw", 12)
         if self._options["topology"] == "load_with_external_ct":
@@ -1476,12 +1476,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # Hardware limits can change while slow history/PV reads are awaited.
         # They inform planning; the service path independently rechecks them.
         charging_inputs = self._read_inputs(self._now())
-        hardware_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_grid_charge_limit_a"],
-                         charging_inputs["grid_charge_actuator_max_a"]]
-        config["grid_current_max_a"] = (min(hardware_caps) if charging_inputs["telemetry_valid"]
-                                        and all(value is not None for value in hardware_caps) else 0)
+        # General Deye/BMS current limits cover PV and grid together. The
+        # grid-only register and its 95% ceiling must not cap PV a second time.
+        total_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_max_charge_current_a"]]
+        grid_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_grid_charge_limit_a"],
+                     charging_inputs["grid_charge_actuator_max_a"]]
+        valid = charging_inputs["telemetry_valid"] and charging_inputs["bms_valid"]
+        config["battery_charge_max_a"] = (min(total_caps) if valid
+                                           and all(value is not None for value in total_caps) else None)
+        config["grid_current_max_a"] = (min(grid_caps) if valid
+                                        and all(value is not None for value in grid_caps) else None)
         config["battery_voltage_v"] = charging_inputs["voltage"]
-        config["charge_max_kw"] = min(config["charge_max_kw"], rated)
+        # Match the live controller's AC/DC and stored-energy assumptions.
+        config["eta_ac_dc"] = .9
+        config["eta_charge"] = .95
         config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
         config.update({"minimum_soc_percent": self._effective_min_soc(),
                   "minimum_soc_lower_bound": self._soc_lower_bound() if self._soc_lower_bound() is not None else 40,

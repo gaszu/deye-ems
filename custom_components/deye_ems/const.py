@@ -1,6 +1,6 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "1.0.14"
+VERSION = "1.0.15"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button"]
 
 DEFAULT_OPTIONS = {
@@ -17,7 +17,6 @@ DEFAULT_OPTIONS = {
     "grid_phase_limit_kw": 5.0,
     "inverter_max_power_kw": 12.0,
     "inverter_phase_max_power_kw": 5.0,
-    "charge_max_kw": 5.3,
     "discharge_max_kw": 10.0,
     "grid_max_soc_percent": 95.0,
     "update_seconds": 10,
@@ -36,7 +35,6 @@ OPTION_RANGES = {
     "inverter_phase_max_power_kw": (.1, 500, .1, "kW"),
     "reserve_margin_soc_percent": (0, 10, 1, "%"),
     "winter_weather_soc_percent": (45, 95, 1, "%"),
-    "charge_max_kw": (.1, 12, .1, "kW"),
     "discharge_max_kw": (.1, 12, .1, "kW"),
     "grid_max_soc_percent": (45, 95, 1, "%"),
 }
@@ -52,7 +50,6 @@ OPTION_LABELS = {
     "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
     "reserve_margin_soc_percent": "Dodatkowy bufor prognozy",
     "winter_weather_soc_percent": "Zimowy cel przy słabej prognozie PV",
-    "charge_max_kw": "Modelowy limit ładowania baterii",
     "discharge_max_kw": "Modelowy limit rozładowania baterii",
     "grid_max_soc_percent": "Maksymalny cel doładowania z sieci",
 }

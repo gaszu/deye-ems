@@ -20,7 +20,8 @@ def fixture(now="2026-11-10T01:00:00+01:00", soc=75, load=.5, pv=0):
         rows.append(dict(timestamp=t.isoformat(), pv_p10_kw=pv, pv_p50_kw=pv, load_kw=load))
     return dict(now=now, soc_percent=soc, forecast=rows,
                 config={"pv_peak_kwp": 20, "pv_forecast_reference_kwp": 20,
-                        "battery_voltage_v": 54, "grid_current_max_a": 108})
+                        "battery_voltage_v": 54, "grid_current_max_a": 108,
+                        "battery_charge_max_a": 200})
 
 
 class PlannerTests(unittest.TestCase):
@@ -244,16 +245,16 @@ class PlannerTests(unittest.TestCase):
         inputs["forecast"] = []
         self.assertEqual(plan_energy(inputs)["targets"]["night"]["soc_percent"], 85)
 
-    def test_pv_charge_setting12kw_respects_live_current_times_voltage(self):
+    def test_grid_charging_respects_live_current_times_voltage(self):
         inputs = fixture(soc=40, load=.1)
-        inputs["config"].update({"charge_max_kw": 12, "grid_import_max_kw": 20})
+        inputs["config"].update({"grid_import_max_kw": 20})
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
         self.assertTrue(all(row["grid_charge_kw"] <= 54 * 108 / 1000 + 1e-9 for row in result["rows"]))
 
     def test_grid_current54amps_halves_dc_terminal_budget(self):
         inputs = fixture(soc=40, load=.1)
-        inputs["config"].update({"charge_max_kw": 12, "grid_import_max_kw": 20,
+        inputs["config"].update({"grid_import_max_kw": 20,
                                 "grid_current_max_a": 54})
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
@@ -261,7 +262,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_dynamic_limit_above108_has_no_hidden_legacy_charger_ceiling(self):
         inputs = fixture(soc=40, load=.1)
-        inputs["config"].update(charge_max_kw=12, grid_import_max_kw=30,
+        inputs["config"].update(grid_import_max_kw=30,
             grid_current_max_a=190, battery_voltage_v=54, winter_weather_soc_percent=95)
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
@@ -270,7 +271,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_current_voltage_power_and_conversion_efficiencies_apply_once(self):
         inputs = fixture(soc=40, load=.1)
-        inputs["config"].update(charge_max_kw=12, grid_import_max_kw=30,
+        inputs["config"].update(grid_import_max_kw=30,
             grid_current_max_a=100, battery_voltage_v=50, winter_weather_soc_percent=95,
             eta_charge=.95, eta_ac_dc=.9)
         first = plan_energy(inputs)["rows"][0]
@@ -288,18 +289,19 @@ class PlannerTests(unittest.TestCase):
         inputs["config"].pop("battery_voltage_v")
         self.assertEqual(plan_energy(inputs)["quality"], "invalid")
 
-    def test_model_charge_power_setting_remains_an_independent_cap(self):
-        inputs = fixture(soc=40, load=0)
+    def test_obsolete_model_charge_power_setting_cannot_override_live_limits(self):
+        inputs = fixture(soc=40, load=.1)
         inputs["config"].update(grid_current_max_a=250, battery_voltage_v=54,
             charge_max_kw=5.3, winter_weather_soc_percent=95)
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
-        self.assertTrue(all(row["grid_charge_kw"] <= 5.3 + 1e-9 for row in result["rows"]))
+        self.assertTrue(any(row["grid_charge_kw"] > 5.3 for row in result["rows"]))
+        self.assertTrue(all(row["grid_charge_kw"] <= 10.8 + 1e-9 for row in result["rows"]))
 
     def test_projected_grid_charge_reserves_house_power_inside_inverter_rating(self):
         inputs = fixture(soc=40, load=3)
         inputs["config"].update(grid_current_max_a=250, battery_voltage_v=54,
-            charge_max_kw=12, inverter_max_kw=6, grid_import_max_kw=30,
+            inverter_max_kw=6, grid_import_max_kw=30,
             winter_weather_soc_percent=95)
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
@@ -313,9 +315,9 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(result["p10"]["grid_charge_kwh"], 0)
         self.assertTrue(result["targets"]["night"]["unreachable"])
 
-    def test_high_pv_charging_can_use_its_own12kw_budget(self):
+    def test_high_pv_charging_can_use_total_budget_when_grid_charging_is_zero(self):
         inputs = fixture(now="2026-07-10T01:00:00+02:00", soc=40, load=.1, pv=15)
-        inputs["config"].update({"charge_max_kw": 12, "grid_current_max_a": 0})
+        inputs["config"].update({"battery_charge_max_a": 250, "grid_current_max_a": 0})
         result = plan_energy(inputs)
         self.assertEqual(result["p50"]["grid_charge_kwh"], 0)
         self.assertGreater(result["rows"][0]["pv_charge_kw"], 5.3)

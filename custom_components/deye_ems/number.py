@@ -7,13 +7,14 @@ from .entity import DeyeEMSEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    # Retire only this integration's former writable 108 A parameter. Keep its
-    # registry/history record, so rolling back the integration can restore it.
+    # Keep obsolete parameters' registry/history records for rollback. Retire
+    # only our own enabled entries; preserve explicit user disable decisions.
     registry = er.async_get(hass)
-    legacy_id = registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_grid_current_max_a")
-    legacy = registry.async_get(legacy_id) if legacy_id else None
-    if legacy is not None and legacy.config_entry_id == entry.entry_id and legacy.disabled_by is None:
-        registry.async_update_entity(legacy_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+    for key in ("grid_current_max_a", "charge_max_kw"):
+        legacy_id = registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_{key}")
+        legacy = registry.async_get(legacy_id) if legacy_id else None
+        if legacy is not None and legacy.config_entry_id == entry.entry_id and legacy.disabled_by is None:
+            registry.async_update_entity(legacy_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
     async_add_entities([DeyeEMSNumber(entry.runtime_data, entry, key) for key in OPTION_RANGES])
 
 

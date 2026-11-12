@@ -19,6 +19,9 @@ Optional inputs: ``soc_valid`` (runtime freshness verdict), ``retained_targets``
 DEFAULTS keys. Runtime owns entity/unit/restored/freshness checks. Optional
 ``soc_updated_at`` is checked when supplied, with a fresh same-BMS
 ``voltage_updated_at`` serving only as a communication anchor.
+Projection requires live ``battery_charge_max_a`` (total Deye/BMS ceiling),
+``grid_current_max_a`` (separate grid-only ceiling), and battery voltage.
+The obsolete fixed ``charge_max_kw`` option is ignored, including saved values.
 
 Outputs: status ok/unreachable/fallback, quality valid/invalid, generated_at,
 season, targets night/peak, central projection rows and p10/p50 metrics.
@@ -38,8 +41,9 @@ DEFAULTS = {
     "minimum_soc_percent": 40.0, "margin_soc_percent": 5.0,
     "minimum_soc_lower_bound": 40.0,
     "winter_weather_soc_percent": 75.0,
-    "grid_max_soc_percent": 95.0, "charge_max_kw": 5.3,
-    "grid_current_max_a": 0.0, "battery_voltage_v": None,
+    "grid_max_soc_percent": 95.0,
+    "battery_charge_max_a": None, "grid_current_max_a": None,
+    "battery_voltage_v": None,
     "discharge_max_kw": 10.0, "grid_import_max_kw": 12.0,
     "grid_export_max_kw": 9.0, "inverter_max_kw": 12.0,
     "eta_charge": .95, "eta_discharge": .95,
@@ -78,9 +82,9 @@ def _settings(raw, *, target_only=False):
         raise ValueError("invalid_timezone") from None
     for key in DEFAULTS:
         if key not in ("timezone", "pv_forecast_mode"):
-            if key == "battery_voltage_v" and cfg[key] is None and target_only:
-                # Fallback may choose a reserve target without inventing a
-                # measured voltage. It returns no energy projection.
+            if key in ("battery_voltage_v", "battery_charge_max_a", "grid_current_max_a") and cfg[key] is None and target_only:
+                # Fallback may choose a reserve target without inventing
+                # measured voltage/current. It returns no energy projection.
                 continue
             if key in ("pv_peak_kwp", "pv_forecast_reference_kwp"):
                 if cfg[key] is not None:
@@ -94,24 +98,33 @@ def _settings(raw, *, target_only=False):
             and cfg["minimum_soc_percent"] < cfg["grid_max_soc_percent"] <= 95
             and 0 <= cfg["margin_soc_percent"] <= 20
             and 45 <= cfg["winter_weather_soc_percent"] <= 95
-            and 0 <= cfg["grid_current_max_a"] <= 1000
+            and (target_only and cfg["battery_charge_max_a"] is None
+                 or cfg["battery_charge_max_a"] is not None and 0 <= cfg["battery_charge_max_a"] <= 1000)
+            and (target_only and cfg["grid_current_max_a"] is None
+                 or cfg["grid_current_max_a"] is not None and 0 <= cfg["grid_current_max_a"] <= 1000)
             and (target_only and cfg["battery_voltage_v"] is None
                  or cfg["battery_voltage_v"] is not None and 40 <= cfg["battery_voltage_v"] <= 65)):
         raise ValueError("invalid_soc_configuration")
     for key in ("eta_charge", "eta_discharge", "eta_ac_dc", "eta_dc_ac"):
         if not .01 <= cfg[key] <= 1:
             raise ValueError("invalid_" + key)
-    if not (0 <= cfg["charge_max_kw"] <= 100 and 0 <= cfg["discharge_max_kw"] <= 100
+    if not (0 <= cfg["discharge_max_kw"] <= 100
             and 0 < cfg["grid_import_max_kw"] <= 100
             and 0 <= cfg["grid_export_max_kw"] <= 100
             and 0 < cfg["inverter_max_kw"] <= 100):
         raise ValueError("invalid_power_configuration")
-    # The input current is the validated live limit, not a user-entered legacy
-    # ceiling. This is DC terminal power. AC/DC conversion and stored-energy
-    # efficiency are each applied exactly once in _simulate.
-    cfg["grid_charge_max_kw"] = (min(cfg["charge_max_kw"],
+    # Both current inputs are validated live limits, never the old fixed kW
+    # option. Total charging shares the Deye/BMS budget between PV and grid;
+    # the separate grid setting may impose a lower grid-only ceiling.
+    # These are DC terminal powers. Conversion and storage efficiencies are
+    # each applied exactly once in _simulate. Target-only fallback invents no
+    # measured current or voltage and returns no energy projection.
+    cfg["battery_charge_max_kw"] = (min(cfg["inverter_max_kw"],
+                                        cfg["battery_voltage_v"] * cfg["battery_charge_max_a"] / 1000)
+                                    if cfg["battery_voltage_v"] is not None and cfg["battery_charge_max_a"] is not None else 0.)
+    cfg["grid_charge_max_kw"] = (min(cfg["battery_charge_max_kw"],
                                      cfg["battery_voltage_v"] * cfg["grid_current_max_a"] / 1000)
-                                 if cfg["battery_voltage_v"] is not None else 0.)
+                                 if cfg["battery_voltage_v"] is not None and cfg["grid_current_max_a"] is not None else 0.)
     return cfg
 
 
@@ -176,7 +189,7 @@ def _prefix_need(rows, item, cfg):
         hours = max(0., min(row["epoch"] + 1800, end) - max(row["epoch"], begin)) / 3600
         deficit = row["load_kw"] / cfg["eta_dc_ac"] - row["pv_p10_kw"]
         debt += (deficit / cfg["eta_discharge"] if deficit >= 0 else
-                 -min(-deficit, cfg["charge_max_kw"]) * cfg["eta_charge"]) * hours
+                 -min(-deficit, cfg["battery_charge_max_kw"]) * cfg["eta_charge"]) * hours
         maximum = max(maximum, debt)
     return maximum
 
@@ -224,7 +237,7 @@ def _simulate(rows, now, soc, cfg, targets=None, quantile="pv_p10_kw"):
         pv = row[quantile]
         pv_load = min(row["load_kw"], pv * cfg["eta_dc_ac"], cfg["inverter_max_kw"])
         surplus = max(pv - pv_load / cfg["eta_dc_ac"], 0.)
-        pv_charge = min(surplus, cfg["charge_max_kw"],
+        pv_charge = min(surplus, cfg["battery_charge_max_kw"],
                         max(cfg["capacity_kwh"] - energy, 0.) / cfg["eta_charge"] / hours)
         energy += pv_charge * cfg["eta_charge"] * hours
         deficit = max(row["load_kw"] - pv_load, 0.)
@@ -238,7 +251,7 @@ def _simulate(rows, now, soc, cfg, targets=None, quantile="pv_p10_kw"):
             remaining = (forthcoming["at"].timestamp() - ts) / 3600
             paced = max(threshold - energy, 0.) / cfg["eta_charge"] / remaining
             grid_charge = min(paced, cfg["grid_charge_max_kw"],
-                              max(cfg["charge_max_kw"] - pv_charge, 0.),
+                              max(cfg["battery_charge_max_kw"] - pv_charge, 0.),
                               max(cfg["grid_import_max_kw"] - grid_load, 0.) * cfg["eta_ac_dc"],
                               max(cfg["inverter_max_kw"] - grid_load, 0.) * cfg["eta_ac_dc"])
             energy += grid_charge * cfg["eta_charge"] * hours
@@ -396,6 +409,7 @@ def plan_energy(inputs: dict) -> dict:
                 for name, lo, hi in (("minimum_soc_percent", 5, 90),
                                      ("minimum_soc_lower_bound", 5, 90),
                                      ("winter_weather_soc_percent", 45, 95),
+                                     ("grid_max_soc_percent", 45, 95),
                                      ("margin_soc_percent", 0, 20),
                                      ("pv_peak_kwp", .1, 1000),
                                      ("pv_forecast_reference_kwp", .1, 1000)):
