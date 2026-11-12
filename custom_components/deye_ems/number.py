@@ -1,11 +1,19 @@
 """Persistent, UI-editable engine parameters, including a fixed safety SoC."""
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import EntityCategory
-from .const import DEFAULT_OPTIONS, OPTION_LABELS, OPTION_RANGES
+from homeassistant.helpers import entity_registry as er
+from .const import DOMAIN, DEFAULT_OPTIONS, OPTION_LABELS, OPTION_RANGES
 from .entity import DeyeEMSEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    # Retire only this integration's former writable 108 A parameter. Keep its
+    # registry/history record, so rolling back the integration can restore it.
+    registry = er.async_get(hass)
+    legacy_id = registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_grid_current_max_a")
+    legacy = registry.async_get(legacy_id) if legacy_id else None
+    if legacy is not None and legacy.config_entry_id == entry.entry_id and legacy.disabled_by is None:
+        registry.async_update_entity(legacy_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
     async_add_entities([DeyeEMSNumber(entry.runtime_data, entry, key) for key in OPTION_RANGES])
 
 

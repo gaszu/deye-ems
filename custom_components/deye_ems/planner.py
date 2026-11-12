@@ -39,7 +39,7 @@ DEFAULTS = {
     "minimum_soc_lower_bound": 40.0,
     "winter_weather_soc_percent": 75.0,
     "grid_max_soc_percent": 95.0, "charge_max_kw": 5.3,
-    "grid_current_max_a": 108.0,
+    "grid_current_max_a": 0.0, "battery_voltage_v": None,
     "discharge_max_kw": 10.0, "grid_import_max_kw": 12.0,
     "grid_export_max_kw": 9.0, "inverter_max_kw": 12.0,
     "eta_charge": .95, "eta_discharge": .95,
@@ -68,7 +68,7 @@ def _time(value, zone):
         raise ValueError("invalid_aware_timestamp") from None
 
 
-def _settings(raw):
+def _settings(raw, *, target_only=False):
     if not isinstance(raw, dict):
         raise ValueError("invalid_config")
     cfg = dict(DEFAULTS, **{k: v for k, v in raw.items() if k in DEFAULTS})
@@ -78,6 +78,10 @@ def _settings(raw):
         raise ValueError("invalid_timezone") from None
     for key in DEFAULTS:
         if key not in ("timezone", "pv_forecast_mode"):
+            if key == "battery_voltage_v" and cfg[key] is None and target_only:
+                # Fallback may choose a reserve target without inventing a
+                # measured voltage. It returns no energy projection.
+                continue
             if key in ("pv_peak_kwp", "pv_forecast_reference_kwp"):
                 if cfg[key] is not None:
                     cfg[key] = _value(cfg[key], key, .1, 1000)
@@ -90,7 +94,9 @@ def _settings(raw):
             and cfg["minimum_soc_percent"] < cfg["grid_max_soc_percent"] <= 95
             and 0 <= cfg["margin_soc_percent"] <= 20
             and 45 <= cfg["winter_weather_soc_percent"] <= 95
-            and 0 <= cfg["grid_current_max_a"] <= 108):
+            and 0 <= cfg["grid_current_max_a"] <= 1000
+            and (target_only and cfg["battery_voltage_v"] is None
+                 or cfg["battery_voltage_v"] is not None and 40 <= cfg["battery_voltage_v"] <= 65)):
         raise ValueError("invalid_soc_configuration")
     for key in ("eta_charge", "eta_discharge", "eta_ac_dc", "eta_dc_ac"):
         if not .01 <= cfg[key] <= 1:
@@ -100,9 +106,12 @@ def _settings(raw):
             and 0 <= cfg["grid_export_max_kw"] <= 100
             and 0 < cfg["inverter_max_kw"] <= 100):
         raise ValueError("invalid_power_configuration")
-    # 5.3 kW/108 A is the explicitly adopted grid-charger model, not a
-    # measured conversion curve. A high PV charge limit never enlarges Grid.
-    cfg["grid_charge_max_kw"] = min(cfg["charge_max_kw"], 5.3 * cfg["grid_current_max_a"] / 108)
+    # The input current is the validated live limit, not a user-entered legacy
+    # ceiling. This is DC terminal power. AC/DC conversion and stored-energy
+    # efficiency are each applied exactly once in _simulate.
+    cfg["grid_charge_max_kw"] = (min(cfg["charge_max_kw"],
+                                     cfg["battery_voltage_v"] * cfg["grid_current_max_a"] / 1000)
+                                 if cfg["battery_voltage_v"] is not None else 0.)
     return cfg
 
 
@@ -230,7 +239,8 @@ def _simulate(rows, now, soc, cfg, targets=None, quantile="pv_p10_kw"):
             paced = max(threshold - energy, 0.) / cfg["eta_charge"] / remaining
             grid_charge = min(paced, cfg["grid_charge_max_kw"],
                               max(cfg["charge_max_kw"] - pv_charge, 0.),
-                              max(cfg["grid_import_max_kw"] - grid_load, 0.) * cfg["eta_ac_dc"])
+                              max(cfg["grid_import_max_kw"] - grid_load, 0.) * cfg["eta_ac_dc"],
+                              max(cfg["inverter_max_kw"] - grid_load, 0.) * cfg["eta_ac_dc"])
             energy += grid_charge * cfg["eta_charge"] * hours
         imported = grid_load + grid_charge / cfg["eta_ac_dc"]
         exported = min(max(surplus - pv_charge, 0.) * cfg["eta_dc_ac"],
@@ -393,7 +403,7 @@ def plan_energy(inputs: dict) -> dict:
                     if (not isinstance(value, bool) and isinstance(value, (float, int))
                             and math.isfinite(value) and lo <= value <= hi):
                         safe_config[name] = value
-            cfg = _settings(safe_config)
+            cfg = _settings(safe_config, target_only=True)
             now = _time(inputs.get("now"), cfg["zone"])
         except ValueError:
             return dict(status="fallback", quality="invalid", reason="invalid_clock",
@@ -500,7 +510,8 @@ def plan_energy(inputs: dict) -> dict:
                                  "PV serves LOAD then battery to physical100% then surplus export",
                                  "Grid charge only in cheap windows; no grid charging for export",
                                  "Phase LOAD is not forecast; live AC/phase/BMS limits and device ACK belong to the controller",
-                                 "Grid charging uses the assumed5.3kW/108A model and the configured current cap",
+                                 "Grid DC charging power uses live battery voltage times the validated dynamic current limit; AC/DC and storage efficiencies each apply once",
+                                 "Without a future native LOAD/CT-branch split, the entire forecast house demand conservatively reserves inverter GRID-import headroom",
                                  "Whole-system PV is unchanged; only explicit specific-profile mode normalizes by reference then multiplies by installed kWp; raw peak1.5x nominal is a sanity assumption",
                                  "Beyond complete24h weather coverage, winter tail uses the configured weak-PV target conservatively"])
     except (ValueError, TypeError, KeyError, OverflowError) as exc:

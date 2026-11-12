@@ -52,3 +52,12 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - Wymiana z siecią, limity importu i rejestr energii slotów używają CT. PortGRID może oddawać do CWU przyCT=0 bez eksportu do sieci. Historia zapotrzebowania dodaje różnicę zgodnych godzin CT−GRID do LOAD.
 - Wymagany trybZero Export To CT jest wybrany jawnie; dotychczasowy wariantLoad-only nadal wymagaZero Export To Load. Żadnego automatycznego przełączania trybów. Zmiana kontekstu pomiarowego unieważnia plan i pozostawia obserwację.
 - Wspólna znamionowa moc oraz limit modelowy obejmują falownik jako całość. Model rozdziela dostępny limit między PV i baterię na pełne obciążenie; nie są to dwa niezależne limity dla LOAD i CWU. EMS nie zapisuje sprzętowego ograniczenia mocy falownika.
+
+## Strojenie 1.0.13 — automatyczny limit i port GRID
+
+- Górny limit prądu ładowania z sieci to `floor(95% × Maximum Battery Charge Current)` odczytany z Deye. Nastawa Maximum Battery Grid Charge Current pozostaje wyjściem sterownika. Stałe 108 A oraz dawny ręczny parametr nie ograniczają ani nie zastępują poprawnego odczytu. BMS i zakres wyjścia nadal ograniczają wynik.
+- Import portu GRID, suma i fazy, podlega skonfigurowanej mocy falownika osobno od wymiany przyłącza na CT. Przy szacowaniu zapasu portu używany jest natywny LOAD, a przy kontroli przyłącza pełny bilans domu. Odbiory między CT a portem GRID nie są doliczane do portu drugi raz.
+- Chroniony slot blokuje ładowanie baterii z sieci i preferuje pokrywanie domu z PV/baterii w dostępnych granicach. Nie ustanawia twardego CT=0: duży odbiór między CT a portem GRID może pobierać resztę mocy bezpośrednio z sieci. Przykład25kWodbioru, GRID−12kW, CT+13kW jest dozwolony, jeśli spełniony jest niezależny limit przyłącza i pozostałe warunki. Natywny LOAD współdzieli moc wyjściową falownika z odbiorami gałęzi.
+- W prognozie bez osobnego przyszłego profilu gałęzi CT pełny dom jest traktowany zachowawczo jako obciążenie portu; może to obniżyć modelową dostępność ładowania. Bieżący regulator korzysta z oddzielnych rzeczywistych pomiarów.
+- Wymagany prąd i prognozowana energia używają aktualnego napięcia baterii oraz osobno sprawności konwersji AC/DC i magazynowania. Modelowy limit ładowania zachowuje ustawioną wartość.
+- Harmonogram zwykłych zmian o :00/:30 i histereza z wersji1.0.7 pozostają. Nowe twarde limity są sprawdzane także po zapisie rejestru próby, bezpośrednio przed poleceniem; redukcje ochronne nie czekają na harmonogram.

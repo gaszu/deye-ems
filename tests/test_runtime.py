@@ -102,8 +102,10 @@ class Harness:
                 value, unit = 10, "%"
             if key == "voltage":
                 value, unit = 54, "V"
-            if key in ("bms_charge_current", "max_charge_current_number"):
+            if key == "bms_charge_current":
                 value, unit = 108, "A"
+            if key == "max_charge_current_number":
+                value, unit = 120, "A"  # 95%=114 A; the fixture's BMS still limits108 A.
             if key == "grid_current_number":
                 value, unit = 0, "A"
             if key.startswith("tou_soc_"):
@@ -450,7 +452,11 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(g["phase_limit_w"], 5000)
         self.assertEqual(g["conversion_total_limit_w"], 4000)
         self.assertEqual(g["conversion_phase_limit_w"], 1500)
-        self.assertEqual(runtime.calculate_grid_charge_cap(g)["cap_a"], 25)
+        self.assertEqual(g["inverter_grid_import_limit_w"], 4000)
+        self.assertEqual(g["inverter_grid_phase_limit_w"], 1500)
+        # The1.5kW port phase also supplies the fixture's600W native LOAD.
+        # Its250W reserve leaves650W /60W-per-A =10A for charging.
+        self.assertEqual(runtime.calculate_grid_charge_cap(g)["cap_a"], 10)
         captured = []
         planner = h.co._planner
         def calculate(value):

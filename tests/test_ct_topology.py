@@ -27,10 +27,12 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
         h = ct_harness()
         await h.co.async_set_option("grid_import_limit_kw", 16)
         await h.co.async_set_option("grid_phase_limit_kw", 7)
-        h.set("grid_power", 13500, "W")
+        # The14kW utility import includes5kW of the passive CT branch;
+        # only9kW traverses the10kW inverter's GRID port.
+        h.set("grid_power", 9000, "W")
         h.set("ct_grid_power", 14000, "W")
         for i in (1, 2, 3):
-            h.set(f"grid_l{i}_power", 4500, "W")
+            h.set(f"grid_l{i}_power", 3000, "W")
             h.set(f"ct_grid_l{i}_power", 14000/3, "W")
         inputs = h.co._read_inputs(h.now)
         self.assertTrue(inputs["telemetry_valid"])
@@ -38,6 +40,8 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
         cap = runtime.calculate_grid_charge_cap(g)
         self.assertEqual(g["total_limit_w"], 16000)
         self.assertEqual(g["conversion_total_limit_w"], 10000)
+        self.assertEqual(g["inverter_grid_import_limit_w"], 10000)
+        self.assertTrue(cap["inverter_port_within_limits"])
         self.assertTrue(cap["grid_within_limits"])
         self.assertGreater(cap["cap_a"], 0)
         low = runtime.calculate_grid_charge_cap({**g, "total_limit_w": 10000})

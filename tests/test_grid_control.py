@@ -27,6 +27,7 @@ def snapshot(**changes):
     data = dict(now_ts=1000., winter=True, cheap_window=True,
                 emergency_allowed=False, soc_valid=True, soc=50., target_soc=75.,
                 remaining_h=4., bms_cap_a=108., telemetry_valid=True,
+                deye_cap_a=108., actuator_cap_a=240.,
                 load_w=2000., load_phases_w=[1000., 600., 400.],
                 grid_w=2000., grid_phases_w=[1000., 600., 400.],
                 battery_voltage_v=54., current_a=0.,
@@ -35,6 +36,13 @@ def snapshot(**changes):
                 ordinary_last_not_sent_ts=None, grid_charge_active=True,
                 pending_current_a=None)
     data.update(changes)
+    for native, source in (("grid_port_w", "grid_w"),
+                           ("grid_port_phases_w", "grid_phases_w"),
+                           ("grid_port_load_w", "load_w"),
+                           ("grid_port_load_phases_w", "load_phases_w")):
+        data.setdefault(native, copy.deepcopy(data[source]))
+    data.setdefault("inverter_grid_import_limit_w", 12000.)
+    data.setdefault("inverter_grid_phase_limit_w", 5000.)
     if "ordinary_last_possible_ts" not in changes:
         data["ordinary_last_possible_ts"] = data["last_attempt_ts"]
     return data
@@ -250,11 +258,11 @@ class GridChargeScenarios(unittest.TestCase):
         self.assertTrue(calculate_grid_charge(g)["write"])
 
     def test_small_need_variations_and_ordinary_downward_changes_are_bounded(self):
-        # 74->75% in 20 min needs 41 A; a 40 A setting is within the deadband.
+        # 74->75% in 20 min needs 39 A at54V and95% storage efficiency.
         g = snapshot(soc=74, target_soc=75, remaining_h=1/3,
                      current_a=40, last_attempt_a=40)
         result = calculate_grid_charge(g)
-        self.assertEqual(result["need_a"], 41)
+        self.assertEqual(result["need_a"], 39)
         self.assertFalse(result["write"])
         result = calculate_grid_charge(snapshot(current_a=60, last_attempt_a=60,
                                                 soc=74, remaining_h=1))
@@ -369,16 +377,16 @@ class GridChargeScenarios(unittest.TestCase):
         self.assertFalse(calculate_grid_charge(g)["write"])
 
     def test_five_amp_deadband_applies_in_both_directions(self):
-        # This deadline needs 14 A. Test both sides of the actual 5 A threshold.
-        for current, should_write in ((9.01, False), (9, True),
-                                      (18.99, False), (19, True)):
+        # This deadline needs 13 A. Test both sides of the actual 5 A threshold.
+        for current, should_write in ((8.01, False), (8, True),
+                                      (17.99, False), (18, True)):
             with self.subTest(current=current):
                 result = calculate_grid_charge(snapshot(
                     soc=74, remaining_h=1, current_a=current, last_attempt_a=current))
-                self.assertEqual(result["need_a"], 14)
+                self.assertEqual(result["need_a"], 13)
                 self.assertEqual(result["write"], should_write)
                 if should_write:
-                    self.assertEqual(result["next_a"], 14)
+                    self.assertEqual(result["next_a"], 13)
 
     def test_grid_clipping_to_less_than_five_amps_does_not_trigger_a_write(self):
         g = snapshot(current_a=20, last_attempt_a=20, grid_w=6500,
@@ -388,6 +396,7 @@ class GridChargeScenarios(unittest.TestCase):
         self.assertEqual(result["grid_step_headroom_a"], 3)
         self.assertEqual(result["reason"], "grid_step_headroom")
         g["grid_phases_w"] = [4450, 1100, 950]
+        g["grid_port_phases_w"] = list(g["grid_phases_w"])
         result = calculate_grid_charge(g)
         self.assertTrue(result["write"])
         self.assertEqual(result["next_a"], 25)

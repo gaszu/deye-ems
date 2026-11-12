@@ -1,17 +1,16 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-12";
+const PANEL_TAG = "deye-ems-panel-1-0-13";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
   pv_peak_kwp: "Moc paneli PV (kWp)",
   pv_forecast_reference_kwp: "Moc referencyjna profilu PV (kWp)",
-  grid_import_limit_kw: "Limit przyłącza łącznie (kW)",
+  grid_import_limit_kw: "Moc przyłącza — maksymalny pobór z sieci (kW)",
   grid_phase_limit_kw: "Limit przyłącza na fazę (kW)",
   inverter_max_power_kw: "Moc falownika łącznie (kW)",
   inverter_phase_max_power_kw: "Dopuszczalna moc na fazę (kW)",
   reserve_margin_soc_percent: "Bufor prognozy (p.p.)",
   winter_weather_soc_percent: "Zimowy cel przy słabym PV (%)",
-  grid_current_max_a: "Limit prądu z sieci (A)",
   charge_max_kw: "Modelowy limit ładowania (kW)",
   discharge_max_kw: "Modelowy limit rozładowania (kW)",
   grid_max_soc_percent: "Maksymalny cel ładowania z sieci (%)"
@@ -22,13 +21,16 @@ const ranges = {
   grid_import_limit_kw:[1,30,.1],grid_phase_limit_kw:[.5,15,.1],
   inverter_max_power_kw:[.1,1000,.1],inverter_phase_max_power_kw:[.1,500,.1],
   reserve_margin_soc_percent:[0,10,1],winter_weather_soc_percent:[45,95,1],
-  grid_current_max_a:[0,108,1],charge_max_kw:[.1,12,.1],
+  charge_max_kw:[.1,12,.1],
   discharge_max_kw:[.1,12,.1],grid_max_soc_percent:[45,95,1]
 };
 const reasons = {
   planned:"Plan gotowy", initializing:"Uruchamianie", shadow:"Obserwacja",
   telemetry_invalid:"Brak poprawnych, świeżych pomiarów",
   bms_blocked:"BMS blokuje ładowanie", grid_headroom:"Ograniczenie poborem z sieci",
+  deye_charge_cap:"Limit Deye po odjęciu 5%", actuator_cap:"Zakres nastawy ładowania w Deye",
+  inverter_grid_headroom:"Limit mocy pobieranej przez port GRID falownika",
+  inverter_grid_load_headroom:"Zapas portu GRID po zasileniu LOAD",
   load_headroom:"Priorytet zasilania domu", bms_cap:"Limit baterii / falownika",converter_cap:"Limit mocy konwersji falownika",
   ramp_up:"Stopniowe zwiększanie prądu", ramp_down:"Stopniowe zmniejszanie prądu",
   scheduled_hold:"Nastawa utrzymywana do :00 lub :30", scheduled_setpoint:"Wyliczona nastawa na bieżące pół godziny",
@@ -448,6 +450,9 @@ class DeyeEMSPanel extends HTMLElement {
     const lowerBound=numeric(o.min_soc_lower_bound),boundValid=o.min_soc_bound_valid===true&&lowerBound!==null&&lowerBound>=5&&lowerBound<=90;
     const rawFloor=numeric(o.effective_min_soc_percent)??numeric(o.min_soc_percent),floor=rawFloor!==null&&rawFloor>=5&&rawFloor<=90?rawFloor:null;
     const fresh=this.snapshotFresh(),request=fresh?c.next_a:null,readSetting=fresh&&d.inputs?.telemetry_valid===true?c.read_setting_a??d.inputs.current_a:null;
+    const deyeLimitValid=fresh&&d.inputs?.grid_charge_limit_valid===true;
+    const deyeLimit=deyeLimitValid?numeric(d.inputs.deye_grid_charge_limit_a):null;
+    const deyeSetting=deyeLimitValid?numeric(d.inputs.deye_max_charge_current_a):null;
     const ctTopology=fresh&&d.inputs?.topology==="load_with_external_ct";
     const selectedTopology=this.drafts.topology??o.topology??"load_only";
     const savedTopologyLabel=o.topology==="load_with_external_ct"?"Zero Export To CT":o.topology==="load_only"?"Zero Export To Load":"brak odczytu";
@@ -483,6 +488,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<div class="actions"><button id="mode" '+(this.busy?'disabled':'')+'>'+(active?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div>'+
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+
+      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.')+card("Limit BMS",num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A","Dopuszczalny prąd baterii.")+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu BMS, falownika i przyłącza.")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
       '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
       this.solcastUsageHtml()+
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p>'+this.solcastHtml()+'</section>'+
@@ -499,7 +505,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.12.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.13.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
     if(details)details.open=detailsOpen;
     this.bindLoads();

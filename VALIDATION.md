@@ -1,3 +1,13 @@
+# Wersja 1.0.13 — dynamiczny limit i port GRID
+
+- **419 testów Python i77 testów panelu PASS.** Dodano12scenariuszy pure,17runtime,6planera,3interfejsu encji i2panelu. Pozostałe scenariusze zachowują regresje harmonogramu, histerezy, trwałego rejestru i sterowania GC.
+- Sprawdzono przekroczenie dawnego108A przy poprawnym limicie, niezależne ograniczenia Deye/BMS/zakresu encji, nieprawidłowe odczyty i metadane, stare ustawienie przy bieżącej komunikacji, utratę pomiarów oraz błędne przypisanie limitu do sterowanego wyjścia.
+- Ograniczenie portu GRID działa przy wolnym przyłączu CT, w przeciążeniu jednej fazy, przed włączeniem GC i po zmianie limitu podczas zapisu Store. Testy obejmują też oczekującą wyższą nastawę i brak fikcyjnego potwierdzenia przez przyjęcie usługi.
+- Dodatkowe regresje runtime i planera potwierdzają25kWgałęzi między CT a GRID:12kWz falownika oraz13kWbezpośrednio z sieci w chronionym slocie przy odpowiednim przyłączu. GC pozostaje OFF, import CT jest prawidłowy, a zużycie nie jest obcinane do mocy falownika.
+- Losowe300zestawów limitów potwierdza nieprzekraczanie limitów prądu i proaktywnego budżetu portu. Przeliczenia napięcia/sprawności testowane są oddzielnie; modelowy parametr mocy ładowania jest zachowany.
+- Migracja wyłącza tylko własną dawną encję number, nie usuwa jej historii i zachowuje wcześniejsze wyłączenie użytkownika. Sensor i panel pokazują brak danych zamiast108A lub fikcyjnego zera.
+- Testy awarii wykonano offline z atrapami usług. Nie wywoływano przeciążenia ani błędu BMS na produkcji. Sprawdzenia oprogramowania nie potwierdzają fizycznej reakcji falownika.
+
 # Wersja 1.0.12 — komunikat instalacyjny
 
 - 381 testów Python i75 testów panelu PASS. Istniejące sprawdzenia obejmują pierwszy krok konfiguracji, rejestrację panelu z dostępem administratora oraz zgodność wersji panelu z integracją.

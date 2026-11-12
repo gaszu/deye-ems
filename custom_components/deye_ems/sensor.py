@@ -11,6 +11,7 @@ DESCRIPTIONS = (
     ("peak_soc", "Modelowy cel SoC popołudnie", "%"),
     ("selected_soc", "Wybrany cel SoC", "%"),
     ("charge_cap", "Dostępny prąd ładowania", "A"),
+    ("deye_grid_charge_limit", "Automatyczny limit ładowania z sieci", "A"),
     ("charge_request", "Żądany prąd ładowania", "A"),
     ("decision_reason", "Przyczyna regulacji", None),
 )
@@ -31,6 +32,11 @@ class DeyeEMSSensor(DeyeEMSEntity, SensorEntity):
         self._attr_icon = "mdi:solar-power"
 
     @property
+    def available(self):
+        return super().available and (self.key != "deye_grid_charge_limit" or
+                                      self.snapshot.get("inputs", {}).get("grid_charge_limit_valid") is True)
+
+    @property
     def native_value(self):
         plan, control = self.snapshot.get("plan", {}), self.snapshot.get("control", {})
         if self.key == "status":
@@ -41,6 +47,9 @@ class DeyeEMSSensor(DeyeEMSEntity, SensorEntity):
             return plan.get("targets", {}).get("night" if self.key == "night_soc" else "peak", {}).get("soc_percent")
         if self.key == "charge_cap":
             return control.get("cap_a")
+        if self.key == "deye_grid_charge_limit":
+            inputs = self.snapshot.get("inputs", {})
+            return inputs.get("deye_grid_charge_limit_a") if inputs.get("grid_charge_limit_valid") else None
         if self.key == "selected_soc":
             return control.get("target_soc")
         if self.key == "charge_request":
@@ -49,6 +58,10 @@ class DeyeEMSSensor(DeyeEMSEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
+        if self.key == "deye_grid_charge_limit":
+            inputs = self.snapshot.get("inputs", {})
+            return {"deye_max_charge_current_a": inputs.get("deye_max_charge_current_a"),
+                    "fraction": 0.95, "source_entity": self.coordinator.options.get("sources", {}).get("max_charge_current_number")}
         if self.key == "plan":
             p = self.snapshot.get("plan", {})
             return {key: p[key] for key in ("generated_at", "quality", "reason", "source", "season", "targets") if key in p}

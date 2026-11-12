@@ -496,6 +496,32 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return None
         return value
 
+    def _grid_charge_setting_limits(self, now, *, deye_live):
+        """Read the independent Deye limit; never use the controlled setpoint.
+
+        Number settings can be latched for hours. Their availability, units and
+        report timestamp are checked, while native GRID and LOAD powers from
+        the same inverter must establish current communication independently.
+        Broad HA number ranges are only API limits, not hardware authority.
+        """
+        deye = self._measurement("max_charge_current_number", now, unit="A", low=0, high=1000)
+        distinct = (self._sources.get("max_charge_current_number")
+                    and self._sources.get("max_charge_current_number") != self._sources.get("grid_current_number"))
+        deye_cap = math.floor(deye * 95 / 100) if deye is not None and distinct and deye_live else None
+        actuator = self._state("grid_current_number")
+        actuator_cap = None
+        if deye_cap is not None and actuator is not None:
+            if "max" not in actuator.attributes:
+                actuator_cap = deye_cap
+            else:
+                maximum = _number(actuator.attributes["max"])
+                if maximum is not None and maximum >= 0:
+                    actuator_cap = min(deye_cap, math.floor(maximum))
+        return {"deye_max_charge_current_a": deye,
+                "deye_grid_charge_limit_a": deye_cap,
+                "grid_charge_actuator_max_a": actuator_cap,
+                "grid_charge_limit_valid": deye_cap is not None and actuator_cap is not None}
+
     def _read_inputs(self, now):
         voltage = self._measurement("voltage", now, unit="V", age=120, low=40, high=65)
         soc = self._measurement("soc", now, unit="%", low=0, high=100)
@@ -513,25 +539,32 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # ESPHome can publish this latched flag only on change. Its available,
         # non-restored setting is anchored by the same BMS's live voltage.
         block = self._measurement("bms_blocking_charge", now, low=0, high=1000)
-        deye = self._measurement("max_charge_current_number", now, unit="A", low=0, high=1000)
-        bms_valid = voltage is not None and None not in (charge, block, deye)
-        cap = min(108, self._options["grid_current_max_a"], charge, deye) if bms_valid and block == 0 else 0
+        bms_valid = voltage is not None and None not in (charge, block)
+        cap = charge if bms_valid and block == 0 else 0
         current = self._measurement("grid_current_number", now, unit="A", low=0, high=1000)
         battery = self._measurement("battery_power", now, unit="W", age=30, low=-60000, high=60000)
         raw_load = powers["load_power"]
+        limits = self._grid_charge_setting_limits(now, deye_live=all(v is not None for v in powers.values()))
+        limits["grid_charge_limit_valid"] = limits["grid_charge_limit_valid"] and current is not None
         inputs = {**powers, "soc": soc, "soc_valid": bool(soc_valid), "voltage": voltage,
                 "current_a": current, "bms_cap_a": cap, "bms_valid": bms_valid,
+                **limits,
                 "battery_power": battery,
                 "outside_load_w": 0, "outside_power_valid": True, "raw_load_power": raw_load,
                 "total_load_with_outside_w": raw_load,
                 "telemetry_valid": voltage is not None and current is not None and
-                bms_valid and all(v is not None for v in powers.values())}
+                bms_valid and limits["grid_charge_limit_valid"] and all(v is not None for v in powers.values())}
         inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
         inputs["topology"] = self._options["topology"]
         mode_state = self._state("work_mode")
         inputs["inverter_work_mode"] = (mode_state.state if mode_state is not None
             and not mode_state.attributes.get("restored", False) and mode_state.state not in _BAD else None)
         inputs["grid_port_power"] = powers["grid_power"]
+        # Keep the physical port and its native LOAD intact when CT replaces
+        # the public utility balance and full-house LOAD below.
+        for i in (1, 2, 3):
+            inputs[f"grid_port_l{i}_power"] = powers[f"grid_l{i}_power"]
+            inputs[f"raw_load_l{i}_power"] = powers[f"load_l{i}_power"]
         inputs["topology_error"] = None
         inputs["load_and_grid_output_w"] = None
         if self._options["topology"] == "load_with_external_ct":
@@ -1023,20 +1056,29 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "minimum_soc_lower_bound": self._soc_lower_bound(),
                 "capacity_kwh": self._options["capacity_kwh"],
                 "bms_cap_a": inputs["bms_cap_a"], "telemetry_valid": inputs["telemetry_valid"],
+                "deye_cap_a": inputs["deye_grid_charge_limit_a"],
+                "actuator_cap_a": inputs["grid_charge_actuator_max_a"],
                 "load_w": inputs["load_power"], "grid_w": inputs["grid_power"],
                 "outside_load_w": 0 if self._options["topology"] == "load_with_external_ct" else inputs["outside_load_w"],
                 "load_phases_w": [inputs[f"load_l{i}_power"] for i in (1, 2, 3)],
                 "grid_phases_w": [inputs[f"grid_l{i}_power"] for i in (1, 2, 3)],
+                "grid_port_w": inputs["grid_port_power"],
+                "grid_port_phases_w": [inputs[f"grid_port_l{i}_power"] for i in (1, 2, 3)],
+                "grid_port_load_w": inputs["raw_load_power"],
+                "grid_port_load_phases_w": [inputs[f"raw_load_l{i}_power"] for i in (1, 2, 3)],
                 "battery_voltage_v": inputs["voltage"], "current_a": inputs["current_a"],
                 "grid_charge_balanced": inputs.get("grid_charge_balanced"),
                 "last_attempt_ts": ledger.get("at", 0), "last_attempt_a": ledger.get("a", 0),
                 "total_limit_w": self._options["grid_import_limit_kw"] * 1000,
                 "phase_limit_w": self._options["grid_phase_limit_kw"] * 1000,
+                "inverter_grid_import_limit_w": self._options["inverter_max_power_kw"] * 1000,
+                "inverter_grid_phase_limit_w": self._options["inverter_phase_max_power_kw"] * 1000,
                 "conversion_total_limit_w": min(self._options.get("inverter_max_power_kw", 12),
                     self._options["combined_output_limit_kw"] if self._options["topology"] == "load_with_external_ct"
                     else self._options.get("inverter_max_power_kw", 12)) * 1000,
                 "conversion_phase_limit_w": self._options.get("inverter_phase_max_power_kw", 5) * 1000,
-                "headroom_w": 500, "phase_headroom_w": 250, "charge_efficiency": .9}
+                "headroom_w": 500, "phase_headroom_w": 250,
+                "charge_efficiency": .9, "charge_storage_efficiency": .95}
 
     def _current_policy_stable(self, now):
         policy = self._memory["current_policy"]
@@ -1425,12 +1467,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             rows.append({"timestamp": when.isoformat(), "pv_p10_kw": point.get("p10"),
                          "pv_p50_kw": point.get("p50"), "load_kw": profile[when.hour]})
         config = {key: self._options.get(key) for key in (
-                    "capacity_kwh", "winter_weather_soc_percent", "grid_current_max_a",
+                    "capacity_kwh", "winter_weather_soc_percent",
                     "charge_max_kw", "discharge_max_kw", "grid_max_soc_percent",
                     "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode")}
         rated = self._options.get("inverter_max_power_kw", 12)
         if self._options["topology"] == "load_with_external_ct":
             rated = min(rated, self._options["combined_output_limit_kw"])
+        # Hardware limits can change while slow history/PV reads are awaited.
+        # They inform planning; the service path independently rechecks them.
+        charging_inputs = self._read_inputs(self._now())
+        hardware_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_grid_charge_limit_a"],
+                         charging_inputs["grid_charge_actuator_max_a"]]
+        config["grid_current_max_a"] = (min(hardware_caps) if charging_inputs["telemetry_valid"]
+                                        and all(value is not None for value in hardware_caps) else 0)
+        config["battery_voltage_v"] = charging_inputs["voltage"]
         config["charge_max_kw"] = min(config["charge_max_kw"], rated)
         config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
         config.update({"minimum_soc_percent": self._effective_min_soc(),

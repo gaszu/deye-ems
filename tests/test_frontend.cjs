@@ -39,7 +39,7 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-12");
+  const Panel = registry.get("deye-ems-panel-1-0-13");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -61,8 +61,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-12"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.12/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-13"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.13/);
 });
 
 function apiUsage(panel,changes={}){
@@ -70,6 +70,37 @@ function apiUsage(panel,changes={}){
     quota:{limit:8,utc:{day:"2026-11-10",used:4}},...changes};
   return panel.solcastUsageHtml();
 }
+
+test("automatic Deye current ceiling is read-only and independent of the controlled setting",()=>{
+  const {panel,calls}=fixture();
+  Object.assign(panel.payload.data.inputs,{grid_charge_limit_valid:true,
+    deye_max_charge_current_a:200,deye_grid_charge_limit_a:190,grid_port_power:4000});
+  panel.payload.options.grid_current_max_a=108;
+  panel.payload.options.inverter_max_power_kw=12;
+  panel.render();
+  const html=panel.shadowRoot.innerHTML;
+  assert.match(html,/Automatyczny limit Deye −5%/);
+  assert.match(html,/>190<small>A<\/small>/);
+  assert.match(html,/ustawiony w Deye: 200 A/);
+  assert.doesNotMatch(html,/data-key="grid_current_max_a"|data-save="grid_current_max_a"/);
+  assert.match(html,/Moc portu GRID falownika: 4 kW/);
+  assert.equal(calls.length,0);
+});
+
+test("automatic Deye ceiling shows a missing value when invalid or stale",()=>{
+  const {panel}=fixture();
+  Object.assign(panel.payload.data.inputs,{grid_charge_limit_valid:false,
+    deye_max_charge_current_a:200,deye_grid_charge_limit_a:190});
+  panel.render();
+  let section=panel.shadowRoot.innerHTML.split('<h2>Ładowanie akumulatora z sieci</h2>')[1].split('</section>')[0];
+  assert.doesNotMatch(section,/>190<small>/);
+  assert.match(section,/Brak poprawnego odczytu limitu Deye/);
+  panel.payload.data.inputs.grid_charge_limit_valid=true;
+  panel.payload.data.updated_at=new Date(NOW-31000).toISOString();
+  panel.render();
+  section=panel.shadowRoot.innerHTML.split('<h2>Ładowanie akumulatora z sieci</h2>')[1].split('</section>')[0];
+  assert.doesNotMatch(section,/>190<small>/);
+});
 
 test("Solcast API usage is visible before advanced details and uses the local UTC budget",()=>{
   const {panel,calls}=fixture();apiUsage(panel);panel.render();

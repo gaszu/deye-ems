@@ -1,6 +1,6 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "1.0.12"
+VERSION = "1.0.13"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button"]
 
 DEFAULT_OPTIONS = {
@@ -17,7 +17,6 @@ DEFAULT_OPTIONS = {
     "grid_phase_limit_kw": 5.0,
     "inverter_max_power_kw": 12.0,
     "inverter_phase_max_power_kw": 5.0,
-    "grid_current_max_a": 108.0,
     "charge_max_kw": 5.3,
     "discharge_max_kw": 10.0,
     "grid_max_soc_percent": 95.0,
@@ -37,7 +36,6 @@ OPTION_RANGES = {
     "inverter_phase_max_power_kw": (.1, 500, .1, "kW"),
     "reserve_margin_soc_percent": (0, 10, 1, "%"),
     "winter_weather_soc_percent": (45, 95, 1, "%"),
-    "grid_current_max_a": (0, 108, 1, "A"),
     "charge_max_kw": (.1, 12, .1, "kW"),
     "discharge_max_kw": (.1, 12, .1, "kW"),
     "grid_max_soc_percent": (45, 95, 1, "%"),
@@ -48,13 +46,12 @@ OPTION_LABELS = {
     "capacity_kwh": "Pojemność magazynu",
     "pv_peak_kwp": "Zainstalowana moc PV",
     "pv_forecast_reference_kwp": "Moc instalacji referencyjnej prognozy",
-    "grid_import_limit_kw": "Limit importu przyłącza — łącznie",
+    "grid_import_limit_kw": "Moc przyłącza — maksymalny pobór z sieci",
     "grid_phase_limit_kw": "Limit importu przyłącza — na fazę",
     "inverter_max_power_kw": "Moc falownika — łącznie",
     "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
     "reserve_margin_soc_percent": "Dodatkowy bufor prognozy",
     "winter_weather_soc_percent": "Zimowy cel przy słabej prognozie PV",
-    "grid_current_max_a": "Maksymalny prąd ładowania z sieci",
     "charge_max_kw": "Modelowy limit ładowania baterii",
     "discharge_max_kw": "Modelowy limit rozładowania baterii",
     "grid_max_soc_percent": "Maksymalny cel doładowania z sieci",
