@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-17";
-const PANEL_VERSION = "1.0.17";
+const PANEL_TAG = "deye-ems-panel-1-0-18";
+const PANEL_VERSION = "1.0.18";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -31,9 +31,10 @@ const reasons = {
   inverter_grid_headroom:"Limit mocy pobieranej przez port GRID falownika",
   inverter_grid_load_headroom:"Zapas portu GRID po zasileniu LOAD",
   load_headroom:"Priorytet zasilania domu", bms_cap:"Limit baterii / falownika",converter_cap:"Limit mocy konwersji falownika",
+  battery_charge_headroom:"Ograniczenie łącznej mocy ładowania baterii",
   ramp_up:"Stopniowe zwiększanie prądu", ramp_down:"Stopniowe zmniejszanie prądu",
-  scheduled_hold:"Nastawa utrzymywana do :00 lub :30", scheduled_setpoint:"Wyliczona nastawa na bieżące pół godziny",
-  initial_charge_start:"Pierwszy start ładowania w tanim oknie",
+  scheduled_hold:"Oczekiwanie na dozwolony termin korekty prądu", scheduled_setpoint:"Wyliczona nastawa na bieżące pół godziny",
+  initial_charge_start:"Przygotowanie pierwszego startu ładowania w tanim oknie",
   scheduled_retry:"Ponowienie niepotwierdzonej nastawy", scheduled_deadband:"Zmiana mniejsza niż 10 A — utrzymanie nastawy",
   recovery_wait:"Oczekiwanie na 2 minuty stabilnych warunków", target_hysteresis:"Cel osiągnięty — wznowienie po spadku o 2 p.p. SoC",
   ramp_wait:"Historyczna przerwa regulacji", target_reached:"Cel SoC osiągnięty",
@@ -83,6 +84,49 @@ class DeyeEMSPanel extends HTMLElement {
   async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=this.mergeUpdateStatus(await this._hass.callWS({type:"deye_ems/command",...args}));if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
+  telemetryIssueText(){
+    const sourceNames={battery_power:"moc baterii",grid_power:"moc portu GRID",grid_l1_power:"GRID L1",grid_l2_power:"GRID L2",grid_l3_power:"GRID L3",load_power:"moc LOAD",load_l1_power:"LOAD L1",load_l2_power:"LOAD L2",load_l3_power:"LOAD L3",voltage:"napięcie baterii",bms_charge_current:"limit BMS",bms_blocking_charge:"zgoda BMS",max_charge_current_number:"limit Deye",grid_current_number:"nastawa prądu",battery_low_soc:"próg Battery low SOC",soc:"SoC baterii",reserve:"rezerwa SoC",ct_balance:"bilans CT",charge_power:"zgodność czasowa mocy",ct_grid_power:"moc CT",ct_grid_l1_power:"CT L1",ct_grid_l2_power:"CT L2",ct_grid_l3_power:"CT L3"};
+    const issueNames={missing:"brak odczytu",restored:"odczyt przywrócony",wrong_unit:"błędna jednostka",invalid:"błędny odczyt",future:"błędny czas odczytu",stale:"za stary odczyt",time_skew:"odczyty z różnych chwil",alias:"powtórzone przypisanie"};
+    const issues=this.payload?.data?.inputs?.telemetry_issues;
+    if(!Array.isArray(issues))return "";
+    const messages=issues.filter(v=>v&&typeof v==="object"&&Object.hasOwn(sourceNames,v.source)&&Object.hasOwn(issueNames,v.reason)).map(v=>sourceNames[v.source]+": "+issueNames[v.reason]);
+    return [...new Set(messages)].slice(0,3).join("; ");
+  }
+  nextCurrentChangeText(){
+    const at=updateTimestamp(this.payload?.data?.control?.next_current_change_at),now=Date.now();
+    if(at===null||at<=now||at-now>48*3600000)return "";
+    const date=new Date(at),today=new Date(now);
+    const day=d=>new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+    const clock=new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(date);
+    return day(date)===day(today)?"o "+clock:"dnia "+day(date)+" o "+clock;
+  }
+  currentStatusText(reason){
+    const p=this.payload||{},d=p.data||{},c=d.control||{},input=d.inputs||{};
+    if(p.mode!=="active")return "Tryb obserwacji — EMS nie steruje ładowaniem.";
+    if(!this.snapshotFresh())return "Brak aktualnego stanu sterowania. Oczekiwanie na świeży odczyt.";
+    const plain=String(reason).replace(/^safety_/,"");
+    const hard=new Set(["bms_blocked","hardware_mode_mismatch","owner_conflict","ownership_conflict","grid_headroom","inverter_grid_headroom","deye_charge_cap","actuator_cap","converter_cap","battery_charge_headroom"]);
+    if(hard.has(plain)&&Object.hasOwn(reasons,plain))return reasons[plain];
+    if(input.telemetry_valid!==true||c.current_hold_reason==="telemetry_invalid"){const issues=this.telemetryIssueText();return "Brak poprawnych, świeżych pomiarów."+(issues?" "+issues+".":"");}
+    const routine=new Set(["scheduled_hold","scheduled_setpoint","scheduled_retry","scheduled_deadband","initial_charge_start","recovery_wait","ramp_wait","dispatch_retry_wait","pending_readback","awaiting_readback","retry_unconfirmed","waiting_setting_readback","deadband","ramp_up","ramp_down","active","initializing"]);
+    if(!routine.has(plain))return Object.hasOwn(reasons,reason)?reasons[reason]:Object.hasOwn(reasons,plain)?reasons[plain]:"Silnik sprawdza plan i dostępne dane";
+    const rawSetting=c.read_setting_a??input.current_a;
+    const setting=typeof rawSetting==="number"&&Number.isFinite(rawSetting)&&rawSetting>=0?rawSetting:null;
+    const flag=c.grid_charge_enabled;
+    let state=flag===true?"Doładowanie baterii z sieci jest włączone." :flag===false?"Doładowanie baterii z sieci jest wyłączone.":"Brak potwierdzenia włączenia doładowania z sieci.";
+    if(setting!==null&&setting>0)state=flag===false?"Limit "+num(setting,0)+" A zapisany, doładowanie baterii z sieci jest wyłączone.":state+" Limit "+num(setting,0)+" A.";
+    const hold=c.current_hold_reason;
+    const next=this.nextCurrentChangeText();
+    if(hold==="waiting_stable_measurements"){
+      const left=c.recovery_remaining_s;
+      return state+" Oczekiwanie na stabilne pomiary"+(typeof left==="number"&&Number.isFinite(left)&&left>0&&left<=120?" — pozostało co najmniej "+Math.ceil(left)+" s.":".");
+    }
+    const notes={policy_blocked:"Ładowanie z sieci jest teraz niedozwolone.",target_reached:"Cel SoC został osiągnięty.",pv_covers_charge_need:"PV pokrywa potrzebę ładowania.",waiting_readback:"Oczekiwanie na potwierdzenie nastawy z falownika.",waiting_retry:"Oczekiwanie po poprzedniej próbie polecenia.",initial_start:"Przygotowanie pierwszego startu w tanim oknie.",ready:"Regulator może teraz zmienić prąd."};
+    if(Object.hasOwn(notes,hold))state+=" "+notes[hold];
+    if(next)return state+" Następna zmiana prądu najwcześniej "+next+".";
+    if(hold==="scheduled_regular"||plain==="scheduled_hold")return state+" Termin kolejnej zmiany prądu nie jest jeszcze potwierdzony.";
+    return state;
+  }
   kw(key){const v=this.measurement(key);return v===null?null:v/1000;}
   mergeUpdateStatus(payload){
     const previous=this.payload;
@@ -566,8 +610,7 @@ class DeyeEMSPanel extends HTMLElement {
     const card=(name,value,unit,sub)=>'<article><span class="label">'+esc(name)+'</span><strong>'+esc(value)+'<small>'+esc(unit)+'</small></strong><span class="sub">'+esc(sub||"")+'</span></article>';
     const reason=c.runtime_reason||c.reason||d.reason||d.status||"initializing";
     const owners=d.owner?.conflicts||d.owner?.blocking||d.conflicts||[];
-    const safeReason=String(reason).replace(/^safety_/,"");
-    const statusText=Object.hasOwn(reasons,reason)?reasons[reason]:Object.hasOwn(reasons,safeReason)?reasons[safeReason]:"Silnik sprawdza plan i dostępne dane";
+    const statusText=this.currentStatusText(reason);
     const solcast=d.solcast||{};
     const solcastLabels={ok:"Prognoza pobrana",cached:"Prognoza z datowanego cache",unavailable:"Brak aktualnej prognozy API",not_configured:"Połączenie nieustawione",ha_entities:"Prognoza z wybranych encji HA",disabled:"Pobieranie wyłączone"};
     const solcastStatus=Object.hasOwn(solcastLabels,solcast.status)?solcastLabels[solcast.status]:"Oczekiwanie na prognozę";
@@ -588,7 +631,7 @@ class DeyeEMSPanel extends HTMLElement {
       card("Tryb",active?"Aktywny":"Obserwacja","",active?"Sterowanie falownikiem":"Planowanie bez poleceń do falownika")+'</div>'+
       this.updatesHtml()+this.topologyHtml()+
       (!fresh?'<div class="notice warning">Brak aktualnego odczytu silnika. Pomiary wymagają aktualizacji z ostatnich 30 sekund.</div>':'')+
-      '<div class="notice">'+esc(statusText)+(active?'':' · Obliczenia bez poleceń do falownika.')+'</div>'+
+      '<div class="notice">'+esc(statusText)+'</div>'+
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
       ((plan.unreachable||c.unreachable)?'<div class="notice warning">Dostępna energia lub moc może nie wystarczyć do osiągnięcia celu. Limit poboru ma pierwszeństwo.</div>':'')+
       '<div class="actions"><button id="mode" '+(this.busy?'disabled':'')+'>'+(active?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div>'+

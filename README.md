@@ -4,17 +4,19 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.17
+## Instalacja wersji 1.0.18
+
+Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcześniejszy termin korekty zamiast ogólnego komunikatu o :00/:30. Termin zależy od aktualnych warunków i nie gwarantuje rozpoczęcia ładowania. Limity, rezerwa SoC i sterowanie pozostają zachowane.
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.17** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.18** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.17.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.17/deye-ems-1.0.17.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.17.md).
+Alternatywnie pobierz [deye-ems-1.0.18.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.18/deye-ems-1.0.18.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.18.md).
 
 ## Konfiguracja
 
