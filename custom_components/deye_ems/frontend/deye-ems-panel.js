@@ -1,5 +1,5 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-10";
+const PANEL_TAG = "deye-ems-panel-1-0-11";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -148,6 +148,33 @@ class DeyeEMSPanel extends HTMLElement {
     const select=this.shadowRoot.getElementById("panel-theme");
     select?.addEventListener("change",()=>{this.appearanceDraft=select.value;this.appearanceError="";this.render();});
     this.shadowRoot.getElementById("appearance-save")?.addEventListener("click",()=>this.saveAppearance());
+  }
+  solcastUsageHtml(){
+    const solcast=this.payload?.data?.solcast||{},quota=solcast.quota||{},utc=quota.utc||{};
+    const today=new Date(Date.now()).toISOString().slice(0,10),day=utc.day;
+    const validDay=typeof day==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(day)&&day===today;
+    const count=value=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0;
+    const invalidState=["invalid_quota_state","clock_moved_backwards"].includes(solcast.reason);
+    const fresh=this.snapshotFresh(),valid=fresh&&!invalidState&&validDay&&count(utc.used)&&count(quota.limit)&&quota.limit>0;
+    const used=valid?utc.used:null,limit=valid?quota.limit:null,remaining=valid?Math.max(limit-used,0):null;
+    const reset=valid?new Date(Date.parse(day+"T00:00:00Z")+86400000).toISOString():null;
+    const configured=solcast.api_configured===true,enabled=solcast.api_enabled===true;
+    const ha=solcast.status==="ha_entities";
+    const source=enabled?"Licznik klienta API EMS.":configured?
+      "Pobieranie API EMS wyłączone. Prognoza z encji HA.":ha?
+      "Prognoza z encji HA. EMS nie otrzymuje licznika zapytań tej integracji.":
+      solcast.api_configured===false||solcast.status==="not_configured"?
+      "Klient API EMS nie jest skonfigurowany.":"Licznik klienta API EMS.";
+    const missing=!fresh?"Brak aktualnego odczytu licznika.":invalidState?"Stan licznika wymaga sprawdzenia. Liczba dostępnych zapytań jest nieznana.":
+      utc.day&&utc.day!==today?"Licznik dotyczy innej doby UTC. Oczekiwanie na aktualny odczyt.":
+      "Brak danych licznika API EMS.";
+    const card=(name,value)=>'<article><span class="label">'+name+'</span><strong>'+num(value,0)+'</strong></article>';
+    return '<div class="api-usage" aria-label="Zapytania API Solcast"><h3>Zapytania API Solcast</h3><p class="legend">'+source+'</p>'+
+      '<div class="grid">'+card("Wykorzystano dziś",used)+card("Limit na dobę UTC",limit)+card("Pozostało",remaining)+'</div>'+
+      (valid?'<p class="legend">Doba UTC: '+esc(day)+' · Odnowienie limitu: '+esc(time(reset))+' (Europe/Warsaw).</p>':
+        '<p class="legend" role="status">'+missing+'</p>')+
+      (valid&&(remaining===0||solcast.reason==="daily_quota_exhausted")?'<p class="notice warning" role="status">Limit zapytań API EMS wyczerpany.</p>':'')+
+      '<p class="legend">Lokalny rejestr obejmuje próby zapytań i początkowy lub importowany stan wykorzystania. To nie licznik udanych pobrań ani odczyt wykorzystania całego konta Solcast. Zapytania innych klientów nie są tu automatycznie doliczane.</p></div>';
   }
   clearSolcastSecret(){
     this.solcastSecret="";
@@ -430,7 +457,7 @@ class DeyeEMSPanel extends HTMLElement {
     const owners=d.owner?.conflicts||d.owner?.blocking||d.conflicts||[];
     const safeReason=String(reason).replace(/^safety_/,"");
     const statusText=Object.hasOwn(reasons,reason)?reasons[reason]:Object.hasOwn(reasons,safeReason)?reasons[safeReason]:"Silnik sprawdza plan i dostępne dane";
-    const solcast=d.solcast||{},quota=solcast.quota||{};
+    const solcast=d.solcast||{};
     const solcastLabels={ok:"Prognoza pobrana",cached:"Prognoza z datowanego cache",unavailable:"Brak aktualnej prognozy API",not_configured:"Połączenie nieustawione",ha_entities:"Prognoza z wybranych encji HA",disabled:"Pobieranie wyłączone"};
     const solcastStatus=Object.hasOwn(solcastLabels,solcast.status)?solcastLabels[solcast.status]:"Oczekiwanie na prognozę";
     const sourceNames={own_plan:"bieżący plan",dated_cache:"ostatni poprawny plan",dated_cache_with_retained_raise:"plan z dodatkowym zapasem",unreachable_plan_raise:"podwyższony zapas",winter_fallback:"zapas na zimę",summer_emergency_fallback:"awaryjne doładowanie",own_deterministic_planner:"bieżący plan"};
@@ -457,7 +484,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+
       '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
-      (numeric(quota.utc?.used)!==null?'<p class="legend">Zapytania dziś (UTC): '+num(quota.utc.used,0)+' / '+num(quota.limit,0)+'</p>':'')+
+      this.solcastUsageHtml()+
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p>'+this.solcastHtml()+'</section>'+
       '<section><h2>Przyłącze sieciowe</h2><div class="fields">'+basicField("grid_import_limit_kw","Zapisz limit łączny")+basicField("grid_phase_limit_kw","Zapisz limit fazowy")+'</div><p class="legend">Maksymalny dozwolony pobór całej instalacji z sieci, niezależny od mocy falownika. Obowiązuje w LOAD i CT. W CT obejmuje również odbiory między przyłączem a portem GRID. Wpisz limity swojego przyłącza; regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Moc falownika, limit ładowarki i BMS pozostają osobnymi ograniczeniami.</p></section>'+
       this.loadsHtml()+
@@ -472,7 +499,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.10.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.11.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
     if(details)details.open=detailsOpen;
     this.bindLoads();

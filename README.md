@@ -4,17 +4,17 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.10
+## Instalacja wersji 1.0.11
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.10** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.11** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.10.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.10/deye-ems-1.0.10.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.10.md).
+Alternatywnie pobierz [deye-ems-1.0.11.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.11/deye-ems-1.0.11.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.11.md).
 
 ## Konfiguracja
 
@@ -47,6 +47,8 @@ Import z `solcast_solar` kopiuje dostępne ustawienia i **bieżący snapshot kal
 Korekty importowane do EMS dotyczą wyłącznie surowych odpowiedzi własnego API. Prognozy z encji HA nie są korygowane ponownie. Tryb **prognoza całej instalacji** używa wartości 1:1; moc kWp nie skaluje ich drugi raz. Osobny tryb profilu referencyjnego skaluje przez stosunek mocy zainstalowanej do referencyjnej.
 
 Limit zapytań jest rozliczany dla całego konta według **doby UTC**. Każda instalacja wymaga oddzielnego zapytania; wykrywanie i nieudane próby również mogą zużyć limit. Rejestr próby jest utrwalany przed HTTP. Restart, zapis ustawień i zmiana źródła nie zerują wykorzystania. Początkowe zużycie może podnieść zapisany licznik, nigdy go obniżyć. Przy nieznanym zużyciu pozostaw pełny limit doby; domyślnie jest to 10. Unikaj równoległego odpytywania konta przez kilku klientów.
+
+Panel pokazuje **Wykorzystano / Limit / Pozostało** dla lokalnego licznika API klienta EMS oraz czas odnowienia doby UTC przeliczony na Warszawę. Licznik obejmuje zarezerwowane próby, również błędy i zaimportowane wykorzystanie; nie jest licznikiem udanych pobrań ani odczytem całego konta Solcast. Dla źródła z encji HA, wyłączonego klienta, brakujących lub nieaktualnych danych panel pokazuje wyjaśnienie zamiast domyślnych zer. Odczyt panelu nie wykonuje dodatkowych zapytań Solcast.
 
 ## Plan i regulacja
 

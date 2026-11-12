@@ -1,3 +1,9 @@
+# Wersja 1.0.11 — licznik API Solcast
+
+- **381 testów Python i 75 testów panelu PASS.** Trzy testy statusu sprawdzają rozróżnienie włączonego/wyłączonego/nieskonfigurowanego klienta, brak klucza w statusie, zachowanie rejestru i brak dodatkowych HTTP oraz usług urządzeń przy odczycie.
+- Siedem testów interfejsu obejmuje widoczność kart, aktualny limit i pozostałe próby, rzeczywiste zero, przekroczenie limitu, błędy API z prawidłowym licznikiem, uszkodzone lub brakujące dane, stary odczyt i inną dobę UTC. Reset jest formatowany w Europe/Warsaw, z godziną01 zimą i02 latem.
+- Licznik dotyczy lokalnie zarejestrowanych prób klienta EMS, wraz z importem i błędami. Testy nie potwierdzają stanu wykorzystania całego konta Solcast przez inne aplikacje ani fizycznej reakcji falownika. Regulator i polityka zapytań nie zostały zmienione.
+
 # Wersja 1.0.9 — sprawdzenia offline
 
 - 378 testów Python i 68 testów panelu PASS. Limit przyłącza 16 kW przy falowniku 10 kW jest zapisywany i przekazywany do regulatora oraz planera; ograniczenie mocy falownika pozostaje niezależne. Porównanie CT przy 14 kW potwierdza różną decyzję dla przyłącza 10 i 16 kW.

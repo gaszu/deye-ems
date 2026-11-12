@@ -1671,6 +1671,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "profiles": deepcopy(self._memory["load_profiles"]),
                     "effective_loads": self.effective_loads, "loads_revision": self.loads_revision,
                     "planning": self._plan_task is not None and not self._plan_task.done(),
-                    "solcast": self._redact(self._solcast_status),
+                    "solcast": {**self._redact(self._solcast_status),
+                        "api_configured": bool(self._options.get("solcast", {}).get("api_key")),
+                        "api_enabled": self._solcast_configured()},
                     "settings": self.options, "sources": dict(self._sources),
                     "updated_at": now.isoformat(), "physical_confirmation": False}

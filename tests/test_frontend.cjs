@@ -31,15 +31,15 @@ class FakeShadow {
   querySelectorAll(selector) {const data=/^\[data-([a-z-]+)\]$/.exec(selector)?.[1];if(data){const key=data.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());return this.nodes.filter(n=>n.dataset[key]!==undefined);}return this.nodes.filter(n=>selector==="input[data-key]"&&n.attrs.tag==="input"&&n.dataset.key!==undefined);}
 }
 
-function fixture(previousElements = []) {
+function fixture(previousElements = [], now = NOW) {
   const registry = new Map(previousElements);
   class HTMLElement {constructor(){this.style=new FakeStyle();}attachShadow(){this.shadowRoot=new FakeShadow();return this.shadowRoot;}}
-  class ClockDate extends Date {static now(){return NOW;}}
+  class ClockDate extends Date {static now(){return now;}}
   const context = vm.createContext({HTMLElement,Date:ClockDate,console,
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-10");
+  const Panel = registry.get("deye-ems-panel-1-0-11");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -56,12 +56,112 @@ function fixture(previousElements = []) {
 
 test("an existing browser session registers the updated panel alongside the old element",()=>{
   class LegacyPanel {}
-  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel]]);
+  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel],["deye-ems-panel-1-0-10",LegacyPanel]]);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.10/);
+  assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-11"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.11/);
+});
+
+function apiUsage(panel,changes={}){
+  panel.payload.data.solcast={status:"ok",api_configured:true,api_enabled:true,
+    quota:{limit:8,utc:{day:"2026-11-10",used:4}},...changes};
+  return panel.solcastUsageHtml();
+}
+
+test("Solcast API usage is visible before advanced details and uses the local UTC budget",()=>{
+  const {panel,calls}=fixture();apiUsage(panel);panel.render();
+  const visible=panel.shadowRoot.innerHTML.split("<details>")[0];
+  assert.match(visible,/aria-label="Zapytania API Solcast"/);
+  assert.match(visible,/Wykorzystano dziś<\/span><strong>4<\/strong>/);
+  assert.match(visible,/Limit na dobę UTC<\/span><strong>8<\/strong>/);
+  assert.match(visible,/Pozostało<\/span><strong>4<\/strong>/);
+  assert.match(visible,/Doba UTC: 2026-11-10/);
+  assert.match(visible,/Odnowienie limitu: 11\.11,?\s+01:00 \(Europe\/Warsaw\)/);
+  assert.match(visible,/Lokalny rejestr obejmuje próby zapytań/);
+  assert.match(visible,/To nie licznik udanych pobrań/);
+  assert.match(visible,/Zapytania innych klientów nie są tu automatycznie doliczane/);
+  assert.equal(calls.length,0);
+});
+
+test("Solcast API usage preserves a real zero and clamps remaining after a raised initial counter",()=>{
+  const {panel}=fixture();
+  let html=apiUsage(panel,{quota:{limit:8,utc:{day:"2026-11-10",used:0}}});
+  assert.match(html,/Wykorzystano dziś<\/span><strong>0<\/strong>/);
+  assert.match(html,/Pozostało<\/span><strong>8<\/strong>/);
+  assert.doesNotMatch(html,/Limit zapytań API EMS wyczerpany/);
+  for(const used of [8,10]){
+    html=apiUsage(panel,{reason:"daily_quota_exhausted",quota:{limit:8,utc:{day:"2026-11-10",used}}});
+    assert.match(html,new RegExp('Wykorzystano dziś</span><strong>'+used+'</strong>'));
+    assert.match(html,/Pozostało<\/span><strong>0<\/strong>/);
+    assert.match(html,/Limit zapytań API EMS wyczerpany/);
+    assert.doesNotMatch(html,/<strong>-\d/);
+  }
+});
+
+test("Solcast API usage never turns missing malformed or other-day counters into zero",()=>{
+  const {panel}=fixture();
+  const invalid=[undefined,{},null,{limit:8},
+    ...[null,true,"4",4.5,-1,Infinity,NaN].map(used=>({limit:8,utc:{day:"2026-11-10",used}})),
+    ...[null,true,"8",0,-1,8.5,Infinity].map(limit=>({limit,utc:{day:"2026-11-10",used:4}})),
+    ...[undefined,"2026-11-09","2026-11-11","2026-02-30","<img src=x onerror=alert(1)>"].map(day=>({limit:8,utc:{day,used:4}}))];
+  for(const quota of invalid){
+    const html=apiUsage(panel,{quota});
+    assert.equal((html.match(/<strong>—<\/strong>/g)||[]).length,3);
+    assert.doesNotMatch(html,/<strong>0<\/strong>|Odnowienie limitu:|<img/);
+  }
+});
+
+test("Solcast API usage rejects stale snapshots and known corrupt request history",()=>{
+  const {panel}=fixture();
+  for(const reason of ["invalid_quota_state","clock_moved_backwards"]){
+    const html=apiUsage(panel,{reason,quota:{limit:8,utc:{day:"2026-11-10",used:0}}});
+    assert.equal((html.match(/<strong>—<\/strong>/g)||[]).length,3);
+    assert.match(html,/Liczba dostępnych zapytań jest nieznana/);
+  }
+  panel.payload.data.updated_at=new Date(NOW-30001).toISOString();
+  const html=apiUsage(panel,{reason:"daily_quota_exhausted",quota:{limit:8,utc:{day:"2026-11-10",used:8}}});
+  assert.equal((html.match(/<strong>—<\/strong>/g)||[]).length,3);
+  assert.match(html,/Brak aktualnego odczytu licznika/);
+  assert.doesNotMatch(html,/Odnowienie limitu:|Limit zapytań API EMS wyczerpany/);
+  panel.payload.data.updated_at=new Date(NOW).toISOString();
+  const previousDay=apiUsage(panel,{reason:"daily_quota_exhausted",quota:{limit:8,utc:{day:"2026-11-09",used:8}}});
+  assert.match(previousDay,/Licznik dotyczy innej doby UTC/);
+  assert.doesNotMatch(previousDay,/Limit zapytań API EMS wyczerpany/);
+});
+
+test("Solcast API usage distinguishes HA forecasts disabled API and unconfigured API without guessing their counts",()=>{
+  const {panel}=fixture();
+  for(const [changes,message] of [
+    [{status:"ha_entities",api_configured:false,api_enabled:false,quota:undefined},/Prognoza z encji HA\. EMS nie otrzymuje licznika zapytań tej integracji/],
+    [{status:"ha_entities",api_configured:true,api_enabled:false,quota:undefined},/Pobieranie API EMS wyłączone\. Prognoza z encji HA/],
+    [{status:"not_configured",api_configured:false,api_enabled:false,quota:undefined},/Klient API EMS nie jest skonfigurowany/]
+  ]){
+    const html=apiUsage(panel,changes);assert.match(html,message);
+    assert.equal((html.match(/<strong>—<\/strong>/g)||[]).length,3);
+    assert.doesNotMatch(html,/<strong>0<\/strong>/);
+  }
+  const html=apiUsage(panel,{status:"unavailable",reason:"authentication_failed"});
+  assert.match(html,/Wykorzystano dziś<\/span><strong>4<\/strong>/);
+});
+
+test("Solcast UTC reset displays Polish summer time without moving the quota day",()=>{
+  const now=Date.parse("2026-07-04T23:15:00Z"),{panel}=fixture([],now);
+  panel.payload.data.updated_at=new Date(now).toISOString();
+  const html=apiUsage(panel,{quota:{limit:10,utc:{day:"2026-07-04",used:3},warsaw:{day:"2026-07-05",used:1}}});
+  assert.match(html,/Doba UTC: 2026-07-04/);
+  assert.match(html,/Odnowienie limitu: 05\.07,?\s+02:00 \(Europe\/Warsaw\)/);
+  assert.match(html,/Wykorzystano dziś<\/span><strong>3<\/strong>/);
+  assert.match(html,/Pozostało<\/span><strong>7<\/strong>/);
+});
+
+test("Solcast API usage never echoes provider fields credentials or arbitrary reason text",()=>{
+  const {panel}=fixture();
+  const html=apiUsage(panel,{api_key:"private-key-never-render",status:"<img src=x>",reason:"private-key-never-render",
+    source:"<script>private-key-never-render</script>",sites:[{resource_id:"private-site"}]});
+  assert.doesNotMatch(html,/private-key|private-site|<script|<img/);
 });
 
 test("renders four simple primary facts and leaves technical settings collapsed",()=>{
