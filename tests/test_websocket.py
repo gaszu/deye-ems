@@ -6,6 +6,7 @@ require_admin method; keep the stub limited to its actual handler interface.
 """
 import ast
 import asyncio
+from copy import deepcopy
 from functools import wraps
 import json
 from pathlib import Path
@@ -107,6 +108,7 @@ def load_module():
         "callback": lambda func: func,
         "HomeAssistantError": HomeAssistantError,
         "DATA_APPEARANCE": "deye_ems_appearance",
+        "DATA_UPDATES": "deye_ems_updates",
         "vol": SimpleNamespace(
             Required=lambda key: key, Optional=lambda key: key,
             In=lambda values: values, Any=lambda *values: values),
@@ -133,6 +135,97 @@ def coordinator():
 
 
 class WebSocketTests(unittest.IsolatedAsyncioTestCase):
+    async def test_status_exposes_running_version_and_cached_updates_without_checking(self):
+        module, _ = load_module()
+        co = coordinator()
+        hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+        cached = {"status": "available", "latest_version": "1.0.18", "checked_at": "2026-11-12T12:00:00+00:00",
+                  "retry_at": None, "reason": None,
+                  "release_url": "https://github.com/gaszu/ha-deye-ems/releases/tag/v1.0.18",
+                  "marketplace_url": "/marketplace"}
+
+        class CachedUpdates:
+            async_check = AsyncMock(side_effect=AssertionError("Polling must not query GitHub"))
+            @property
+            def status(self):
+                return deepcopy(cached)
+
+        manager = CachedUpdates()
+        hass.data[module["DATA_UPDATES"]] = manager
+        for message_id in (30, 31):
+            module["status"](hass, connection, {"id": message_id, "type": "deye_ems/status"})
+            await hass.drain()
+            payload = connection.results[-1][1]
+            self.assertEqual(payload["backend_version"], CONSTANTS["VERSION"])
+            self.assertEqual(payload["updates"], cached)
+            payload["updates"]["latest_version"] = "changed-client-copy"
+        self.assertEqual(cached["latest_version"], "1.0.18")
+        manager.async_check.assert_not_awaited()
+        for method in ("async_recalculate", "async_set_mode", "async_set_option",
+                       "async_save_load", "async_delete_load", "async_toggle_load"):
+            getattr(co, method).assert_not_awaited()
+
+    async def test_explicit_update_check_in_active_mode_does_not_touch_energy_engine(self):
+        module, _ = load_module()
+        co = coordinator()
+        co.mode = "active"
+        hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+        hass.services = SimpleNamespace(async_call=AsyncMock(side_effect=AssertionError("No hardware service")))
+        updates = SimpleNamespace(status={"status": "not_checked", "latest_version": None})
+        async def checked():
+            updates.status = {"status": "available", "latest_version": "1.0.18"}
+        updates.async_check = AsyncMock(side_effect=checked)
+        hass.data[module["DATA_UPDATES"]] = updates
+        before = deepcopy(co.options)
+        module["command"](hass, connection, {"id": 32, "type": "deye_ems/command", "command": "check_updates"})
+        await hass.drain()
+        updates.async_check.assert_awaited_once_with()
+        self.assertEqual(connection.errors, [])
+        self.assertEqual(connection.results[0][1]["updates"], updates.status)
+        self.assertEqual(connection.results[0][1]["backend_version"], CONSTANTS["VERSION"])
+        self.assertEqual(connection.results[0][1]["mode"], "active")
+        self.assertEqual(co.options, before)
+        hass.services.async_call.assert_not_awaited()
+        for method in ("async_recalculate", "async_set_mode", "async_set_option",
+                       "async_save_load", "async_delete_load", "async_toggle_load"):
+            getattr(co, method).assert_not_awaited()
+
+    async def test_update_check_missing_manager_returns_safe_error_without_engine_work(self):
+        module, _ = load_module()
+        co = coordinator()
+        hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+        module["command"](hass, connection, {"id": 33, "type": "deye_ems/command", "command": "check_updates"})
+        await hass.drain()
+        self.assertEqual(connection.results, [])
+        self.assertEqual(connection.errors, [(33, "invalid_request", "Sprawdzanie aktualizacji nie jest jeszcze dostępne. Odśwież panel.")])
+        self.assertEqual(co.mode, "shadow")
+        co.async_recalculate.assert_not_awaited()
+        co.async_set_mode.assert_not_awaited()
+        co.async_set_option.assert_not_awaited()
+
+    async def test_update_check_unexpected_failure_never_echoes_exception_or_provider_details(self):
+        module, _ = load_module()
+        co = coordinator()
+        hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+        updates = SimpleNamespace(status={"status": "not_checked"},
+            async_check=AsyncMock(side_effect=RuntimeError("private-token-provider-body-unexpected")))
+        hass.data[module["DATA_UPDATES"]] = updates
+        module["command"](hass, connection, {"id": 34, "type": "deye_ems/command", "command": "check_updates"})
+        await hass.drain()
+        self.assertEqual(connection.results, [])
+        self.assertEqual(connection.errors, [(34, "update_check_failed", "Nie udało się sprawdzić aktualizacji.")])
+        self.assertNotIn("private-token", repr(connection.errors))
+        self.assertEqual(co.mode, "shadow")
+
+    def test_missing_update_manager_is_not_an_assertion_that_software_is_current(self):
+        module, _ = load_module()
+        payload = module["_payload"](coordinator())
+        self.assertEqual(payload["backend_version"], CONSTANTS["VERSION"])
+        self.assertEqual(payload["updates"]["status"], "not_checked")
+        self.assertIsNone(payload["updates"]["latest_version"])
+        self.assertIsNone(payload["updates"]["checked_at"])
+        self.assertEqual(payload["updates"]["marketplace_url"], "/marketplace")
+
     async def test_topology_strings_pass_wire_validation_and_reach_coordinator(self):
         for value in ("load_only", "load_with_external_ct"):
             module, _ = load_module()
@@ -226,6 +319,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
                              "expected_loads_revision": "old"}),
                 ("command", {"id": 14, "type": "deye_ems/command", "command": "appearance",
                              "theme": "synthetic-night"}),
+                ("command", {"id": 15, "type": "deye_ems/command", "command": "check_updates"}),
             ):
                 with self.subTest(admin=user is not None, handler=handler, message=message["id"]):
                     module, _ = load_module()
@@ -276,7 +370,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, _ = load_module()
         co = coordinator()
         payload = module["_payload"](co)
-        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance"})
+        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance", "backend_version", "updates"})
         self.assertEqual(payload["appearance"], {"theme": ""})
         self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]) | {
             "effective_min_soc_percent", "min_soc_bound_valid", "min_soc_lower_bound"})

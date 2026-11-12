@@ -1,5 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-16";
+const PANEL_TAG = "deye-ems-panel-1-0-17";
+const PANEL_VERSION = "1.0.17";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -32,6 +33,7 @@ const reasons = {
   load_headroom:"Priorytet zasilania domu", bms_cap:"Limit baterii / falownika",converter_cap:"Limit mocy konwersji falownika",
   ramp_up:"Stopniowe zwiększanie prądu", ramp_down:"Stopniowe zmniejszanie prądu",
   scheduled_hold:"Nastawa utrzymywana do :00 lub :30", scheduled_setpoint:"Wyliczona nastawa na bieżące pół godziny",
+  initial_charge_start:"Pierwszy start ładowania w tanim oknie",
   scheduled_retry:"Ponowienie niepotwierdzonej nastawy", scheduled_deadband:"Zmiana mniejsza niż 10 A — utrzymanie nastawy",
   recovery_wait:"Oczekiwanie na 2 minuty stabilnych warunków", target_hysteresis:"Cel osiągnięty — wznowienie po spadku o 2 p.p. SoC",
   ramp_wait:"Historyczna przerwa regulacji", target_reached:"Cel SoC osiągnięty",
@@ -53,6 +55,9 @@ const esc = v => String(v ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"
 const numeric = v => (typeof v === "number" || typeof v === "string" && v.trim() !== "") && Number.isFinite(Number(v)) ? Number(v) : null;
 const num = (v,d=1) => numeric(v) === null ? "—" : numeric(v).toLocaleString("pl-PL",{maximumFractionDigits:d});
 const time = v => v && Number.isFinite(new Date(v).getTime()) ? new Date(v).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—";
+const releaseVersion = value => typeof value==="string"&&/^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})$/.test(value)?value:null;
+const compareVersions = (a,b) => {const left=a.split(".").map(Number),right=b.split(".").map(Number);for(let i=0;i<3;i++)if(left[i]!==right[i])return Math.sign(left[i]-right[i]);return 0;};
+const updateTimestamp = value => typeof value==="string"&&/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
 const solcastFields = {
   api_key:"Klucz API Solcast",resource_ids:"Identyfikatory instalacji (puste: wykrywanie)",
   poll_interval_minutes:"Odstęp pobierania (minuty)",max_requests_per_day:"Limit zapytań na dobę UTC",
@@ -70,15 +75,80 @@ const solcastMessages = {
 };
 
 class DeyeEMSPanel extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;}
+  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;}
   set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
-  disconnectedCallback(){clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);}
-  async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=payload;this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}this.render();}
-  async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=await this._hass.callWS({type:"deye_ems/command",...args});if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
+  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);}
+  async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=this.mergeUpdateStatus(payload);this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}this.render();}
+  async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=this.mergeUpdateStatus(await this._hass.callWS({type:"deye_ems/command",...args}));if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
   kw(key){const v=this.measurement(key);return v===null?null:v/1000;}
+  mergeUpdateStatus(payload){
+    const previous=this.payload;
+    if(!payload||payload.backend_version!==previous?.backend_version)return payload;
+    const oldTime=updateTimestamp(previous?.updates?.checked_at),newTime=updateTimestamp(payload.updates?.checked_at);
+    return oldTime!==null&&(newTime===null||oldTime>newTime)?{...payload,updates:previous.updates}:payload;
+  }
+  updatesRetrySeconds(){
+    const at=updateTimestamp(this.payload?.updates?.retry_at),remaining=at===null?0:at-Date.now();
+    return remaining>0&&remaining<=86400000?Math.ceil(remaining/1000):0;
+  }
+  hasUnsavedChanges(){return Boolean(this.solcastOpen||this.loadDraft||this.loadDelete||this.appearanceDraft!==null||Object.keys(this.drafts).length);}
+  async checkUpdates(){
+    const version=releaseVersion(this.payload?.backend_version);
+    if(!this._hass||this.busy||this.updatesBusy||!version||this.updatesRetrySeconds()>0)return false;
+    const request=++this.updatesSequence;this.updatesBusy=true;this.updatesError="";this.render();
+    try{
+      const response=await this._hass.callWS({type:"deye_ems/command",command:"check_updates"});
+      if(request!==this.updatesSequence)return false;
+      if(this.payload?.backend_version!==version||response?.backend_version!==version||!response.updates||typeof response.updates!=="object"||Array.isArray(response.updates)){
+        this.updatesError="Wersja HA mogła się zmienić. Odśwież panel i sprawdź ponownie.";return false;
+      }
+      // A long release check must not replace newer mode, settings or telemetry.
+      this.payload=this.mergeUpdateStatus({...this.payload,updates:response.updates});
+      return true;
+    }catch{
+      if(request===this.updatesSequence)this.updatesError="Nie udało się sprawdzić aktualizacji. Spróbuj ponownie później.";
+      return false;
+    }finally{
+      if(request===this.updatesSequence){this.updatesBusy=false;this.render();}
+    }
+  }
+  reloadInterface(){
+    if(this.busy||this.hasUnsavedChanges())return false;
+    globalThis.location?.reload();return true;
+  }
+  updatesHtml(){
+    const p=this.payload||{},u=p.updates||{},running=releaseVersion(p.backend_version),latest=releaseVersion(u.latest_version);
+    const checked=updateTimestamp(u.checked_at),knownCheck=checked!==null&&checked<=Date.now();
+    const comparison=running?compareVersions(running,PANEL_VERSION):null;
+    const mismatch=comparison!==null&&comparison!==0;
+    const pending=this.updatesBusy||u.status==="checking",retry=this.updatesRetrySeconds();
+    const good=u.stale!==true&&knownCheck&&running&&latest;
+    let message="Nie sprawdzono jeszcze dostępności aktualizacji.";
+    if(!running)message="Brak potwierdzonej wersji uruchomionej w HA. Odśwież panel lub zakończ aktualizację i restart HA.";
+    else if(pending)message="Sprawdzanie dostępnych wydań…";
+    else if(u.status==="error"||this.updatesError){
+      const errors={rate_limited:"Osiągnięto limit sprawdzania wydań. Spróbuj ponownie później.",network:"Nie udało się połączyć z serwisem wydań.",invalid_response:"Nie otrzymano poprawnej informacji o wydaniu."};
+      message=this.updatesError||(Object.hasOwn(errors,u.reason)?errors[u.reason]:"Nie udało się sprawdzić aktualizacji. Spróbuj ponownie później.");
+    }else if(good&&u.status==="available"&&compareVersions(latest,running)>0)message="Dostępna aktualizacja: "+latest+".";
+    else if(good&&u.status==="current"&&compareVersions(latest,running)===0)message="Ostatnie sprawdzenie: brak nowszego wydania.";
+    else if(good&&u.status==="ahead"&&compareVersions(latest,running)<0)message="Uruchomiona wersja HA jest nowsza niż ostatnie wydanie publiczne.";
+    const releaseLink=latest&&knownCheck?'<a href="https://github.com/gaszu/ha-deye-ems/releases/tag/v'+latest+'" target="_blank" rel="noopener noreferrer">Opis wydania '+esc(latest)+'</a>':'';
+    const warning=mismatch?'<p class="notice warning">'+(comparison>0?'Otwarta karta ma starszy interfejs niż wersja uruchomiona w HA. Odśwież interfejs.':'Interfejs jest nowszy niż wersja uruchomiona w HA. Sprawdź w Marketplace, czy po aktualizacji wymagany jest restart HA.')+'</p>':'';
+    const lastKnown=latest&&knownCheck&&(u.status==="error"||u.stale===true)?'<p class="legend">Ostatnio znane wydanie: '+esc(latest)+'. Ta informacja może być nieaktualna.</p>':'';
+    const disabled=this.busy||pending||!running||retry>0;
+    return '<section aria-label="Wersja i aktualizacje"><h2>Wersja i aktualizacje</h2><p>Uruchomiona w HA: <b>'+esc(running)+'</b> · Interfejs tej karty: <b>'+PANEL_VERSION+'</b>.</p>'+warning+
+      '<p role="status">'+esc(message)+'</p>'+lastKnown+(knownCheck?'<p class="legend">Ostatnia próba sprawdzenia: '+esc(time(u.checked_at))+(u.stale===true?' · wynik nieaktualny':'')+'.</p>':'')+
+      (retry?'<p class="legend">Ponowne sprawdzenie za '+retry+' s.</p>':'')+
+      '<div class="actions"><button id="updates-check" class="secondary" '+(disabled?'disabled':'')+'>'+(pending?'Sprawdzanie…':'Sprawdź aktualizacje')+'</button><a href="/marketplace">Otwórz Marketplace</a>'+releaseLink+
+      '<button id="updates-reload" class="secondary" '+(this.busy||this.hasUnsavedChanges()?'disabled':'')+'>Odśwież interfejs</button></div><p class="legend">Sprawdzenie odczytuje publiczne wydania GitHub. Instalację i ewentualny restart wykonuje się w Marketplace tej instancji. Przed odświeżeniem interfejsu zapisz lub anuluj edytowane zmiany.</p></section>';
+  }
+  bindUpdates(){
+    this.shadowRoot.getElementById("updates-check")?.addEventListener("click",()=>this.checkUpdates());
+    this.shadowRoot.getElementById("updates-reload")?.addEventListener("click",()=>this.reloadInterface());
+  }
   pvPriorityHtml(){
     const d=this.payload?.data,c=d?.control;
     const ready=this.snapshotFresh()&&d?.inputs?.telemetry_valid===true;
@@ -368,7 +438,7 @@ class DeyeEMSPanel extends HTMLElement {
     try{
       const payload=await this._hass.callWS({type:"deye_ems/status"});
       if(sequence!==this.solcastSequence||request!==this.requestSequence||!this.solcastOpen)return;
-      this.payload=payload;this.error="";
+      this.payload=this.mergeUpdateStatus(payload);this.error="";
       ready=this.solcastPlanReady();
     }catch{/* Reload can briefly remove the coordinator; status is retried. */}
     if(sequence!==this.solcastSequence||!this.solcastOpen)return;
@@ -516,7 +586,7 @@ class DeyeEMSPanel extends HTMLElement {
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Wybrany cel SoC",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
       card("Tryb",active?"Aktywny":"Obserwacja","",active?"Sterowanie falownikiem":"Planowanie bez poleceń do falownika")+'</div>'+
-      this.topologyHtml()+
+      this.updatesHtml()+this.topologyHtml()+
       (!fresh?'<div class="notice warning">Brak aktualnego odczytu silnika. Pomiary wymagają aktualizacji z ostatnich 30 sekund.</div>':'')+
       '<div class="notice">'+esc(statusText)+(active?'':' · Obliczenia bez poleceń do falownika.')+'</div>'+
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
@@ -541,12 +611,13 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja 1.0.16.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja '+PANEL_VERSION+'.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
     if(details)details.open=detailsOpen;
     this.bindLoads();
     this.bindSolcast();
     this.bindAppearance();
+    this.bindUpdates();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));
     this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active?"shadow":"active"}));
     this.shadowRoot.getElementById("topology")?.addEventListener("change",event=>{this.drafts.topology=event.target.value;});

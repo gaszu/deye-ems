@@ -10,6 +10,13 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - Bateria i natywny GRID mają niezależne encje, poprawne jednostki, nieprzywrócone odczyty do 30 s i rozbieżność znaczników nie większą niż 10 s. Błąd unieważnia telemetrię ładowania. Potrzeba jest ponownie sprawdzana bezpośrednio przed zwiększeniem prądu i włączeniem GC, po oczekującym zapisie rejestru próby.
 - Szacunek dotyczy nadwyżki po zasileniu odbiorów. Nie jest dokładnym licznikiem udziału źródeł; inne lokalne źródło DC również może uczestniczyć w bilansie. Obserwowany teraz wkład PV nie jest gwarancją produkcji do końca slotu. Regulator aktualizuje obliczenia z kolejnymi pomiarami.
 
+## Pierwszy start ładowania — rozszerzenie 1.0.17
+
+- Pierwsza nastawa z zera w tanim oknie może zostać wysłana poza :00/:30 po 120 s stabilnych obserwacji, przy znanej historii, bez niepotwierdzonej dodatniej nastawy i przy spełnieniu limitów oraz potrzeby ładowania. Od ostatniego możliwego polecenia nadal wymagane są 120 s, a od pewnego niewysłania 60 s.
+- Uprawnienie jest trwałe i obejmuje całe okno do terminu celu: zimowe 21:00–07:00 jest jednym oknem także przez północ i zmianę slotów TOU. Każda możliwie wysłana dodatnia nastawa zużywa uprawnienie, również zwykła korekta. Zapisy zerowe go nie odnawiają. Prepared zapis po restarcie jest traktowany zachowawczo jako potencjalnie wysłany.
+- Nieprawidłowy zapis lub niejednoznaczna historia starego wydania blokują automatyczny pierwszy start. Jawna zmiana z obserwacji do aktywnego sterowania może jednorazowo nadać brakujące uprawnienie przy znanej historii i zerowej nastawie, bez dodatniego oczekującego polecenia. Nie odnawia już zużytej ani uszkodzonej zgody.
+- Kontrola ostatniej chwili po Store ponownie potwierdza okno, zerową nastawę i uprawnienie oraz wszystkie dotychczasowe zabezpieczenia. Zmiana PV/BMS, taryfy lub odczytu nastawy może zablokować przygotowaną próbę. Następne zwykłe zwiększenia i korekty nadal wymagają :00/:30.
+
 ## Instalacja i niezależność
 
 - Instalowalna integracja Home Assistant 2026.11+, publiczny kod `gaszu/ha-deye-ems`, własne repozytorium Marketplace/HACS i paczka ZIP.

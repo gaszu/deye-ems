@@ -1,3 +1,11 @@
+# Wersja 1.0.17 — aktualizacje i pierwszy start w tanim oknie
+
+- **497 testów Python i 102 testy panelu PASS.** Niezależne sprawdzenia sekcji aktualizacji potwierdziły102testy panelu,19WebSocket i11instalacji.
+- Jedenaście nowych testów klienta wydań sprawdza brak HTTP podczas odczytu i startu, wersje, pojedyncze współdzielone pobranie, anulowanie, limit czasu i64KiB, przerwę między próbami, limity GitHub, uszkodzone odpowiedzi i brak ujawniania treści dostawcy. Publiczne API sprawdzono również z rzeczywistymi nagłówkami klienta: odpowiedź200.
+- Pięć nowych testów WebSocket potwierdza admin-only przed planowaniem zadania, działanie przy aktywnym EMS bez usług urządzeń, odczyt zapisanych danych i bezpieczne błędy. Jedenaście nowych testów panelu obejmuje różnice wersji, brak/błąd/stary wynik, bezpieczne odnośniki, ochronę niezapisanych formularzy oraz zatrzymanie EMS i zmiany konfiguracji podczas oczekującego sprawdzenia.
+- Piętnaście nowych testów pierwszego startu obejmuje pominiętą granicę czasu,120s stabilnych pomiarów, zapamiętaną zgodę całego okna, PV i restart, niepewny dziennik, niewysłanie, zmianę BMS/PV/taryfy/nastawy po Store oraz jednorazową jawną aktywację przy migracji. Zwykłe późniejsze korekty nadal respektują :00/:30.
+- Awarie i reakcje urządzeń symulowano offline. Sprawdzenie dostępnej wersji nie jest instalacją, restartem, przejęciem sterowania ani potwierdzeniem fizycznego ładowania. Wersja backendu oznacza załadowany moduł, a nie same pliki czekające na restart.
+
 # Wersja 1.0.16 — PV w bieżącej regulacji prądu
 
 - **466 testów Python i 91 testów panelu PASS.** Niezależna próba 74 testów regulatora i granicy runtime przeszła poprawnie.

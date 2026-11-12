@@ -24,7 +24,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OWNER_ENTITIES, OPTION_RANGES
 from .grid_control import (calculate_grid_charge_cap, calculate_grid_charge_increase_cap,
                            calculate_grid_charge as calculate_grid_charge_demand)
-from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready,
+from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready, initial_dispatch_ready,
                                 DEADBAND_A, QUANTUM_A)
 from .planner import plan_energy
 from .slot_meter import update_slot_measurements
@@ -93,7 +93,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "load_profiles": {}, "ledger": {}, "plan": {}, "observed_owners": {},
                         "slot_measurements": {}, "safety_raise": {},
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
-                        "grid_dispatch": {}, "current_policy": {}, "metering_context": {}, "soc_floor_guard": {}}
+                        "grid_dispatch": {}, "current_policy": {}, "initial_charge_window": {},
+                        "metering_context": {}, "soc_floor_guard": {}}
         self._last_save_ts = 0
         self._last_error = None
         # Evidence of an accepted service call, never a physical charging ACK.
@@ -180,7 +181,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 if key == "mode":
                     if saved.get(key) in ("shadow", "active"):
                         self._memory[key] = saved[key]
-                elif key == "grid_dispatch" and key in saved and not isinstance(saved[key], dict):
+                elif key in ("grid_dispatch", "initial_charge_window") and key in saved and not isinstance(saved[key], dict):
                     self._memory[key] = {"invalid": True}
                 elif isinstance(saved.get(key), dict):
                     self._memory[key] = saved[key]
@@ -188,6 +189,13 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # A restart retains the target latch, but cannot prove continuous safety.
         self._memory["current_policy"]["safe_since"] = None
         dispatch = self._memory["grid_dispatch"]
+        if (dispatch.get("outcome") in ("prepared", "accepted", "uncertain")
+                and isinstance(dispatch.get("positive_deadline"), str)):
+            at = _number(dispatch.get("attempt_at"))
+            if at is not None and at <= self._now().timestamp():
+                self._memory["initial_charge_window"] = {"version": 1,
+                    "deadline": dispatch["positive_deadline"], "at": at,
+                    "id": dispatch.get("id"), "spent": True}
         if dispatch.get("outcome") == "prepared" and self._dispatch_history(self._now())["known"]:
             # A crash may have happened after a slow Store and actual dispatch.
             # An unfinished write-ahead record cannot grant an early retry.
@@ -416,6 +424,18 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 self._preflight(retake=True)
                 self._memory["observed_owners"] = {entity: True for entity in OWNER_ENTITIES
                                                     if self.hass.states.get(entity) is not None}
+                if self.mode != "active" and self._memory["initial_charge_window"] == {}:
+                    now = self._now()
+                    inputs = self._read_inputs(now)
+                    history = self._dispatch_history(now)
+                    _, night, afternoon, deadline, _ = self._window(now)
+                    if (night or afternoon) and inputs["current_a"] == 0 and history["known"] and (
+                            history.get("upper_a") is None or history["upper_a"] == 0):
+                        # Explicit activation may grant the one missing v16
+                        # permission. Restoring an active mode never does this.
+                        self._memory["initial_charge_window"] = {"version": 1,
+                            "deadline": deadline.isoformat(), "at": now.timestamp(),
+                            "id": uuid4().hex, "spent": False}
             elif self.mode == "active" and not self._owner_conflicts():
                 # Explicit relinquishing is cleaned up while we still own the
                 # hardware. A conflict is different: never touch another owner.
@@ -768,10 +788,75 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return {"known": True, "possible_at": at, "possible_a": amps, "upper_a": upper,
                 "not_sent_at": state["not_sent_at"]}
 
+    def _initial_record_valid(self, record, now):
+        if (not isinstance(record, dict) or record.get("version") != 1
+                or not isinstance(record.get("deadline"), str)
+                or not isinstance(record.get("id"), str) or not record["id"]
+                or not isinstance(record.get("spent"), bool)
+                or _number(record.get("at")) is None
+                or not 0 <= record["at"] <= now.timestamp()):
+            return False
+        try:
+            at = datetime.fromtimestamp(record["at"], _TZ)
+            _, night, afternoon, deadline, _ = self._window(at)
+            return (night or afternoon) and record["deadline"] == deadline.isoformat()
+        except (ValueError, OverflowError, OSError):
+            return False
+
+    def _new_initial_window_proven(self, now):
+        _, night, afternoon, _, _ = self._window(now)
+        if not (night or afternoon):
+            return False
+        if afternoon:
+            begin = now.replace(hour=13, minute=0, second=0, microsecond=0)
+        else:
+            # Before07:00 the night began on the previous calendar date;
+            # its season, not today's month, determines21:00 versus22:00.
+            begin_date = now - timedelta(days=1) if now.hour < 7 else now
+            late = 21 if begin_date.month in (10, 11, 12, 1, 2, 3) else 22
+            begin = begin_date.replace(hour=late, minute=0, second=0, microsecond=0)
+        own = self._current_grid_attempt
+        if own is not None and own["outcome"] != "not_sent":
+            own = None
+        history = self._dispatch_history(now, own_attempt=own)
+        return history["known"] and (history.get("possible_at") is None or
+                                      history["possible_at"] < begin.timestamp())
+
+    def _initial_window_started(self, now):
+        record = self._memory.get("initial_charge_window")
+        if record == {}:
+            return not self._new_initial_window_proven(now)
+        if not self._initial_record_valid(record, now):
+            return True  # Malformed/future permission records fail closed.
+        if record["deadline"] == self._window(now)[3].isoformat():
+            return record["spent"]
+        return not self._new_initial_window_proven(now)
+
+    def _prepare_initial_window(self, now):
+        record = self._memory["initial_charge_window"]
+        if record != {} and not self._initial_record_valid(record, now):
+            return False
+        if record and record["deadline"] == self._window(now)[3].isoformat():
+            return False
+        if not self._new_initial_window_proven(now):
+            return False
+        self._memory["initial_charge_window"] = {"version": 1,
+            "deadline": self._window(now)[3].isoformat(), "at": now.timestamp(),
+            "id": uuid4().hex, "spent": False}
+        return True
+
     def _ordinary_dispatch_ready(self, now, *, own_attempt=None):
         history = self._dispatch_history(now, own_attempt=own_attempt)
-        return (history["known"] and dispatch_ready(now.timestamp(),
-                history.get("possible_at"), history.get("not_sent_at")))
+        if not history["known"]:
+            return False
+        if dispatch_ready(now.timestamp(), history.get("possible_at"), history.get("not_sent_at")):
+            return True
+        inputs = self._read_inputs(now)
+        target, emergency, _ = self._target(now)
+        g = self._grid_input(inputs, now, target, emergency)
+        return (initial_dispatch_ready(g) and (own_attempt is None or
+                own_attempt.get("initial_permission") is True and
+                own_attempt.get("initial_deadline") == g["policy_deadline"]))
 
     async def _service(self, entity_id, action, value=None):
         if (self._soc_lower_bound() is None and entity_id != self._sources["grid_current_number"]
@@ -816,6 +901,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 self._last_error = "last_moment_safety_direction_guard"
                 return False
             if context is not None and context["ordinary"]:
+                if (context.get("positive_deadline") is not None and
+                        context["positive_deadline"] != live_grid["policy_deadline"]):
+                    self._last_error = "last_moment_initial_window_guard"
+                    return False
+                if (context.get("initial_start") is True and
+                        (inputs["current_a"] != 0 or context.get("initial_deadline") != live_grid["policy_deadline"])):
+                    self._last_error = "last_moment_initial_start_guard"
+                    return False
                 delta = abs(value - inputs["current_a"]) if inputs["current_a"] is not None else None
                 starting_small = inputs["current_a"] == 0 and value > 0
                 if (not self._ordinary_dispatch_ready(now, own_attempt=context)
@@ -873,6 +966,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             current_attempt = self._current_grid_attempt if entity_id == self._sources["grid_current_number"] else None
             if current_attempt is not None:
                 current_attempt.update(outcome="uncertain", dispatch_at=self._now().timestamp())
+                if current_attempt.get("positive_deadline") is not None:
+                    self._memory["initial_charge_window"] = {"version": 1,
+                        "deadline": current_attempt["positive_deadline"],
+                        "at": current_attempt["dispatch_at"], "id": current_attempt["id"], "spent": True}
+                    self._memory["current_policy"]["initial_started"] = True
             await asyncio.wait_for(self.hass.services.async_call(
                 domain, action, data, blocking=True), timeout=10)
             if current_attempt is not None:
@@ -910,6 +1008,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "previous_possible_a": previous.get("possible_a"),
                 "unconfirmed_upper_a": max(value, previous.get("upper_a") or 0),
                 "previous_upper_a": previous.get("upper_a"),
+                "initial_start": current_attempt.get("initial_start", False),
+                "initial_deadline": current_attempt.get("initial_deadline"),
+                "positive_deadline": current_attempt.get("positive_deadline"),
                 "not_sent_at": previous.get("not_sent_at")}
             current_attempt.update(prepared=True, prepared_at=now_ts)
         self._memory["ledger"][entity_id] = {"at": now_ts, "a": value, "action": action}
@@ -948,8 +1049,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         now = self._now()
         if ordinary and not self._ordinary_dispatch_ready(now):
             return False
+        target, emergency, _ = self._target(now)
+        initial_grid = self._grid_input(before, now, target, emergency)
+        initial = ordinary and before["current_a"] == 0 and not self._initial_window_started(now)
         context = {"id": uuid4().hex, "ordinary": ordinary, "outcome": "not_sent", "prepared": False,
-                   "previous": self._dispatch_history(now)}
+                   "previous": self._dispatch_history(now),
+                   "initial_start": initial, "initial_permission": initial_dispatch_ready(initial_grid),
+                   "initial_deadline": initial_grid["policy_deadline"] if initial else None,
+                   "positive_deadline": initial_grid["policy_deadline"] if value > 0 and initial_grid["cheap_window"] else None}
         if value <= 0:
             self._pending_grid_reduction = None
         self._current_grid_attempt = context
@@ -1063,9 +1170,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         gc_report = _stamp(getattr(gc, "last_reported", None) or getattr(gc, "last_updated", None))
         charging = (gc is not None and gc.state == "on" and not gc.attributes.get("restored", False)
                     and gc_report is not None and gc_report <= now.timestamp() and inputs["telemetry_valid"])
+        initial_started = self._initial_window_started(now)
+        policy = {**self._memory["current_policy"], "initial_started": initial_started}
         return {"now_ts": now.timestamp(), "winter": winter, "cheap_window": night or afternoon,
                 "policy_deadline": deadline.isoformat(),
-                "current_policy": self._memory["current_policy"],
+                "current_policy": policy, "initial_window_started": initial_started,
                 "hardware_ok": self._hardware_modes_ok(),
                 "ordinary_history_known": history["known"],
                 "ordinary_last_possible_ts": history.get("possible_at"),
@@ -1669,6 +1778,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if self._stopped:
                 return self.data
             now = self._now()
+            initial_record_changed = self._prepare_initial_window(now)
             bound = self._soc_lower_bound()
             guard = self._memory["soc_floor_guard"]
             if bound is not None and bound != guard.get("lower_bound"):
@@ -1725,7 +1835,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._memory["current_policy"] = policy
             # Persist latch transitions before any hardware action. Store failure
             # blocks ordinary starts; stopping and immediate safety remain allowed.
-            if any(previous_policy.get(k) != policy.get(k) for k in ("deadline", "stopped")):
+            if initial_record_changed or any(previous_policy.get(k) != policy.get(k) for k in ("deadline", "stopped")):
                 try:
                     await self._save()
                 except Exception:

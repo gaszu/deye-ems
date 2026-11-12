@@ -4,7 +4,8 @@ from homeassistant.components import websocket_api
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from .appearance import DATA_APPEARANCE
-from .const import DOMAIN, DEFAULT_OPTIONS, DEFAULT_SOURCES
+from .const import DOMAIN, DEFAULT_OPTIONS, DEFAULT_SOURCES, VERSION
+from .updates import DATA_UPDATES
 
 
 def _coordinator(hass):
@@ -12,8 +13,12 @@ def _coordinator(hass):
     return next(iter(entries.values())) if entries else None
 
 
-def _payload(coordinator, appearance=None):
+def _payload(coordinator, appearance=None, updates=None):
     return {"entry_id": coordinator.entry.entry_id, "mode": coordinator.mode, "data": coordinator.data or {},
+        "backend_version": VERSION,
+        "updates": updates.status if updates is not None else {
+            "status": "not_checked", "latest_version": None, "checked_at": None,
+            "retry_at": None, "reason": None, "release_url": None, "marketplace_url": "/marketplace", "stale": False},
         "appearance": appearance.appearance if appearance is not None else {"theme": ""},
         "effective_loads": coordinator.effective_loads, "loads_revision": coordinator.loads_revision,
         "options": {**{k: coordinator.options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
@@ -30,11 +35,11 @@ async def status(hass, connection, msg):
     if coordinator is None:
         connection.send_error(msg["id"], "not_loaded", "Deye EMS is not loaded")
         return
-    connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE)))
+    connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE), hass.data.get(DATA_UPDATES)))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/command",
-    vol.Required("command"): vol.In(("recalculate", "mode", "option", "load_save", "load_delete", "load_toggle", "appearance")),
+    vol.Required("command"): vol.In(("recalculate", "mode", "option", "load_save", "load_delete", "load_toggle", "appearance", "check_updates")),
     vol.Optional("theme"): str,
     vol.Optional("mode"): vol.In(("shadow", "active")),
     vol.Optional("original_energy_entity"): str, vol.Optional("channel"): dict,
@@ -49,7 +54,17 @@ async def command(hass, connection, msg):
         connection.send_error(msg["id"], "not_loaded", "Deye EMS is not loaded")
         return
     try:
-        if msg["command"] == "appearance":
+        if msg["command"] == "check_updates":
+            updates = hass.data.get(DATA_UPDATES)
+            if updates is None:
+                raise ValueError("Sprawdzanie aktualizacji nie jest jeszcze dostępne. Odśwież panel.")
+            try:
+                await updates.async_check()
+            except Exception:
+                # Unexpected failures must not echo HTTP bodies or credentials.
+                connection.send_error(msg["id"], "update_check_failed", "Nie udało się sprawdzić aktualizacji.")
+                return
+        elif msg["command"] == "appearance":
             appearance = hass.data.get(DATA_APPEARANCE)
             if appearance is None:
                 raise ValueError("Wygląd panelu nie jest jeszcze dostępny. Odśwież panel.")
@@ -72,7 +87,7 @@ async def command(hass, connection, msg):
     except (ValueError, KeyError, HomeAssistantError) as err:
         connection.send_error(msg["id"], "invalid_request", str(err))
         return
-    connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE)))
+    connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE), hass.data.get(DATA_UPDATES)))
 
 
 @callback

@@ -4,17 +4,17 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 1.0.16
+## Instalacja wersji 1.0.17
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=ha-deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v1.0.16** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v1.0.17** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-1.0.16.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.16/deye-ems-1.0.16.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.16.md).
+Alternatywnie pobierz [deye-ems-1.0.17.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.17/deye-ems-1.0.17.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/1.0.17.md).
 
 ## Konfiguracja
 
@@ -56,7 +56,7 @@ Silnik tworzy deterministyczną projekcję bilansu energii na 48 h. Zimą wyznac
 
 Regulator uwzględnia świeżość i jednostki pomiarów, GRID/LOAD łącznie i na fazach, napięcie baterii oraz ograniczenia BMS i falownika. Model rozkładu fazowego zależy od potwierdzonych ustawień urządzenia; brak potwierdzenia wybiera wariant zachowawczy. Limity importu i mocy konwersji są kontrolowane osobno. EMS nie przełącza automatycznie trybów falownika.
 
-W kandydacie1.0.7 zwykłe nastawy prądu są wyliczane bez rampy20A i wysyłane o :00/:30, w pierwszej minucie bloku. Korekta wymaga10A, nastawa jest zaokrąglana do5A w granicach bezpieczeństwa. Bezpieczny start z zera może użyć1–4A. Po osiągnięciu celu ponowny start wymaga spadku SoC o2p.p., a po ograniczeniu wymagane są120s stabilnych obserwacji i dopuszczony termin zapisu. Zwiększenia muszą zmieścić się w aktualnym zapasie GRID oraz limitach LOAD, falownika i BMS. Ochrony i zakończenie ładowania mogą wymagać natychmiastowej redukcji. Restart ani opóźniony odczyt nie kasują przerwy między możliwymi wysłanymi poleceniami. Próba polecenia jest zapisywana przed usługą; przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
+Zwykłe nastawy prądu są wyliczane bez rampy20A i wysyłane o :00/:30, w pierwszej minucie bloku. Korekta wymaga10A, nastawa jest zaokrąglana do5A w granicach bezpieczeństwa. Bezpieczny start z zera może użyć1–4A. Od 1.0.17 pierwszy start w tanim oknie może odbyć się w dowolnej minucie po120s stabilnych obserwacji; uprawnienie jest trwałe i jednorazowe dla całego okna. Po osiągnięciu celu ponowny start wymaga spadku SoC o2p.p., a po ograniczeniu wymagane są120s stabilnych obserwacji i dopuszczony termin zapisu. Zwiększenia muszą zmieścić się w aktualnym zapasie GRID oraz limitach LOAD, falownika i BMS. Ochrony i zakończenie ładowania mogą wymagać natychmiastowej redukcji. Restart ani opóźniony odczyt nie kasują przerwy między możliwymi wysłanymi poleceniami. Próba polecenia jest zapisywana przed usługą; przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
 
 Od wersji 1.0.13 EMS odczytuje ogólny **Maximum Battery Charge Current** Deye i wyznacza `floor(0,95 × prąd Deye)`. Oddzielna encja **Maximum Battery Grid Charge Current** jest nastawą sterowaną przez EMS; nie służy do wyznaczania własnego limitu. Dawny stały parametr 108 A nie uczestniczy już w obliczeniach i jego encja number jest wyłączana bez usuwania historii. Nowy sensor i panel pokazują automatyczny limit. Brak poprawnego odczytu blokuje ładowanie zamiast przywracać 108 A.
 
@@ -79,6 +79,8 @@ Model zakłada, że główny LOAD obejmuje modelowane odbiorniki. Użytkownik mu
 ## Panel, aktualizacje i testy
 
 Panel pokazuje tryb, cele, przepływy, plan i diagnostykę. W ustawieniach zaawansowanych pole **Motyw panelu** pozwala wybrać dowolny zainstalowany motyw HA albo dziedziczyć bieżący motyw profilu. Wygląd jest stosowany lokalnie w EMS, łącznie z tłem i kartami, bez zmiany innych dashboardów. Integracja tworzy własne encje sensor, binary_sensor, number, select i button.
+
+Sekcja **Wersja i aktualizacje** pokazuje wersję załadowaną przez HA oraz wersję interfejsu w otwartej karcie. **Sprawdź aktualizacje** ręcznie pobiera informację o najnowszym stabilnym wydaniu z publicznego GitHuba. Wynik wskazuje dostępne wydanie lub aktualność, a błąd pozostawia poprzedni wynik wyraźnie oznaczony jako nieaktualny. Przycisk **Otwórz Marketplace** prowadzi do sklepu tej samej instancji. Instalację i wymagany restart wykonuje się w HA; sprawdzenie wersji ich nie uruchamia i nie zmienia sterowania. Odczyty statusu nie odpytują GitHuba. Ostrzeżenie o różnicy wersji odróżnia starą kartę przeglądarki od nowszego interfejsu przy starszym załadowanym backendzie.
 
 Sekcja **Układ LOAD** albo **Układ LOAD i CT** jest zawsze widoczna na głównym ekranie. Nazwa wynika z zapisanej konfiguracji, a obok pomiarów panel pokazuje odczytany tryb falownika oraz objaśnienia przepływów i wspólnej mocy. W układzie LOAD pobór odbiorów między GRID a CT jest nieobliczany; w układzie z CT wynika z bilansu CT−GRID. Brak aktualnych, poprawnych danych nie usuwa sekcji i nie jest zastępowany zerem.
 

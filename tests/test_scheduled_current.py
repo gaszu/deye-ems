@@ -110,13 +110,13 @@ class ScheduledRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.current_calls(), [10])
         self.assertEqual(h.co._memory["current_policy"]["safe_since"], h.now.timestamp())
 
-    async def test_startup_observes_then_waits_for_next_boundary(self):
+    async def test_first_start_observes_two_minutes_without_waiting_for_next_boundary(self):
         h = Harness()
         h.co._memory["current_policy"] = {}
         h.active()
         await h.tick()
         self.assertEqual(h.current_calls(), [])
-        for _ in range(179):
+        for _ in range(11):
             h.advance(10)
             await h.tick()
         self.assertEqual(h.current_calls(), [])

@@ -39,6 +39,40 @@ def dispatch_ready(now, possible, not_sent):
             and (not_sent is None or now - not_sent >= 60))
 
 
+def initial_dispatch_ready(g):
+    """One observed zero-to-positive start per whole cheap-window deadline.
+
+    The coordinator spends the permission in a durable prepared-attempt
+    journal. It is never refunded by a zero setting, clouds or a restart.
+    """
+    policy = g.get("current_policy", {})
+    now = g.get("now_ts")
+    if (not isinstance(policy, dict) or not _finite(now) or now <= 0
+            or g.get("cheap_window") is not True or g.get("hardware_ok") is not True
+            or g.get("telemetry_valid") is not True or g.get("soc_valid") is not True
+            or g.get("current_a") != 0 or g.get("ordinary_history_known") is not True
+            or policy.get("initial_started", False) is not False
+            or policy.get("stopped", True) is not False
+            or policy.get("deadline") != g.get("policy_deadline")
+            or not isinstance(g.get("policy_deadline"), str) or not g["policy_deadline"]):
+        return False
+    pending = g.get("pending_current_a")
+    if pending is not None and (not _finite(pending) or pending != 0):
+        return False
+    since, observed = policy.get("safe_since"), policy.get("observed_at")
+    if (not _finite(since) or not 0 <= since <= now - RECOVERY_SECONDS
+            or not _finite(observed) or not 0 <= now - observed <= 30):
+        return False
+    for key, delay in (("ordinary_last_possible_ts", RECOVERY_SECONDS),
+                       ("ordinary_last_not_sent_ts", 60)):
+        if key not in g:
+            return False
+        at = g[key]
+        if at is not None and (not _finite(at) or not delay <= now - at):
+            return False
+    return True
+
+
 def update_policy(g, previous):
     """Target latch belongs to one tariff deadline, with a fresh safety timer.
 
@@ -75,14 +109,20 @@ def update_policy(g, previous):
     elif (not _finite(since) or not 0 <= since <= now or not _finite(observed)
           or not 0 <= now - observed <= 30):
         since = now
+    initial = g.get("initial_window_started")
+    if not isinstance(initial, bool):
+        initial = (previous.get("initial_started", False) if previous.get("deadline") == key else False)
     return dict(version=1, deadline=key if isinstance(key, str) else "",
-                stopped=bool(stopped), safe_since=since, observed_at=now)
+                stopped=bool(stopped), safe_since=since, observed_at=now,
+                initial_started=initial if isinstance(initial, bool) else True)
 
 
 def _ordinary(g, result):
     result.update(write=False, next_a=g["current_a"])
     now = g["now_ts"]
-    if not dispatch_ready(now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts")):
+    scheduled = dispatch_ready(now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"))
+    initial = initial_dispatch_ready(g)
+    if not scheduled and not initial:
         result["reason"] = "scheduled_hold"
         return result
     policy = g.get("current_policy", {})
@@ -114,7 +154,8 @@ def _ordinary(g, result):
         result["reason"] = "scheduled_deadband"
         return result
     result.update(next_a=candidate, write=True,
-                  reason="scheduled_retry" if unconfirmed else "scheduled_setpoint")
+                  reason="initial_charge_start" if initial and not scheduled else
+                         "scheduled_retry" if unconfirmed else "scheduled_setpoint")
     return result
 
 

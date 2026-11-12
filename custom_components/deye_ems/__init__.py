@@ -8,12 +8,16 @@ from homeassistant.const import Platform
 from .appearance import AppearanceManager, DATA_APPEARANCE
 from .const import DOMAIN, PLATFORMS, VERSION
 from .coordinator import DeyeEMSCoordinator
+from .updates import UpdateManager, DATA_UPDATES
 from .websocket import async_register
 
 PANEL_PATH = "deye-ems"
 
 
 async def async_setup_entry(hass, entry):
+    if DATA_UPDATES not in hass.data:
+        # Manual checks are app-wide and never run as part of EMS refreshes.
+        hass.data[DATA_UPDATES] = UpdateManager(hass)
     if DATA_APPEARANCE not in hass.data:
         appearance = AppearanceManager(hass)
         await appearance.async_load()
