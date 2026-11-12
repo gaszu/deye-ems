@@ -2,6 +2,12 @@
 
 Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zachowanie; rozszerzenia i strojenie będą opisywane w następnych wersjach.
 
+## Stan doładowania i oczekiwanie — rozszerzenie 1.0.18
+
+- Panel rozróżnia odczyt Grid Charge, zapisany limit prądu i fizyczną moc baterii. Nastawa ani włączony Grid Charge nie stanowią pomiaru energii pobranej z sieci.
+- Backend podaje przyczynę oczekiwania oraz najwcześniejszy możliwy termin korekty, uwzględniając pierwszy start, stabilność pomiarów i ograniczenia ponowień. Termin nie jest obietnicą wysłania: potrzeba ładowania i zabezpieczenia są sprawdzane ponownie.
+- Brak aktualnych pomiarów lub potwierdzenia rejestru nie jest przedstawiany jako działające ładowanie. Diagnostyka wskazuje źródła odrzucone przez dotychczasową walidację. Rozszerzenie nie zmienia decyzji ani harmonogramu regulatora.
+
 ## Priorytet PV w regulatorze — rozszerzenie 1.0.16
 
 - `C = max(-battery_power, 0)` jest zmierzonym ładowaniem DC. `G = max(grid_port_power, suma faz portu GRID, 0)` jest dodatnim dopływem AC do falownika. Kredyt nadwyżki lokalnej wynosi `max(C - G - 200 W, 0)`. Odjęcie całego G przy sprawności 1 jest zachowawcze; nie przypisuje strat prostowania do PV i uwzględnia GRID zasilający dom przez bypass. CT, całkowita produkcja PV i nastawa prądu nie zastępują tych pomiarów.

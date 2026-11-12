@@ -7,6 +7,7 @@ The old pure controller remains a regression-tested safety/cap calculation; its
 from __future__ import annotations
 
 import math
+from datetime import datetime
 
 from .grid_control import calculate_grid_charge as _base, calculate_grid_charge_increase_cap
 
@@ -170,3 +171,87 @@ def calculate_grid_charge(g):
             result["reason"] = "target_hysteresis"
         return result
     return _base(g, ordinary_policy=_ordinary)
+
+
+def describe_current_wait(g):
+    """Read-only explanation of the next ordinary opportunity, never a promise.
+
+    No permissions, journal entries or controller inputs are changed here.
+    A missing recovery observation cannot be turned into a countdown.
+    """
+    status = dict(current_hold_reason="policy_blocked", recovery_remaining_s=None,
+                  next_current_change_at=None,
+                  initial_window_started=g.get("initial_window_started")
+                  if isinstance(g.get("initial_window_started"), bool) else None,
+                  grid_charge_enabled=g.get("grid_charge_enabled")
+                  if isinstance(g.get("grid_charge_enabled"), bool) else None)
+    now = g.get("now_ts")
+    if not _finite(now) or now <= 0:
+        return status
+    result = calculate_grid_charge(g)
+    reason = result.get("reason")
+    if g.get("telemetry_valid") is not True or g.get("soc_valid") is not True or not result.get("telemetry_ok"):
+        status["current_hold_reason"] = "telemetry_invalid"
+        return status
+    if reason in ("target_reached", "target_hysteresis", "pv_covers_charge_need"):
+        status["current_hold_reason"] = "pv_covers_charge_need" if reason == "pv_covers_charge_need" else "target_reached"
+        return status
+    if (g.get("hardware_ok") is not True or g.get("cheap_window") is not True
+            or result.get("safety") or result.get("need_a", 0) <= 0):
+        return status
+    policy = g.get("current_policy", {})
+    if not isinstance(policy, dict):
+        return status
+    pending = g.get("pending_current_a")
+    if (g.get("ordinary_history_known") is not True
+            or pending is not None and (not _finite(pending) or pending != 0)):
+        status["current_hold_reason"] = "waiting_readback"
+        return status
+    since, observed = policy.get("safe_since"), policy.get("observed_at")
+    status["current_hold_reason"] = "waiting_stable_measurements"
+    if (not _finite(since) or not 0 <= since <= now or not _finite(observed)
+            or not 0 <= now-observed <= 30):
+        return status
+    recovery = max(0, since+RECOVERY_SECONDS-now)
+    status["recovery_remaining_s"] = math.ceil(recovery)
+    eligible = max(now, since+RECOVERY_SECONDS)
+    retry = now
+    for key, delay in (("ordinary_last_possible_ts", RECOVERY_SECONDS),
+                       ("ordinary_last_not_sent_ts", 60)):
+        if key not in g:
+            status["current_hold_reason"] = "waiting_readback"
+            return status
+        at = g[key]
+        if at is not None:
+            if not _finite(at) or not 0 <= at <= now:
+                status["current_hold_reason"] = "waiting_readback"
+                return status
+            retry = max(retry, at+delay)
+    eligible = max(eligible, retry)
+    try:
+        deadline = datetime.fromisoformat(g["policy_deadline"])
+        if deadline.tzinfo is None or not now < deadline.timestamp() <= now+86400:
+            return status
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return status
+    initial = (g.get("current_a") == 0 and policy.get("initial_started", False) is False
+               and policy.get("stopped", True) is False and policy.get("deadline") == g["policy_deadline"])
+    candidate = eligible
+    if not initial:
+        slot = math.floor(now/SLOT_SECONDS)*SLOT_SECONDS
+        possible = g.get("ordinary_last_possible_ts")
+        for _ in range(50):
+            candidate = max(slot, eligible)
+            if candidate < slot+DISPATCH_WINDOW_SECONDS and (possible is None or possible < slot):
+                break
+            slot += SLOT_SECONDS
+        status["current_hold_reason"] = "waiting_stable_measurements" if recovery > 0 else "scheduled_regular"
+    else:
+        status["current_hold_reason"] = ("waiting_stable_measurements" if recovery > 0 else
+                                         "waiting_retry" if retry > now else "initial_start")
+    if candidate >= deadline.timestamp():
+        return status
+    if not initial and candidate <= now:
+        status["current_hold_reason"] = "ready"
+    status["next_current_change_at"] = datetime.fromtimestamp(candidate, deadline.tzinfo).isoformat()
+    return status

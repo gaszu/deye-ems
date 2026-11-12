@@ -25,7 +25,7 @@ from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OWNER_ENTITIES, OPT
 from .grid_control import (calculate_grid_charge_cap, calculate_grid_charge_increase_cap,
                            calculate_grid_charge as calculate_grid_charge_demand)
 from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready, initial_dispatch_ready,
-                                DEADBAND_A, QUANTUM_A)
+                                describe_current_wait, DEADBAND_A, QUANTUM_A)
 from .planner import plan_energy
 from .slot_meter import update_slot_measurements
 from .topology import ct_load_balance
@@ -543,6 +543,27 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "grid_charge_actuator_max_a": actuator_cap,
                 "grid_charge_limit_valid": deye_cap is not None and actuator_cap is not None}
 
+    def _measurement_issue(self, key, now, *, unit=None, age=None, low=None, high=None):
+        """Controlled diagnostic codes for the existing measurement validator."""
+        state = self._state(key)
+        if state is None:
+            return "missing"
+        if state.attributes.get("restored", False):
+            return "restored"
+        value = _number(state.state)
+        report = _stamp(getattr(state, "last_reported", None) or state.last_updated)
+        if value is None or report is None:
+            return "invalid"
+        if report > now.timestamp():
+            return "future"
+        if unit is not None and state.attributes.get("unit_of_measurement") != unit:
+            return "wrong_unit"
+        if age is not None and now.timestamp()-report > age:
+            return "stale"
+        if low is not None and value < low or high is not None and value > high:
+            return "invalid"
+        return None
+
     def _read_inputs(self, now):
         voltage = self._measurement("voltage", now, unit="V", age=120, low=40, high=65)
         soc = self._measurement("soc", now, unit="%", low=0, high=100)
@@ -635,6 +656,40 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if not inputs["charge_power_valid"]:
             inputs["telemetry_valid"] = False
             inputs["grid_charge_balanced"] = None
+        # Diagnostics only: retain the validators and controller gates above.
+        issues = []
+        checks = {key: dict(unit="W", age=30, low=-60000 if key.startswith("grid") else -200, high=60000)
+                  for key in powers}
+        checks.update(battery_power=dict(unit="W", age=30, low=-60000, high=60000),
+                      voltage=dict(unit="V", age=120, low=40, high=65),
+                      bms_charge_current=dict(unit="A", low=0, high=1000),
+                      bms_blocking_charge=dict(low=0, high=1000),
+                      grid_current_number=dict(unit="A", low=0, high=1000),
+                      max_charge_current_number=dict(unit="A", low=0, high=1000),
+                      battery_low_soc=dict(unit="%", low=0, high=85),
+                      soc=dict(unit="%", age=None if voltage is not None else 1200, low=0, high=100))
+        if self._options["topology"] == "load_with_external_ct":
+            checks.update({key: dict(unit="W", age=30, low=-60000, high=60000) for key in keys})
+        for key, validation in checks.items():
+            issue = self._measurement_issue(key, now, **validation)
+            if issue:
+                issues.append(dict(source=key, reason=issue))
+        if self._sources.get("max_charge_current_number") == self._sources.get("grid_current_number"):
+            issues.append(dict(source="max_charge_current_number", reason="alias"))
+        actuator = self._state("grid_current_number")
+        if actuator is not None and "max" in actuator.attributes:
+            maximum = _number(actuator.attributes["max"])
+            if maximum is None or maximum < 0:
+                issues.append(dict(source="grid_current_number", reason="invalid"))
+        if not all(charge_ids) or len(set(charge_ids)) != len(charge_ids):
+            issues.append(dict(source="charge_power", reason="alias"))
+        elif all(at is not None for at in reports) and max(reports)-min(reports) > 10:
+            issues.append(dict(source="charge_power", reason="time_skew"))
+        if inputs["topology_error"]:
+            issues.append(dict(source="ct_balance", reason="invalid"))
+        if bound is None or self._effective_min_soc()+self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
+            issues.append(dict(source="reserve", reason="invalid"))
+        inputs["telemetry_issues"] = issues
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):
@@ -1181,6 +1236,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "ordinary_last_not_sent_ts": history.get("not_sent_at"),
                 "pending_current_a": None if confirmed else history.get("upper_a"),
                 "grid_charge_active": bool(charging),
+                "grid_charge_enabled": (gc.state == "on" if gc is not None and gc.state in ("on", "off")
+                    and not gc.attributes.get("restored", False) and gc_report is not None
+                    and gc_report <= now.timestamp() and inputs["telemetry_valid"] else None),
                 "emergency_allowed": emergency, "safety_only": safety_only,
                 "soc_valid": inputs["soc_valid"], "soc": inputs["soc"], "target_soc": target,
                 "remaining_h": (deadline.timestamp() - now.timestamp()) / 3600,
@@ -1329,6 +1387,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         control["reduction_pending"] = pending_reduction
         control["actual_battery_w"] = observed["battery_power"]
         control["read_setting_a"] = observed["current_a"]
+        control.update(describe_current_wait(observed_grid))
         if permitted and control.get("next_a", 0) > 0 and not ready:
             control["runtime_reason"] = "waiting_setting_readback"
 
@@ -1841,7 +1900,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 except Exception:
                     self._memory["current_policy"] = {**policy, "stopped": True, "safe_since": None}
                     self._last_error = "current_policy_store_failed"
-            control = self._controller(self._grid_input(inputs, now, target, emergency))
+            request_grid = self._grid_input(inputs, now, target, emergency)
+            control = self._controller(request_grid)
+            control.update(describe_current_wait(request_grid))
             modes_ok = self._hardware_modes_ok()
             active = self.mode == "active"
             if active and not modes_ok:

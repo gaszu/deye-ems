@@ -1,3 +1,9 @@
+# Wersja 1.0.18 — stan doładowania i diagnostyka oczekiwania
+
+- **506 testów Python i 112 testów panelu PASS.** Dziewięć nowych testów backendu obejmuje pierwszy start, zwykły termin korekty, stabilność pomiarów, oczekujący odczyt, blokady ponowień, granicę okna, stan GC i kontrolowane przyczyny błędów pomiarów.
+- Dziesięć nowych testów panelu rozdziela GC i nastawę od rzeczywistego przepływu energii; sprawdza zero, brak potwierdzenia, nieaktualne dane, obserwację, pierwszeństwo ochron, czas w Europe/Warsaw i brak wymyślonego terminu lub surowych komunikatów dostawcy.
+- Diagnostyka jest odczytem istniejących warunków. Testy awarii wykonano offline. Nie zmieniano rezerwy, topologii, limitów ani decyzji regulatora i nie wymuszano reakcji falownika na produkcji.
+
 # Wersja 1.0.17 — aktualizacje i pierwszy start w tanim oknie
 
 - **497 testów Python i 102 testy panelu PASS.** Niezależne sprawdzenia sekcji aktualizacji potwierdziły102testy panelu,19WebSocket i11instalacji.
