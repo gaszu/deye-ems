@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Deye EMS — własny silnik",
-        "description": "Lokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
+        "description": "**Po dodaniu integracji panel Deye EMS znajdziesz na pasku bocznym Home Assistanta.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
         "data": {
           "min_soc_percent": "Minimalny bezpieczny SoC",
           "capacity_kwh": "Pojemność magazynu",

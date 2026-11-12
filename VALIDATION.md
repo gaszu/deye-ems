@@ -1,3 +1,9 @@
+# Wersja 1.0.12 — komunikat instalacyjny
+
+- 381 testów Python i75 testów panelu PASS. Istniejące sprawdzenia obejmują pierwszy krok konfiguracji, rejestrację panelu z dostępem administratora oraz zgodność wersji panelu z integracją.
+- Zbudowana paczka zawiera identyczny wyróżniony komunikat o pasku bocznym w `strings.json` i `translations/pl.json`. Źródłem treści jest generator `build_release.py`, więc kolejne budowanie jej nie usuwa.
+- Poprawka zmienia opis kreatora i dokumentację. Nie zmienia sterowania ani zapisanych preferencji widoczności panelu.
+
 # Wersja 1.0.11 — licznik API Solcast
 
 - **381 testów Python i 75 testów panelu PASS.** Trzy testy statusu sprawdzają rozróżnienie włączonego/wyłączonego/nieskonfigurowanego klienta, brak klucza w statusie, zachowanie rejestru i brak dodatkowych HTTP oraz usług urządzeń przy odczycie.

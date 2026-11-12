@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 1.0.11
+# Instalacja i obsługa Deye EMS 1.0.12
 
 W sekcji „Przyłącze sieciowe” wpisz dozwolony import całej instalacji oraz jednej fazy. Są to parametry przyłącza, niezależne od mocy falownika. Zakres wynosi 1–30 kW łącznie i 0,5–15 kW na fazę. Obowiązują w LOAD i CT; w CT pomiar obejmuje również odbiory przed portem GRID. Regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Aktualizacja zachowuje dotychczasowe wartości.
 
@@ -10,16 +10,20 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v1.0.11**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v1.0.12**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/ha-deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-1.0.11.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.11/deye-ems-1.0.11.zip).
+1. Pobierz [deye-ems-1.0.12.zip](https://github.com/gaszu/ha-deye-ems/releases/download/v1.0.12/deye-ems-1.0.12.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
+
+## Gdzie znaleźć panel po instalacji
+
+**Po dodaniu integracji panel Deye EMS znajdziesz na pasku bocznym Home Assistanta.** Wymagane jest konto administratora. Jeśli wpis jest ukryty, sprawdź opcję „Panel boczny” integracji oraz edycję własnego paska HA. Panel można też otworzyć pod adresem `/deye-ems` swojej instancji.
 
 ## Pierwsza konfiguracja
 
