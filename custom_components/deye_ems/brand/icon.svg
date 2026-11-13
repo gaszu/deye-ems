@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Original Deye EMS solar battery mark</title>
+  <g fill="none" stroke="#E9AC38" stroke-width="8" stroke-linecap="round">
+    <path d="M184 4v16 M184 124v16 M116 72h16 M236 72h16 M136 24l11 11 M221 109l11 11 M136 120l11-11 M221 35l11-11"/>
+  </g>
+  <circle cx="184" cy="72" r="32" fill="#E9AC38"/>
+  <rect x="64" y="74" width="64" height="26" rx="8" fill="#267B6E"/>
+  <rect x="6" y="100" width="180" height="150" rx="20" fill="#E4F4EF" stroke="#267B6E" stroke-width="12"/>
+  <path d="M108 121 62 181h32l-10 49 46-65H98Z" fill="#267B6E"/>
+</svg>
