@@ -1,3 +1,13 @@
+# Wersja 2.1.1 — czytelniejsze karty planu i zachowanie panelu
+
+**804 testy Python i 222 testy panelu PASS** w końcowym sprawdzeniu offline.
+
+- Karty rzeczywistych przedziałów, koła celu/minimalnego zapasu, osobna prognoza, brak wartości, cele zachowawcze, przedziały minione, G11 i różne liczby stref.
+- Krótkie godziny z końcem doby 24:00, rozróżnienie offsetów zmiany czasu i dat przy przedziałach przekraczających dobę.
+- Zachowanie rozwiniętych ustawień przy natywnym kliknięciu i zdarzeniu toggle, odświeżeniu, zmianie motywu oraz opóźnionym zdarzeniu starego elementu.
+- Zachowanie panelu podczas zapisu opcji, w tym zagnieżdżone/równoległe przeładowania, błędy, częściowy setup, anulowanie, wyłączenie i usunięcie.
+- Przegląd w przeglądarce na danych syntetycznych obejmuje jasny/ciemny motyw, LOAD/CT, różne strefy, braki prognozy oraz wąski widok bez poziomego przewijania. Nie potwierdza fizycznego działania falownika.
+
 # Wersja 2.1.0 — operatorzy, rzeczywiste przedziały i start po zapisie
 
 **798 testów Python i 206 testów panelu PASS** w końcowym pełnym sprawdzeniu offline.

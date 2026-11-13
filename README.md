@@ -4,7 +4,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.1.0
+## Instalacja wersji 2.1.1
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -17,12 +17,22 @@ Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcze
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.1.0** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v2.1.1** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
 
-Alternatywnie pobierz [deye-ems-2.1.0.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.0/deye-ems-2.1.0.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.0.md).
+Alternatywnie pobierz [deye-ems-2.1.1.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.1/deye-ems-2.1.1.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.1.md).
+
+## Plan baterii w kartach
+
+Najważniejsze informacje i przycisk sterowania są u góry. Karty **Dziś / Jutro** wynikają z rzeczywistych przedziałów wybranego operatora i taryfy, w tym sezonu, dni wolnych oraz zegara. Panel nie zakłada stałej liczby sześciu stref.
+
+Koło **Cel ładowania** pokazuje zapas do uzyskania na podany termin. Koło **Minimalny zapas** w chronionym przedziale pokazuje próg, do którego dom może korzystać z baterii, przy wyłączonym doładowaniu z sieci. Aktualny SoC jest osobnym pomiarem u góry; projekcja baterii jest opisana oddzielnie. Wartości nieznane pozostają puste, cele zachowawcze mają oznaczenie, a minione przedziały nie otrzymują fikcyjnej historii.
+
+Ustawienia szczegółowe pozostają rozwinięte podczas odświeżania danych i zmiany motywu. Zapis konfiguracji utrzymuje panel EMS podczas zwykłego przeładowania integracji. Rzeczywiste wyłączenie lub usunięcie integracji nadal usuwa jej panel. Wygląd dziedziczy motyw HA; informacje LOAD/CT i bieżące blokady pozostają widoczne.
+
+![Plan baterii — dane przykładowe](https://raw.githubusercontent.com/gaszu/deye-ems/v2.1.1/preview/panel-2.1.1.png)
 
 ## Diagnostyka pomiarów
 
@@ -32,7 +42,7 @@ Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połącze
 
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.0 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.1 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
 

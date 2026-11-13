@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-0";
-const PANEL_VERSION = "2.1.0";
+const PANEL_TAG = "deye-ems-panel-2-1-1";
+const PANEL_VERSION = "2.1.1";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -110,6 +110,7 @@ const tariffMessages={confirm_tariff:"Sprawdź podgląd i zaznacz potwierdzenie 
 
 class DeyeEMSPanel extends HTMLElement {
   telemetryExpanded=false;
+  settingsExpanded=false;settingsElement=null;
   actionError=null;savedWizardNotice="";
   tariffOpen=false;tariffBusy=false;tariffCommitting=false;tariffFlow=null;
   tariffDraft={};tariffError="";tariffNotice="";tariffSequence=0;tariffCatalog=null;
@@ -141,6 +142,48 @@ class DeyeEMSPanel extends HTMLElement {
     return value&&typeof value==="object"&&!Array.isArray(value)&&["idle","waiting","checking","active","blocked","cancelled"].includes(value.status)?value:{status:"idle",reason:null,issues:[]};
   }
   postSavePending(){return ["waiting","checking"].includes(this.postSaveState().status);}
+  planReasonText(reason){
+    const messages={
+      incomplete_48h_forecast:"Brak kompletnej prognozy produkcji i zużycia na 48 godzin.",
+      invalid_forecast_row:"Część danych prognozy jest nieprawidłowa.",
+      stale_or_discontinuous_forecast_axis:"Prognoza ma przerwy albo nie obejmuje właściwego czasu.",
+      invalid_load_kw:"Prognoza zużycia domu wymaga sprawdzenia.",
+      invalid_pv_p10_kw:"Prognoza produkcji PV wymaga sprawdzenia.",
+      invalid_pv_p50_kw:"Prognoza produkcji PV wymaga sprawdzenia.",
+      pv_p10_exceeds_p50:"Warianty prognozy produkcji PV są ze sobą niespójne.",
+      forecast_capacity_mismatch:"Prognoza nie pasuje do zapisanej mocy instalacji PV.",
+      pv_capacity_missing:"Brakuje mocy instalacji PV potrzebnej do obliczeń.",
+      forecast_missing_protected_window:"Prognoza nie obejmuje całego okresu bez doładowania z sieci.",
+      missing_next_night_or_peak_deadline:"Brakuje danych potrzebnych do ustalenia kolejnego celu ładowania.",
+      invalid_battery_charge_max_a:"W chwili obliczania planu nie było potwierdzonego limitu prądu ładowania baterii.",
+      invalid_grid_current_max_a:"W chwili obliczania planu nie było potwierdzonego limitu prądu doładowania z sieci.",
+      invalid_battery_voltage_v:"W danych użytych do planu zabrakło poprawnego napięcia baterii.",
+      invalid_soc_percent:"Stan naładowania baterii wymaga sprawdzenia.",
+      invalid_soc_freshness:"Stan naładowania baterii wymaga świeżego odczytu.",
+      stale_soc_without_bms_communication:"Stan naładowania baterii wymaga świeżego odczytu.",
+      invalid_soc_configuration:"Ustawienia baterii i rezerwy wymagają sprawdzenia.",
+      invalid_power_configuration:"Ustawienia limitów mocy wymagają sprawdzenia.",
+      invalid_config:"Ustawienia modelu wymagają sprawdzenia.",
+      invalid_pv_forecast_mode:"Sposób dopasowania prognozy PV wymaga sprawdzenia.",
+      invalid_clock:"Czas danych wejściowych wymaga sprawdzenia.",
+      invalid_aware_timestamp:"Czas danych wejściowych wymaga sprawdzenia.",
+      invalid_timezone:"Strefa czasowa modelu wymaga sprawdzenia.",
+      load_must_include_heatpump_once:"Sprawdź zakres głównego pomiaru domu i przypisanie dodatkowych odbiorników.",
+      tariff_exceeds_six_tou_slots:"Harmonogram taryfy nie mieści się w sześciu wpisach falownika.",
+      tariff_forecast_outside_validity:"Plan wykracza poza okres ważności zapisanej taryfy."
+    };
+    return Object.hasOwn(messages,reason)?messages[reason]:"Pełny plan nie jest dostępny. Sprawdź diagnostykę danych wejściowych.";
+  }
+  fallbackPlanText(reason){
+    return 'Silnik używa planu zachowawczego. '+this.planReasonText(reason)+' Cele zachowawcze nie są wyliczoną projekcją baterii. Brak wyliczenia nie jest prognozą zerowego zużycia. Nadal obowiązują świeże pomiary i wszystkie ograniczenia.';
+  }
+  unavailablePlanHtml(){
+    const plan=this.payload?.data?.plan||{};
+    const text=!this.snapshotFresh()?'Brak aktualnego planu. Poczekaj na świeży odczyt z Home Assistanta.':
+      plan.source==="own_conservative_fallback"||plan.status==="fallback"?this.fallbackPlanText(plan.reason):
+      this.payload?.data?.planning===true?'Trwa obliczanie planu. Dotychczasowe ograniczenia pozostają zachowane.':this.planReasonText(plan.reason);
+    return '<div role="status" class="notice" data-plan-notice="true">'+esc(text)+'</div>';
+  }
   postSaveHtml(){
     const state=this.postSaveState();
     if(state.status==="idle")return this.savedWizardNotice?'<div role="status" class="notice">'+esc(this.savedWizardNotice)+'</div>':"";
@@ -152,7 +195,7 @@ class DeyeEMSPanel extends HTMLElement {
     const names={...sourceLabels,charge_power:"Zgodność czasowa pomiarów mocy",reserve:"Rezerwa SoC",forecast:"Prognoza",plan:"Plan",hardware:"Model falownika",battery_alarm:"Alarm baterii",battery_fault:"Błąd baterii",topology:"Układ pomiarowy",grid_setting:"Nastawa ładowania",tariff:"Operator i taryfa"};
     for(const kind of ["grid","load","ct_grid"])for(let i=1;i<=3;i++)names[kind+"_l"+i+"_power"]=(kind==="ct_grid"?"CT":kind.toUpperCase())+" L"+i;
     const issues=(Array.isArray(state.issues)?state.issues:[]).slice(0,24).filter(issue=>issue&&typeof issue==="object"&&Object.hasOwn(names,issue.source)&&Object.hasOwn(issueNames,issue.reason));
-    return '<div role="'+(state.status==="blocked"?'alert':'status')+'" class="notice '+(state.status==="blocked"?'error':'')+'" data-post-save="'+esc(state.status)+'"><p>'+(!this.snapshotFresh()?'Ostatni odczyt sprawdzania; oczekiwanie na aktualizację. ':'')+esc(message)+'</p>'+issues.map(issue=>'<p>'+esc(names[issue.source])+': '+esc(issueNames[issue.reason])+'.</p>').join("")+(state.plan_source==="own_conservative_fallback"?'<p>Silnik używa planu zachowawczego; brak kompletnej prognozy nie jest prognozą zerowego zużycia. Nadal obowiązują świeże pomiary i wszystkie ograniczenia.</p>':state.plan_source==="own_deterministic_planner"?'<p>Silnik używa bieżącego planu opartego na prognozie.</p>':'')+(this.postSavePending()?'<p>Sprawdzanie prowadzi silnik także po zamknięciu panelu. Przycisk „Zatrzymaj i obserwuj” anuluje automatyczne włączenie.</p>':'')+'</div>';
+    return '<div role="'+(state.status==="blocked"?'alert':'status')+'" class="notice '+(state.status==="blocked"?'error':'')+'" data-post-save="'+esc(state.status)+'"><p>'+(!this.snapshotFresh()?'Ostatni odczyt sprawdzania; oczekiwanie na aktualizację. ':'')+esc(message)+'</p>'+issues.map(issue=>'<p>'+esc(names[issue.source])+': '+esc(issueNames[issue.reason])+'.</p>').join("")+(state.plan_source==="own_conservative_fallback"?'<p>'+esc(this.fallbackPlanText(state.plan_reason))+'</p>':state.plan_source==="own_deterministic_planner"?'<p>Silnik używa bieżącego planu opartego na prognozie.</p>':'')+(this.postSavePending()?'<p>Sprawdzanie prowadzi silnik także po zamknięciu panelu. Przycisk „Zatrzymaj i obserwuj” anuluje automatyczne włączenie.</p>':'')+'</div>';
   }
   dismissActionError(){const message=this.actionError?.message;this.actionError=null;if(this.error===message)this.error="";this.render();}
   runtimeErrorHtml(){
@@ -493,28 +536,64 @@ class DeyeEMSPanel extends HTMLElement {
     const from=offset(row.start),to=offset(row.end),changed=from!==to;
     return time(row.start)+(changed?' ('+from+')':'')+'–'+time(row.end)+(changed?' ('+to+')':'');
   }
+  tariffSlotHours(row){
+    const start=updateTimestamp(row?.start),end=updateTimestamp(row?.end);
+    if(start===null||end===null||end<=start)return "—";
+    const fromDate=this.slotDateKey(start),toDate=this.slotDateKey(end),[year,month,day]=fromDate.split("-").map(Number);
+    const nextDate=new Date(Date.UTC(year,month-1,day+1)).toISOString().slice(0,10);
+    const parts=value=>new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",hourCycle:"h23",hour:"2-digit",minute:"2-digit",timeZoneName:"shortOffset"}).formatToParts(new Date(value));
+    const clock=values=>values.find(p=>p.type==="hour")?.value+':'+values.find(p=>p.type==="minute")?.value;
+    const offset=values=>values.find(p=>p.type==="timeZoneName")?.value||"";
+    const from=parts(start),to=parts(end),midnight=toDate===nextDate&&clock(to)==="00:00";
+    if(end-start>86400000||fromDate!==toDate&&!midnight)return this.tariffInterval(row);
+    const changed=offset(from)!==offset(to);
+    return clock(from)+(changed?' ('+offset(from)+')':'')+'–'+(midnight?'24:00':clock(to))+(changed?' ('+offset(to)+')':'');
+  }
   tariffClock(value){return value==="local"||value==="local_time"?"Czas lokalny Europe/Warsaw — zmiana lato/zima":value==="fixed_cet"||value==="fixed_winter"?"Stały czas zimowy CET — bez zmiany lato/zima":"Podstawa zegara niepotwierdzona";}
   tariffReason(value){
     const labels={winter:"Sezon zimowy",summer:"Sezon letni",weekend:"Weekend",weekday:"Dzień roboczy",workday:"Dzień roboczy",holiday:"Święto",all_day:"Cała doba",virtual_checkpoint:"Planistyczny punkt kontrolny"};
     return Object.hasOwn(labels,value)?labels[value]:typeof value==="string"&&value.startsWith("holiday:")?"Święto":"Reguła operatora / profilu";
   }
   tariffPermission(value){return value===true?"Dozwolone według polityki EMS":value===false?"Zablokowane":"Niepotwierdzone";}
+  slotGaugeHtml(value,label,tone="neutral"){
+    const n=numeric(value),known=n!==null&&n>=0&&n<=100;
+    return '<div class="slot-gauge '+tone+'"><svg viewBox="0 0 120 120" role="img" aria-label="'+esc(label+': '+(known?num(n)+'%':'brak danych'))+'"><circle class="gauge-track" cx="60" cy="60" r="50"/>'+
+      (known?'<circle class="gauge-value" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="'+n+' 100"/>':'')+'</svg><div class="gauge-reading"><b>'+num(known?n:null)+'</b>'+(known?'<span>%</span>':'')+'</div></div>';
+  }
+  slotDateKey(value){return new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));}
   tariffSlotTargetsHtml(){
+    const now=Date.now();
     const raw=this.payload?.data?.plan?.tariff_slot_targets;
     if(!Array.isArray(raw)||!raw.length)return "";
-    if(!this.snapshotFresh())return '<p class="notice warning">Brak bieżącej tabeli celów SoC. Ostatni odczyt silnika wymaga odświeżenia.</p>';
+    if(!this.snapshotFresh())return '<p class="notice warning">Brak bieżącej tabeli celów SoC. Poczekaj na aktualny odczyt, zanim ocenisz plan.</p>';
     const soc=value=>{const n=numeric(value);return n!==null&&n>=0&&n<=100?n:null;};
     const rows=raw.slice(0,96).filter(row=>row&&typeof row==="object"&&!Array.isArray(row)&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start));
     if(!rows.length)return '<p>Brak poprawnych przedziałów celów SoC.</p>';
-    return '<h3>Cele SoC w przedziałach taryfy</h3><div class="table"><table><thead><tr><th>Przedział</th><th>Strefa operatora</th><th>Sieć → bateria</th><th>Cel ładowania %</th><th>Rezerwa %</th><th>Prognoza SoC od → do %</th><th>Podstawa / termin celu</th></tr></thead><tbody>'+rows.map(row=>{
-      const start=updateTimestamp(row.start),end=updateTimestamp(row.end),past=row.quality==="past"||end<=Date.now();
+    rows.sort((a,b)=>updateTimestamp(a.start)-updateTimestamp(b.start));
+    const today=this.slotDateKey(now),[year,month,day]=today.split("-").map(Number),tomorrow=new Date(Date.UTC(year,month-1,day+1)).toISOString().slice(0,10),groups=new Map();
+    for(const row of rows){const date=this.slotDateKey(row.start);if(!groups.has(date))groups.set(date,[]);groups.get(date).push(row);}
+    return '<div class="slot-plan-heading"><h3>Plan baterii według taryfy</h3><p>Koła pokazują cel ładowania albo minimalny zapas. Nie są pomiarem aktualnego naładowania baterii.</p></div>'+[...groups].map(([date,items])=>{
+      const label=date===today?'Dziś':date===tomorrow?'Jutro':new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",day:"numeric",month:"long"}).format(new Date(items[0].start));
+      return '<div class="slot-day"><h3>'+label+'</h3><div class="slot-grid">'+items.map(row=>{
+      const start=updateTimestamp(row.start),end=updateTimestamp(row.end),past=row.quality==="past"||end<=now;
       const forecast=!past&&row.quality==="forecast",fallback=!past&&row.quality==="fallback",known=forecast||fallback;
-      const target=known&&row.grid_charge_allowed===true?soc(row.charge_target_soc_percent):null,reserve=known?soc(row.reserve_soc_percent):null;
+      const cheap=row.grid_charge_allowed===true,protectedSlot=row.grid_charge_allowed===false;
+      const target=known&&cheap?soc(row.charge_target_soc_percent):null,reserve=!past?soc(row.reserve_soc_percent):null;
       const from=updateTimestamp(row.projection_from),projection=forecast&&from!==null&&from>=start&&from<end;
-      const projected=projection?num(soc(row.projected_soc_start_percent))+' → '+num(soc(row.projected_soc_end_percent))+' (od '+esc(time(row.projection_from))+')':'—';
-      const quality=past?"Przedział miniony — brak historycznej prognozy":fallback?"Cel zachowawczy; brak pełnej prognozy":forecast?"Prognoza modelu":"Brak wyliczenia";
-      return '<tr><td>'+esc(this.tariffInterval(row))+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+num(target)+(fallback&&target!==null?' (zachowawczy)':'')+'</td><td>'+num(reserve)+'</td><td>'+projected+'</td><td>'+quality+' · '+esc(this.tariffReason(row.reason))+(known&&updateTimestamp(row.deadline)!==null?' · '+esc(time(row.deadline)):'')+'</td></tr>';
-    }).join("")+'</tbody></table></div><p class="legend">Cel ładowania dotyczy terminu planu pokazanego w tabeli; nie jest poleceniem ciągłego poboru. Prognozowane SoC opisuje model od podanej chwili, nie historyczny pomiar na początku bieżącego przedziału. Rezerwa, PV, sezon oraz limity nadal obowiązują.</p>';
+      const projectedStart=projection?soc(row.projected_soc_start_percent):null,projectedEnd=projection?soc(row.projected_soc_end_percent):null;
+      const completeProjection=projection&&projectedStart!==null&&projectedEnd!==null;
+      const current=!past&&start<=now&&now<end;
+      const ringLabel=past?'Przedział miniony':protectedSlot?'Minimalny zapas':'Cel ładowania';
+      const gaugeValue=past?null:protectedSlot?reserve:target;
+      const permission=cheap?'Możliwe doładowanie z sieci':protectedSlot?'Bez doładowania z sieci':'Zgoda na doładowanie niepotwierdzona';
+      const deadline=known&&updateTimestamp(row.deadline)!==null?time(row.deadline):null;
+      return '<article class="slot-card '+(past?'is-past':current?'is-current':'')+'" data-tariff-slot="true"'+(current?' aria-current="time"':'')+'><div class="slot-card-top"><span class="slot-zone">'+esc(this.tariffZone(row))+'</span>'+(current?'<span class="slot-badge current">Teraz</span>':past?'<span class="slot-badge">Zakończony</span>':'')+'</div><h4 title="'+esc(this.tariffInterval(row))+'">'+esc(this.tariffSlotHours(row))+'</h4><p class="slot-permission '+(cheap?'charge-allowed':'charge-protected')+'">'+permission+'</p>'+this.slotGaugeHtml(gaugeValue,ringLabel,cheap?'charge':'reserve')+'<p class="slot-role">'+ringLabel+'</p>'+
+        (past?'<p class="slot-explanation">Przedział miniony — brak historycznej prognozy.</p>':protectedSlot?'<p class="slot-explanation">'+(reserve!==null?'Dom może korzystać z baterii do tego poziomu.':'Brak potwierdzonego minimalnego zapasu.')+'</p>':target!==null?'<p class="slot-explanation">'+(deadline?'Cel na '+esc(deadline):'Cel wybranego planu')+'</p>':'<p class="slot-explanation">Cel jeszcze niewyliczony.</p>')+
+        (fallback&&target!==null?'<p class="slot-badge fallback">Cel zachowawczy</p>':'')+
+        (!past&&cheap?'<p class="slot-reserve">Rezerwa: '+num(reserve)+(reserve!==null?'%':'')+'</p>':'')+
+        '<div class="slot-projection"><span>Prognoza baterii</span><b>'+(completeProjection?num(projectedStart)+' → '+num(projectedEnd)+'%':'—')+'</b><small>'+(completeProjection?'od '+esc(time(row.projection_from)):past?'Brak danych historycznych':fallback?'Brak wyliczonej projekcji':'Brak prognozy dla tego przedziału')+'</small></div></article>';
+    }).join("")+'</div></div>';
+    }).join("")+'<p class="legend slot-plan-note">Cel ładowania dotyczy terminu planu pokazanego na karcie; nie musi wypadać na końcu przedziału. Samo zezwolenie taryfy nie oznacza ładowania — decydują także zapas baterii, słońce i limity instalacji. Prognoza opisuje model od podanej chwili, nie pomiar historyczny.</p>';
   }
   physicalTariffHtml(){
     const program=this.payload?.options?.physical_tou;
@@ -533,7 +612,7 @@ class DeyeEMSPanel extends HTMLElement {
   }
   tariffCalendarHtml(){
     const calendar=this.payload?.options?.tariff_calendar;
-    const heading='<section aria-label="Harmonogram taryfy"><h2>Operator i taryfa</h2>';
+    const heading='<section aria-label="Harmonogram taryfy"><h2>Plan na dziś i jutro</h2>';
     if(!calendar||typeof calendar!=="object"||Array.isArray(calendar))return heading+'<p>Oczekiwanie na zapisany kalendarz silnika.</p>'+this.tariffEditorHtml()+'</section>';
     const operator=calendar.operator_label||this.tariffCatalog?.operators?.find(row=>row.operator_id===(calendar.operator_id||calendar.operator))?.label||calendar.operator||"Dotychczasowy profil własny";
     const rows=values=>(Array.isArray(values)?values:[]).slice(0,48).filter(row=>row&&typeof row==="object"&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start)).map(row=>'<tr><td>'+esc(this.tariffInterval(row))+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+esc(this.tariffReason(row.reason))+'</td></tr>').join("");
@@ -544,11 +623,11 @@ class DeyeEMSPanel extends HTMLElement {
     const warning=Object.hasOwn(issues,calendar.issue)?issues[calendar.issue]:calendar.within_validity===false?issues.tariff_outside_validity:calendar.valid===false?"Kalendarz taryfy nie jest zatwierdzony do sterowania. Sprawdź konfigurację.":"Profil wymaga sprawdzenia warunków umowy lub zegara.";
     const requirements=(Array.isArray(calendar.requirements)?calendar.requirements:[]).filter(value=>typeof value==="string").slice(0,12);
     const notes=(typeof calendar.notice==="string"&&calendar.notice?'<p class="notice">'+esc(calendar.notice)+'</p>':'')+(requirements.length?'<p class="legend">Warunki profilu: '+requirements.map(esc).join("; ")+'.</p>':'')+(calendar.valid_from||calendar.valid_until?'<p class="legend">Ważność profilu: '+esc(calendar.valid_from||"niepotwierdzona")+' – '+esc(calendar.valid_until||"bez podanej daty końcowej")+'.</p>':'');
-    return heading+'<p><b>'+esc(operator)+'</b> · '+esc(calendar.tariff||calendar.label||calendar.profile_id||"Zachowany harmonogram")+' · wersja '+esc(calendar.version||"niepotwierdzona")+'.</p><p>'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny tabel: Europe/Warsaw.</p>'+
+    return heading+'<p class="tariff-name"><b>'+esc(operator)+'</b> · '+esc(calendar.tariff||calendar.label||calendar.profile_id||"Zachowany harmonogram")+'</p>'+
       '<p>Aktualna strefa: '+esc(this.snapshotFresh()?this.tariffZone({zone:calendar.current_zone,zone_label:calendar.current_interval?.zone_label}):"brak bieżącego odczytu")+' · następna zmiana: '+esc(time(this.snapshotFresh()?calendar.next_change:null))+'.</p>'+
       (calendar.valid===false||calendar.preview_only===true||calendar.runtime_allowed===false||calendar.within_validity===false?'<p class="notice warning">'+esc(warning)+' Ten podgląd nie potwierdza zgody na sterowanie.</p>':'')+
       (calendar.profile_id==="legacy_g13"?'<p class="notice">Zachowany własny harmonogram G13 z wcześniejszej wersji. Reguły operatora zaczną obowiązywać po wyborze i potwierdzeniu taryfy.</p>':'')+
-      '<p class="legend">Kalendarz uwzględnia reguły zapisanego operatora i profilu. Zezwolenie nie oznacza ciągłego ładowania: decydują także SoC, PV, sezon i limity.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+this.tariffEditorHtml()+(targetTable||tables)+'</section>';
+      this.tariffEditorHtml()+(targetTable||tables)+'<p class="legend">'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny: Europe/Warsaw. Wersja reguł: '+esc(calendar.version||"niepotwierdzona")+'.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+'</section>';
   }
   panelThemeNames(){return Object.keys(this._hass?.themes?.themes||{}).sort((a,b)=>a.localeCompare(b));}
   savedPanelTheme(){return typeof this.payload?.appearance?.theme==="string"?this.payload.appearance.theme:"";}
@@ -1248,7 +1327,6 @@ class DeyeEMSPanel extends HTMLElement {
     this.renderedTariffStage=tariffStage;this.renderedActionError=this.actionError?.message;this.renderedRuntimeError=this.payload?.data?.error;
     this.renderedSourceStage=sourceStage;this.renderedHardwareStage=hardwareStage;this.renderedTelemetryStage=telemetryStage;
     this.renderedAppearanceStage=appearanceStage;
-    const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{},batteryLimit=this.batteryLimitInfo();
     const active=p.mode==="active",pendingStart=this.postSavePending(),rows=plan.rows||[];
     const lowerBound=numeric(o.min_soc_lower_bound),boundValid=o.min_soc_bound_valid===true&&lowerBound!==null&&lowerBound>=5&&lowerBound<=90;
@@ -1276,32 +1354,34 @@ class DeyeEMSPanel extends HTMLElement {
     this.shadowRoot.innerHTML='<style>'+
       ":host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color,#fafafa));color:var(--primary-text-color,#212121);font:15px var(--primary-font-family,var(--ha-font-family-body,system-ui))}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{position:sticky;top:0;z-index:3;background:var(--primary-background-color);padding-block:12px;display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:var(--ha-border-radius-pill,100px);background:var(--label-badge-background-color,var(--secondary-background-color));color:var(--label-badge-text-color,var(--primary-text-color));border:1px solid var(--divider-color);font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:var(--ha-card-backdrop-filter,none);border-width:var(--ha-card-border-width,1px);border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));box-shadow:var(--ha-card-box-shadow,none);color:var(--primary-text-color);padding:22px}.label,.sub{display:block;color:var(--secondary-text-color);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,12px);line-height:1.6;margin:18px 0}.warning{border-inline-start:4px solid var(--warning-color)}.error{border-inline-start:4px solid var(--error-color)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}"+
       "button{font:inherit;cursor:pointer;border:1px solid transparent;border-radius:var(--ha-button-border-radius,var(--ha-border-radius-pill,20px));padding:11px 16px;background:var(--ems-button-background,var(--ha-color-fill-primary-normal-resting,var(--secondary-background-color)));color:var(--ems-button-text,var(--ha-color-on-primary-normal,var(--primary-color)));font-weight:var(--ha-font-weight-medium,600);box-shadow:var(--ha-button-box-shadow,none)}button.secondary{background:transparent;color:var(--primary-color);border-color:var(--divider-color)}button:hover:not(:disabled){background:var(--ems-button-hover,var(--ha-color-fill-primary-normal-hover,var(--secondary-background-color)))}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ha-color-focus,var(--primary-color));outline-offset:3px}button:disabled,input:disabled,select:disabled{opacity:1;color:var(--input-disabled-ink-color,var(--secondary-text-color));background:var(--input-disabled-fill-color,var(--secondary-background-color));border-color:var(--divider-color);cursor:not-allowed} .mode-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.mode-controls button{white-space:normal}svg{width:100%;height:230px;display:block}svg polyline{stroke:var(--primary-color)}svg line{stroke:var(--warning-color,var(--secondary-text-color))}.legend{font-size:12px;color:var(--secondary-text-color)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--input-label-ink-color,var(--secondary-text-color))}input,select{margin-top:7px;width:100%;border:1px solid var(--input-idle-line-color,var(--divider-color));border-radius:var(--ha-border-radius-md,8px);background:var(--input-fill-color,var(--ha-color-form-background,var(--secondary-background-color)));color:var(--input-ink-color,var(--primary-text-color));padding:10px;font:inherit;caret-color:var(--primary-color);accent-color:var(--primary-color)}select option,optgroup{background:var(--primary-background-color,Canvas);color:var(--primary-text-color,CanvasText)}select option:disabled{color:var(--secondary-text-color,GrayText)}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color);font-size:12px;line-height:1.7;margin-top:24px}a{color:var(--primary-color);text-underline-offset:3px}summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form,.solcast-editor{border-top:1px solid var(--divider-color);margin-top:18px;padding-top:6px}.solcast-note{white-space:pre-line}"+
+      ".slot-plan-heading{margin-top:24px}.slot-plan-heading h3{font-size:21px;margin-bottom:6px}.slot-plan-heading p,.slot-plan-note{line-height:1.6;color:var(--secondary-text-color);font-size:13px;max-width:760px}.slot-day{margin-top:22px}.slot-day>h3{font-size:16px;margin:0 0 12px}.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}.slot-card{padding:18px 14px;text-align:center;min-width:0;box-shadow:none;border-radius:16px}.slot-card.is-current{border-color:var(--primary-color);background:var(--ha-color-fill-primary-quiet-resting,var(--ha-card-background,var(--card-background-color,#fff)))}.slot-card.is-past{background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;text-align:left;min-height:26px}.slot-zone{font-size:12px;font-weight:650;color:var(--secondary-text-color)}.slot-card h4{font-size:15px;line-height:1.5;margin:10px 0 6px}.slot-permission{font-size:12px;min-height:36px;line-height:1.5;margin:0 0 10px;color:var(--secondary-text-color)}.slot-badge{display:inline-block;font-size:10px;line-height:1.5;font-weight:650;padding:3px 7px;border-radius:20px;background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-badge.current{background:var(--ha-color-primary-90,var(--secondary-background-color));color:var(--primary-text-color)}.slot-badge.fallback{background:var(--ha-color-warning-90,var(--secondary-background-color));color:var(--primary-text-color);margin:6px 0}.slot-gauge{position:relative;width:112px;height:112px;margin:0 auto;color:var(--primary-color)}.slot-gauge.reserve{color:var(--secondary-text-color)}.slot-gauge svg{width:112px;height:112px;transform:rotate(-90deg);overflow:visible}.slot-gauge circle{fill:none;stroke-width:8}.gauge-track{stroke:var(--divider-color)}.gauge-value{stroke:currentColor;stroke-linecap:round}.gauge-reading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:2px;color:var(--primary-text-color)}.gauge-reading b{font-size:29px;font-weight:650;letter-spacing:-1px}.gauge-reading span{font-size:13px;color:var(--secondary-text-color)}.slot-role{font-size:13px;font-weight:650;margin:10px 0 4px}.slot-explanation{font-size:11px;line-height:1.5;color:var(--secondary-text-color);min-height:33px;margin:0}.slot-reserve{font-size:11px;color:var(--secondary-text-color);margin:7px 0}.slot-projection{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider-color)}.slot-projection span,.slot-projection small{display:block;color:var(--secondary-text-color);font-size:11px;line-height:1.5}.slot-projection b{display:block;font-size:15px;line-height:1.7;font-weight:600}.slot-plan-note{margin-bottom:0}.stats article{padding:18px}.stats strong{font-size:28px;overflow-wrap:anywhere}.stats .sub{line-height:1.5}.slot-grid article strong{font-size:28px}details>summary{font-size:17px;line-height:1.5}details{border-top:1px solid var(--divider-color);margin-top:24px}details[open]>summary{margin-bottom:4px}@media(max-width:480px){.slot-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.slot-card{padding:14px 9px}.slot-card h4{font-size:13px}.slot-zone{font-size:10px}.slot-card-top{align-items:flex-start;flex-direction:column}.slot-gauge,.slot-gauge svg{width:100px;height:100px}.slot-explanation{min-height:48px}.stats strong{font-size:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}"+
       "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){header{flex-direction:column;gap:10px}.mode-controls{width:100%;justify-content:space-between}.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
       '</style><main><header><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div><div class="mode-controls"><div class="pill '+(active?'':'shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div></header>'+
       (this.actionError?'<div role="alert" class="notice error" data-action-error="true"><p><b>Ostatnia nieudana akcja</b></p><p>'+esc(this.actionError.message)+'</p><button id="action-error-dismiss" class="secondary">Zamknij komunikat</button></div>':'')+
       (this.error&&this.error!==this.actionError?.message?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+this.runtimeErrorHtml()+this.postSaveHtml()+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
-      card("Wybrany cel SoC",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
-      card("Tryb",active?"Aktywny":"Obserwacja","",active?"Sterowanie falownikiem":"Planowanie bez poleceń do falownika")+'</div>'+
-      this.updatesHtml()+this.telemetryDiagnosticsHtml()+this.topologyHtml()+this.hardwareHtml()+this.tariffCalendarHtml()+
+      card("Następny cel baterii",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
+      card("Doładowanie z sieci",fresh&&typeof c.grid_charge_enabled==="boolean"?(c.grid_charge_enabled?"Włączone":"Wyłączone"):"—","",fresh?statusText:"Oczekiwanie na odczyt")+'</div>'+
       (!fresh?'<div class="notice warning">Brak aktualnego odczytu silnika. Pomiary wymagają aktualizacji z ostatnich 30 sekund.</div>':'')+
       '<div class="notice">'+esc(statusText)+'</div>'+
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
       ((plan.unreachable||c.unreachable)?'<div class="notice warning">Dostępna energia lub moc może nie wystarczyć do osiągnięcia celu. Limit poboru ma pierwszeństwo.</div>':'')+
+      this.tariffCalendarHtml()+
 
+      '<section><h2>Prognoza modelu</h2>'+this.modelTargetsHtml()+
+      (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':this.unavailablePlanHtml())+
+      '</section>'+
+      this.topologyHtml()+this.hardwareHtml()+this.pvPriorityHtml()+this.solcastUsageHtml()+this.updatesHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+ 
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       this.sourcesHtml()+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+
-      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.')+card(batteryLimit.label,num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A",batteryLimit.note)+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu ograniczeń baterii, falownika i przyłącza.")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. '+esc(batteryLimit.forecast)+' Ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+this.pvPriorityHtml()+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
+      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.')+card(batteryLimit.label,num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A",batteryLimit.note)+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu ograniczeń baterii, falownika i przyłącza.")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. '+esc(batteryLimit.forecast)+' Ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
       '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
-      this.solcastUsageHtml()+
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p>'+this.solcastHtml()+'</section>'+
       '<section><h2>Przyłącze sieciowe</h2><div class="fields">'+basicField("grid_import_limit_kw","Zapisz limit łączny")+basicField("grid_phase_limit_kw","Zapisz limit fazowy")+'</div><p class="legend">Maksymalny dozwolony pobór całej instalacji z sieci, niezależny od mocy falownika. Obowiązuje w LOAD i CT. W CT obejmuje również odbiory między przyłączem a portem GRID. Wpisz limity swojego przyłącza; regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Moc falownika, limit ładowarki i BMS pozostają osobnymi ograniczeniami.</p></section>'+
       this.loadsHtml()+
-      '<section><h2>Prognoza modelu</h2>'+this.modelTargetsHtml()+
-      (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':'<div class="notice">Brak kompletnej prognozy. Silnik pokazuje zachowawcze cele i przyczynę braku planu.</div>')+
-      '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary>'+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
+      this.telemetryDiagnosticsHtml()+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
       '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+this.gridPhaseReadoutHtml()+' · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe zmiany o :00 i :30: wyliczona nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
@@ -1310,7 +1390,19 @@ class DeyeEMSPanel extends HTMLElement {
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
       '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja '+PANEL_VERSION+'.</footer></main>';
     const details=this.shadowRoot.querySelector("details");
-    if(details)details.open=detailsOpen;
+    this.settingsElement=details;
+    if(details){
+      details.open=this.settingsExpanded;
+      // Native toggle is queued. Preserve a summary click before its default
+      // action so a synchronous theme/status render cannot lose that intent.
+      this.shadowRoot.getElementById("settings-toggle")?.addEventListener("click",event=>{
+        if(!event.defaultPrevented&&this.settingsElement===details)this.settingsExpanded=!details.open;
+      });
+      details.addEventListener("toggle",()=>{
+        // A queued toggle from a replaced node must not close the new section.
+        if(this.settingsElement===details)this.settingsExpanded=details.open;
+      });
+    }
     this.bindLoads();
     this.bindSolcast();
     this.bindSources();

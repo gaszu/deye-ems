@@ -110,16 +110,60 @@ async def _async_options_changed(hass, entry):
             return
     if not manager.is_current(ticket):
         return
+    # Keep the existing route present while this options reload exchanges
+    # coordinators. Removing it even briefly makes HA navigate to its default
+    # dashboard before the replacement coordinator can register the panel.
+    # Count per entry: concurrent or nested saves must not release another
+    # reload's navigation lease.
+    panel_reloads = None
+    if hass.data.get("deye_ems_panel"):
+        panel_reloads = hass.data.setdefault(DOMAIN + "_panel_reloads", {})
+        panel_reloads[entry.entry_id] = panel_reloads.get(entry.entry_id, 0) + 1
+    success = False
     try:
         success = await hass.config_entries.async_reload(entry.entry_id)
     except BaseException:
         manager.after_reload(ticket, False)
         raise
+    finally:
+        if panel_reloads is not None:
+            depth = panel_reloads.get(entry.entry_id, 1) - 1
+            if depth > 0:
+                panel_reloads[entry.entry_id] = depth
+            else:
+                panel_reloads.pop(entry.entry_id, None)
+            if not panel_reloads:
+                hass.data.pop(DOMAIN + "_panel_reloads", None)
+            if success is not True:
+                _async_remove_unused_panel(hass, check_loaded_entries=True)
     manager.after_reload(ticket, success)
+
+
+def _async_remove_unused_panel(hass, *, check_loaded_entries=False, ignore_reload_entry=None):
+    """Clean navigation only when no runtime or reload still needs its route."""
+    pending = hass.data.get(DOMAIN + "_panel_reloads", {})
+    if any(depth > 0 for entry_id, depth in pending.items()
+           if entry_id != ignore_reload_entry):
+        return
+    coordinators = hass.data.get(DOMAIN, {})
+    if check_loaded_entries:
+        # A failed setup may already have inserted a partial runtime into
+        # DOMAIN. It must not retain a panel as though setup had succeeded.
+        for entry_id in coordinators:
+            registered = hass.config_entries.async_get_entry(entry_id)
+            state = getattr(registered, "state", None)
+            if (registered is not None and not getattr(registered, "disabled_by", None)
+                    and getattr(state, "value", state) == "loaded"):
+                return
+    elif coordinators:
+        return
+    if hass.data.pop(DOMAIN + "_panel", None):
+        frontend.async_remove_panel(hass, PANEL_PATH)
 
 
 async def async_remove_entry(hass, entry):
     cancel_post_save(hass, entry.entry_id, "configuration_changed")
+    _async_remove_unused_panel(hass, ignore_reload_entry=entry.entry_id)
 
 
 async def async_unload_entry(hass, entry):
@@ -128,7 +172,7 @@ async def async_unload_entry(hass, entry):
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
         await _async_disable_update_checks(hass)
-        frontend.async_remove_panel(hass, PANEL_PATH)
         # Static paths and websocket handlers are registered once per HA process.
-        hass.data.pop(DOMAIN + "_panel", None)
+        _async_remove_unused_panel(hass, ignore_reload_entry=(
+            entry.entry_id if getattr(entry, "disabled_by", None) else None))
 
