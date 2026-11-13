@@ -101,7 +101,7 @@ class Updates(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(status["status"], expected)
                 self.assertEqual(status["latest_version"], tag.removeprefix("v"))
                 self.assertEqual(status["release_url"],
-                    "https://github.com/gaszu/ha-deye-ems/releases/tag/"+tag)
+                    "https://github.com/gaszu/deye-ems/releases/tag/"+tag)
                 self.assertFalse(status["stale"])
                 self.assertEqual(len(session.calls), 1)
                 self.assertNotIn("private-provider-body", json.dumps(status))
@@ -111,7 +111,7 @@ class Updates(unittest.IsolatedAsyncioTestCase):
         await manager.async_check()
         url, options = session.calls[0]
         self.assertEqual(url, module["API_URL"])
-        self.assertEqual(url, "https://api.github.com/repos/gaszu/ha-deye-ems/releases/latest")
+        self.assertEqual(url, "https://api.github.com/repos/gaszu/deye-ems/releases/latest")
         self.assertTrue(options["ssl"])
         self.assertFalse(options["allow_redirects"])
         self.assertLessEqual(options["timeout"], 10)

@@ -4,10 +4,10 @@
   "codeowners": ["@gaszu"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "panel_custom", "recorder"],
-  "documentation": "https://github.com/gaszu/ha-deye-ems",
+  "documentation": "https://github.com/gaszu/deye-ems",
   "integration_type": "service",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/gaszu/ha-deye-ems/issues",
+  "issue_tracker": "https://github.com/gaszu/deye-ems/issues",
   "requirements": [],
-  "version": "1.0.20"
+  "version": "1.0.21"
 }

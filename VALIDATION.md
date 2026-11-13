@@ -1,3 +1,9 @@
+# Wersja 1.0.21 — adres repozytorium
+
+- **528 testów Python i 121 testów panelu PASS.**
+- Odnośniki instalacji, manifest, klient wydań i warunek publikacji wskazują `gaszu/deye-ems`. Testy klienta sprawdzają nowy kanoniczny URL bez przekierowania, a panel generuje odnośniki do wydań nowego repozytorium.
+- Zmiana zachowuje domenę `deye_ems`, mapowania źródeł, silnik, regulator oraz limity. Repozytorium zachowuje identyfikator i dotychczasowe wydania.
+
 # Wersja 1.0.20 — czysta instalacja i profile baterii
 
 - **528 testów Python i 121 testów panelu PASS.** Regresje obejmują pustą listę dodatkowych odbiorników, brak automatycznego dziedziczenia pompy, zapisane kanały ON/OFF oraz pojedyncze liczenie LOAD.
