@@ -40,13 +40,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-0-1");
+  const Panel = registry.get("deye-ems-panel-2-0-2");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"2.0.1",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.0.2",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -62,8 +62,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-0-1"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.0\.1/);
+  assert.notEqual(registry.get("deye-ems-panel-2-0-2"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.0\.2/);
 });
 
 function apiUsage(panel,changes={}){
@@ -81,8 +81,8 @@ test("software version and manual update check are visible without opening advan
   const {panel,calls,reloads}=fixture();
   const html=panel.shadowRoot.innerHTML.split("<details>")[0];
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>2\.0\.1<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>2\.0\.1<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.0\.2<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.0\.2<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -91,18 +91,18 @@ test("software version and manual update check are visible without opening advan
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"2.0.1",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.0.2",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
   html=updateInfo(panel,{status:"available",latest_version:"2.0.200",checked_at});
   assert.match(html,/Dostępna aktualizacja: 2\.0\.200/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"2.0.2",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.0.3",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"2.0.1"},
-    {status:"current",latest_version:"2.0.1",checked_at:"0"},
-    {status:"current",latest_version:"2.0.1",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"2.0.1",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.0.2"},
+    {status:"current",latest_version:"2.0.2",checked_at:"0"},
+    {status:"current",latest_version:"2.0.2",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.0.2",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -110,12 +110,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="2.0.2";panel.render();
+  panel.payload.backend_version="2.0.3";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v2.0.1","2.0.1-beta","02.0.1"]){
+  for(const value of [undefined,null,17,"unknown","v2.0.2","2.0.2-beta","02.0.2"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -125,22 +125,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.0.2",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.0.3",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 2\.0\.2/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.0\.3/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.0.3",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.0\.2"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.0\.3"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['2.0.2\" onclick=\"unexpected()','<img src=x>','2.0.2/../../x',"v2.0.2",true,18,"2.0.2-beta","999999999.0.1"]){
+  for(const latest_version of ['2.0.3\" onclick=\"unexpected()','<img src=x>','2.0.3/../../x',"v2.0.3",true,18,"2.0.3-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -159,9 +159,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.0.3",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.0.2");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.0.3");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -171,9 +171,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"2.0.2",updates:{status:"not_checked"}};
-  finish({backend_version:"2.0.1",updates:{status:"current",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.0.2");
+  panel.payload={...panel.payload,backend_version:"2.0.3",updates:{status:"not_checked"}};
+  finish({backend_version:"2.0.2",updates:{status:"current",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.0.3");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -208,20 +208,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.0.3",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"2.0.2");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"2.0.2",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.0.3");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.0.3",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="2.0.2";
+  panel.payload.backend_version="2.0.3";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));

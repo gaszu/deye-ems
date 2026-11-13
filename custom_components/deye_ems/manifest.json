@@ -1,13 +1,20 @@
 {
   "domain": "deye_ems",
   "name": "Deye EMS",
-  "codeowners": ["@gaszu"],
+  "codeowners": [
+    "@gaszu"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "panel_custom", "recorder"],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "recorder"
+  ],
   "documentation": "https://github.com/gaszu/deye-ems",
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/gaszu/deye-ems/issues",
   "requirements": [],
-  "version": "2.0.1"
+  "version": "2.0.2"
 }

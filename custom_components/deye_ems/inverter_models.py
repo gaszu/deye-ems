@@ -12,9 +12,11 @@ CATALOG_VERSION = "2026-11-13"
 SG04LP1_SOURCE = "https://www.deyeinverter.com/deyeinverter/2026/04/24/BDatasheetSUN-3-6K-SG04LP120260424en-xMzy.pdf"
 SG05LP1_SOURCE = "https://www.deyeinverter.com/product/single-phase-low-voltage-hybrid-inverter/hybrid-inverter-sun-3-610-ksg05lp1eusm2p-2740.html"
 SG04LP3_SOURCE = "https://deye.com/product/sun-5-6-8-10-12k-sg04lp3-eu/"
+SG05LP3_SOURCE = "https://www.deyeinverter.com/deyeinverter/2026/09/14/BDatasheetSUN-3-12K-SG05LP3-EU-SM220260911en.pdf"
+SG05LP3_LARGE_SOURCE = "https://www.deyeinverter.com/deyeinverter/2026/09/14/BDatasheetSUN-14-20K-SG05LP3-EU-SM220260911en.pdf"
 
 
-def _family(suffix, phases, powers, currents, source, passthrough=None):
+def _family(suffix, phases, powers, currents, source, passthrough=None, *, battery_inputs=None):
     return {
         f"SUN-{power:g}K-{suffix}": {
             "model_id": f"SUN-{power:g}K-{suffix}",
@@ -28,6 +30,7 @@ def _family(suffix, phases, powers, currents, source, passthrough=None):
             "control_supported": True, "source_url": source,
             "catalog_version": CATALOG_VERSION,
             "compatibility": "LV entity contract; verify mapped entities and firmware before control",
+            **({"battery_inputs": battery_inputs} if battery_inputs is not None else {}),
         }
         for power, current in zip(powers, currents, strict=True)
     }
@@ -39,6 +42,10 @@ INVERTER_MODELS = {
               (90, 120, 135, 175, 190, 190, 210), SG05LP1_SOURCE),
     **_family("SG04LP3-EU", 3, (5, 6, 8, 10, 12), (120, 150, 190, 210, 240),
               SG04LP3_SOURCE, 45.),
+    **_family("SG05LP3-EU-SM2", 3, (3, 4, 5, 6, 8, 10, 12),
+              (70, 95, 120, 135, 190, 210, 240), SG05LP3_SOURCE, 45., battery_inputs=1),
+    **_family("SG05LP3-EU-SM2", 3, (14, 15, 16, 18, 20),
+              (260, 280, 300, 330, 350), SG05LP3_LARGE_SOURCE, 70., battery_inputs=2),
 }
 HARDWARE_KEYS = ("inverter_model", "inverter_phases", "connection_phases", "inverter_phase")
 
