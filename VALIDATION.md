@@ -1,3 +1,11 @@
+# Wersja 2.0.2 — katalog SG05LP3-EU-SM2
+
+599 testów Python i 149 testów panelu przeszło lokalnie. Nowe modele nie zmieniają istniejącej konfiguracji ani warunków bezpieczeństwa.
+
+- Dwanaście modeli trójfazowych 3–20 kW zweryfikowanych względem oficjalnych kart producenta; katalog obejmuje 28 modeli LV. Testy kontrolują moce, prądy, przepustowość i warianty wejść baterii.
+- Profil SUN-10K-SG05LP3-EU-SM2 dopasowuje górne granice do modelu i zachowuje niższe ograniczenia użytkownika. Migracja nie przełącza automatycznie istniejącej instalacji na nowy model.
+- Wersja panelu i informacje instalacyjne są zgodne z wydaniem 2.0.2. Nie zmieniano limitów świeżości ani oprogramowania urządzeń ESPHome. Testy są syntetyczne; nie potwierdzają fizycznej zgodności wszystkich firmware.
+
 # Wersja 2.0.1 — szczegóły pomiarów
 
 597 testów Python i 149 testów panelu przeszło lokalnie. Diagnostyka nie zmienia ograniczeń sterowania.
