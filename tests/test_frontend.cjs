@@ -18,13 +18,14 @@ class FakeStyle {
 class FakeNode {
   constructor(attrs) {this.attrs=attrs;this.type=attrs.type;this.dataset={};this.events={};this.value=decode(attrs.value??"");this.open=attrs.tag==="details"&&attrs.open===true;this.checked=attrs.checked===true;this.disabled=attrs.disabled===true;this.required=attrs.required===true;for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
   addEventListener(type,callback) {this.events[type]=callback;}
+  dispatchEvent(event) {this.events[event.type]?.(event);return !event.defaultPrevented;}
   reportValidity() {const n=Number(this.value);return this.value!==""&&Number.isFinite(n)&&n>=Number(this.attrs.min)&&n<=Number(this.attrs.max);}
   matches(selector) {return selector.split(",").some(s=>{const match=/^(input|select)\[data-([a-z-]+)\]$/.exec(s);return match&&this.attrs.tag===match[1]&&this.dataset[match[2].replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]!==undefined;});}
 }
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const tariffName=/data-tariff-field="([^"]+)"/.exec(match[1])?.[1];const hardwareName=/data-hardware-field="([^"]+)"/.exec(match[1])?.[1];const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=tariffName?this.nodes.find(n=>n.dataset.tariffField===tariffName):hardwareName?this.nodes.find(n=>n.dataset.hardwareField===hardwareName):name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|summary|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const tariffName=/data-tariff-field="([^"]+)"/.exec(match[1])?.[1];const hardwareName=/data-hardware-field="([^"]+)"/.exec(match[1])?.[1];const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=tariffName?this.nodes.find(n=>n.dataset.tariffField===tariffName):hardwareName?this.nodes.find(n=>n.dataset.hardwareField===hardwareName):name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
   querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const tariff=/\[data-tariff-field="([^"]+)"\]/.exec(selector)?.[1];if(tariff)return this.nodes.find(n=>n.dataset.tariffField===tariff);const hardware=/\[data-hardware-field="([^"]+)"\]/.exec(selector)?.[1];if(hardware)return this.nodes.find(n=>n.dataset.hardwareField===hardware);const source=/\[data-source-field="([^"]+)"\]/.exec(selector)?.[1];if(source)return this.nodes.find(n=>n.dataset.sourceField===source);const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
@@ -40,13 +41,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:(fn,ms)=>{const timer={id:++timerId,fn,ms,cleared:false};timers.push(timer);return timer.id;},clearTimeout:id=>{const timer=timers.find(t=>t.id===id);if(timer)timer.cleared=true;},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-1-0");
+  const Panel = registry.get("deye-ems-panel-2-1-1");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"2.1.0",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.1.1",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -57,14 +58,22 @@ function fixture(previousElements = [], now = NOW) {
 
 test("an existing browser session registers the updated panel alongside the old element",()=>{
   class LegacyPanel {}
-  const {panel,registry}=fixture([["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel],["deye-ems-panel-1-0-10",LegacyPanel]]);
+  const {panel,registry}=fixture([["deye-ems-panel-2-1-0",LegacyPanel],["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel],["deye-ems-panel-1-0-10",LegacyPanel]]);
+  assert.equal(registry.get("deye-ems-panel-2-1-0"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-1-0"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.1\.0/);
+  assert.notEqual(registry.get("deye-ems-panel-2-1-1"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.1\.1/);
 });
+
+function setSettingsOpen(panel,open){
+  const details=panel.shadowRoot.querySelector("details");
+  details.open=open;
+  details.dispatchEvent({type:"toggle",target:details});
+  return details;
+}
 
 function apiUsage(panel,changes={}){
   panel.payload.data.solcast={status:"ok",api_configured:true,api_enabled:true,
@@ -81,8 +90,8 @@ test("software version and manual update check are visible without opening advan
   const {panel,calls,reloads}=fixture();
   const html=panel.shadowRoot.innerHTML.split("<details>")[0];
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>2\.1\.0<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>2\.1\.0<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.1\.1<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.1\.1<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -91,18 +100,18 @@ test("software version and manual update check are visible without opening advan
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"2.1.0",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.1.1",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
   html=updateInfo(panel,{status:"available",latest_version:"2.1.200",checked_at});
   assert.match(html,/Dostępna aktualizacja: 2\.1\.200/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"2.1.1",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.1.2",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"2.1.0"},
-    {status:"current",latest_version:"2.1.0",checked_at:"0"},
-    {status:"current",latest_version:"2.1.0",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"2.1.0",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.1.1"},
+    {status:"current",latest_version:"2.1.1",checked_at:"0"},
+    {status:"current",latest_version:"2.1.1",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.1.1",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -110,12 +119,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="2.1.1";panel.render();
+  panel.payload.backend_version="2.1.2";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v2.1.0","2.1.0-beta","02.1.0"]){
+  for(const value of [undefined,null,17,"unknown","v2.1.1","2.1.1-beta","02.1.1"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -125,22 +134,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.1.1",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.1.2",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 2\.1\.1/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.1\.2/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.1.2",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.1\.1"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.1\.2"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['2.1.1\" onclick=\"unexpected()','<img src=x>','2.1.1/../../x',"v2.1.1",true,18,"2.1.1-beta","999999999.0.1"]){
+  for(const latest_version of ['2.1.2\" onclick=\"unexpected()','<img src=x>','2.1.2/../../x',"v2.1.2",true,18,"2.1.2-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -159,9 +168,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.1.2",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.1.1");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.1.2");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -171,9 +180,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"2.1.1",updates:{status:"not_checked"}};
-  finish({backend_version:"2.1.0",updates:{status:"current",latest_version:"2.1.0",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.1.1");
+  panel.payload={...panel.payload,backend_version:"2.1.2",updates:{status:"not_checked"}};
+  finish({backend_version:"2.1.1",updates:{status:"current",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.1.2");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -193,7 +202,7 @@ test("update cooldown and failed requests affect only the check button and use a
 
 test("reload is explicit and respects unsaved forms while update polling preserves details and drafts",async()=>{
   const {panel,reloads,calls}=fixture();panel.render();
-  const details=panel.shadowRoot.querySelector("details");details.open=true;
+  const details=setSettingsOpen(panel,true);
   panel.drafts.capacity_kwh="88";panel.render();
   assert.equal(panel.shadowRoot.getElementById("updates-reload").disabled,true);
   assert.equal(panel.reloadInterface(),false);assert.equal(reloads(),0);
@@ -208,20 +217,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.1.2",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"2.1.1");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"2.1.1",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.1.2");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.1.2",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="2.1.1";
+  panel.payload.backend_version="2.1.2";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -244,18 +253,18 @@ test("automatic Deye current ceiling is read-only and independent of the control
   assert.equal(calls.length,0);
 });
 
-const storeRow=(available_version="v2.1.0",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
+const storeRow=(available_version="v2.1.1",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
 function storeFixture(){
   const result=fixture(),{panel}=result;
   panel.isConnected=true;panel._hass.user={is_admin:true};
-  panel.payload.updates={status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString(),stale:false};
+  panel.payload.updates={status:"available",latest_version:"2.1.2",checked_at:new Date(NOW).toISOString(),stale:false};
   return result;
 }
 function successfulStore(panel,calls,{legacy=false,alreadyCurrent=false}={}){
   let refreshed=false;
   panel._hass.callWS=async message=>{calls.push(message);
     if(legacy&&message.type.startsWith("marketplace/"))throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.1.0")];
+    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.1.1")];
     if(message.type.endsWith("/repository/refresh")){refreshed=true;return {};}
     throw Error("Unexpected store request");};
 }
@@ -271,7 +280,7 @@ test("open admin panel synchronizes only its older installed repository metadata
   assert.equal(calls.length,3);assert.equal(reloads(),0);assert.equal(panel.busy,false);
   assert.match(panel.updatesHtml(),/Marketplace otrzymał aktualne metadane/);
   assert.ok(calls.every(message=>!JSON.stringify(message).match(/install|download|restart|version\"|mode/)));
-  panel.payload.updates.latest_version="2.1.2";successfulStore(panel,calls);
+  panel.payload.updates.latest_version="2.1.3";successfulStore(panel,calls);
   assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,6);
 });
 
@@ -281,18 +290,18 @@ test("store metadata work is single-flight and never occupies the EMS stop contr
   const first=panel.syncStoreMetadata(),second=panel.syncStoreMetadata();
   assert.equal(first,second);assert.equal(calls.length,1);assert.equal(panel.busy,false);
   assert.equal(panel.shadowRoot.getElementById("mode").disabled,false);
-  finish([storeRow("v2.1.1")]);assert.equal(await first,true);assert.equal(calls.length,1);
+  finish([storeRow("v2.1.2")]);assert.equal(await first,true);assert.equal(calls.length,1);
 });
 
 test("already current marketplace metadata does not issue refresh and cannot downgrade a newer store release",async()=>{
-  for(const version of ["2.1.1","v2.1.2"]){
+  for(const version of ["2.1.2","v2.1.3"]){
     const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return [storeRow(version)];};
     assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,1);
   }
 });
 
 test("metadata sync requires an open admin panel and a fresh validated available release",async()=>{
-  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.1.1"},{latest_version:"2.1.0"},
+  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.1.2"},{latest_version:"2.1.1"},
     {latest_version:"<img src=x>"},{checked_at:new Date(NOW+1).toISOString()},
     {checked_at:new Date(NOW-7200001).toISOString()},{checked_at:null}];
   for(const changes of bad){const {panel,calls}=storeFixture();Object.assign(panel.payload.updates,changes);assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,0);}
@@ -303,9 +312,9 @@ test("metadata sync requires an open admin panel and a fresh validated available
 });
 
 test("wrong ambiguous uninstalled or malformed repository metadata never permits a refresh",async()=>{
-  const rows=[[],{},[storeRow("2.1.0",{id:"different"})],[storeRow("2.1.0",{full_name:"other/repo"})],
-    [storeRow("2.1.0",{domain:"other"})],[storeRow("2.1.0",{category:"plugin"})],
-    [storeRow("2.1.0",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
+  const rows=[[],{},[storeRow("2.1.1",{id:"different"})],[storeRow("2.1.1",{full_name:"other/repo"})],
+    [storeRow("2.1.1",{domain:"other"})],[storeRow("2.1.1",{category:"plugin"})],
+    [storeRow("2.1.1",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
   for(const response of rows){const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return response;};
     assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,1);await panel.syncStoreMetadata();assert.equal(calls.length,1);}
 });
@@ -326,7 +335,7 @@ test("legacy HACS fallback is allowed only for unknown_command and uses the same
 test("an unknown refresh endpoint rediscovers the same repository through legacy HACS before refreshing",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="marketplace/repository/refresh")throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.1":"v2.1.0")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.2":"v2.1.1")];done=true;return {};};
   assert.equal(await panel.syncStoreMetadata(),true);
   assert.deepEqual(calls.map(message=>message.type),["marketplace/repositories/list","marketplace/repository/refresh","hacs/repositories/list","hacs/repository/refresh","hacs/repositories/list"]);
 });
@@ -348,7 +357,7 @@ test("metadata responses after unmount cancellation or release changes never tri
     panel._hass.callWS=message=>{calls.push(message);return new Promise(resolve=>{finish=resolve;});};
     const pending=panel.syncStoreMetadata();
     if(reason==="disconnect"){panel.isConnected=false;panel.disconnectedCallback();}
-    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.2";else panel.payload.updates.stale=true;
+    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.3";else panel.payload.updates.stale=true;
     finish([storeRow()]);assert.equal(await pending,false);assert.equal(calls.length,1);
   }
 });
@@ -370,7 +379,7 @@ test("successful metadata fetch does not claim the store offers an unconfirmed n
 test("normal status polling can trigger metadata synchronization without a separate release check command",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="deye_ems/status")return panel.payload;
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.1":"v2.1.0")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.2":"v2.1.1")];done=true;return {};};
   await panel.refresh();await panel.storeSyncFlight;
   assert.equal(calls.filter(message=>message.type==="marketplace/repository/refresh").length,1);
   assert.ok(calls.every(message=>message.command!=="check_updates"));
@@ -597,7 +606,7 @@ test("measurement diagnostics identify the stale 175 second voltage and unchange
   assert.match(html,/Diagnostyka pomiarów/);assert.match(html,/sensor\.site_battery_voltage/);assert.match(html,/Napięcie baterii/);
   assert.match(html,/53,7 V/);assert.match(html,/>175 s<\/td>/);assert.match(html,/>120 s<\/td>/);
   assert.match(html,/Odczyt starszy niż dopuszczalny limit/);assert.match(html,/Wiek dotyczy ostatniego sprawdzenia silnika/);
-  assert.ok(panel.shadowRoot.innerHTML.indexOf("Diagnostyka pomiarów")<panel.shadowRoot.innerHTML.indexOf("Harmonogram taryfy"));
+  assert.ok(panel.shadowRoot.innerHTML.indexOf("Harmonogram taryfy")<panel.shadowRoot.innerHTML.indexOf("Diagnostyka pomiarów"));
   assert.equal(calls.length,0);
 });
 test("wrong units and absent report time remain distinct without inventing zero age or a threshold",()=>{
@@ -872,21 +881,20 @@ test("renders four simple primary facts and leaves technical settings collapsed"
   const html=panel.shadowRoot.innerHTML;
   const stats=html.split('<div class="grid stats">')[1].split('</div>')[0];
   assert.equal((stats.match(/<article>/g)||[]).length,4);
-  assert.match(stats,/Akumulator/);assert.match(stats,/Sieć \/ dom/);assert.match(stats,/Wybrany cel SoC/);assert.match(stats,/Tryb/);
-  assert.match(html,/<details><summary>Ustawienia zaawansowane/);
+  assert.match(stats,/Akumulator/);assert.match(stats,/Sieć \/ dom/);assert.match(stats,/Następny cel baterii/);assert.match(stats,/Doładowanie z sieci/);
+  assert.match(html,/<details><summary id="settings-toggle">Ustawienia zaawansowane/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);
   assert.equal(panel.shadowRoot.querySelector("details").open,false);
   const beforeAdvanced=html.split("<details>")[0];
-  assert.equal((beforeAdvanced.match(/<input /g)||[]).length,5);
-  assert.match(beforeAdvanced,/data-key="min_soc_percent"/);
-  assert.match(beforeAdvanced,/data-key="capacity_kwh"/);
-  assert.match(beforeAdvanced,/data-key="pv_peak_kwp"/);
+  assert.equal((beforeAdvanced.match(/<input /g)||[]).length,0);
+  assert.doesNotMatch(beforeAdvanced,/data-key="min_soc_percent"|data-key="capacity_kwh"|data-key="pv_peak_kwp"/);
+  assert.match(html.split("<details>")[1],/data-key="min_soc_percent"/);
 });
 
 test("an expanded details section survives polling while measurements update",async()=>{
   const {panel}=fixture();
   const previous=panel.shadowRoot.querySelector("details");
-  previous.open=true;
+  setSettingsOpen(panel,true);
   panel._hass.callWS=async()=>({...panel.payload,data:{...panel.payload.data,
     inputs:{...panel.payload.data.inputs,soc:63}}});
   await panel.refresh();
@@ -900,9 +908,9 @@ test("an expanded details section survives polling while measurements update",as
 
 test("polling respects a manually closed details section after it was open",async()=>{
   const {panel}=fixture();
-  panel.shadowRoot.querySelector("details").open=true;
+  setSettingsOpen(panel,true);
   await panel.refresh();
-  panel.shadowRoot.querySelector("details").open=false;
+  setSettingsOpen(panel,false);
   await panel.refresh();
   assert.equal(panel.shadowRoot.querySelector("details").open,false);
   await panel.refresh();
@@ -912,7 +920,7 @@ test("polling respects a manually closed details section after it was open",asyn
 test("successful and failed commands preserve the current details state",async()=>{
   for(const open of [true,false])for(const fails of [false,true]){
     const {panel}=fixture();
-    panel.shadowRoot.querySelector("details").open=open;
+    setSettingsOpen(panel,open);
     let finish;
     panel._hass.callWS=()=>new Promise((resolve,reject)=>{
       finish=()=>fails?reject(new Error("Synthetic command failure")):resolve(panel.payload);
@@ -933,20 +941,54 @@ test("successful and failed commands preserve the current details state",async()
 
 test("command completion respects closing details while the command is pending",async()=>{
   const {panel}=fixture();
-  panel.shadowRoot.querySelector("details").open=true;
+  setSettingsOpen(panel,true);
   let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=()=>resolve(panel.payload);});
   const pending=panel.command({command:"recalculate"});
-  panel.shadowRoot.querySelector("details").open=false;
+  setSettingsOpen(panel,false);
   finish();
   await pending;
   assert.equal(panel.shadowRoot.querySelector("details").open,false);
 });
 
+test("native settings toggle intent survives a theme synchronization and a following status poll",async()=>{
+  const {panel}=fixture();appearanceThemes(panel);panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  setSettingsOpen(panel,true);
+  panel.hass={...panel._hass,selectedTheme:{dark:true}};
+  assert.equal(panel.shadowRoot.querySelector("details").open,true);
+  await panel.refresh();
+  assert.equal(panel.shadowRoot.querySelector("details").open,true);
+  setSettingsOpen(panel,false);
+  panel.hass={...panel._hass,selectedTheme:{dark:false}};
+  await panel.refresh();
+  assert.equal(panel.shadowRoot.querySelector("details").open,false);
+});
+
+test("a render between summary click and native default keeps the intent and ignores old queued toggle events",async()=>{
+  const {panel}=fixture();appearanceThemes(panel);panel.payload.appearance={theme:"synthetic-neutral"};panel.render();
+  const oldDetails=panel.shadowRoot.querySelector("details"),oldSummary=panel.shadowRoot.getElementById("settings-toggle");
+  // The click listener runs before the browser's native details default action.
+  oldSummary.dispatchEvent({type:"click",target:oldSummary,defaultPrevented:false});
+  assert.equal(oldDetails.open,false);
+  panel.hass={...panel._hass,selectedTheme:{dark:true}};
+  const opened=panel.shadowRoot.querySelector("details");
+  assert.notEqual(opened,oldDetails);assert.equal(opened.open,true);
+  // Late events on a detached old node must not change current UI state.
+  oldDetails.open=true;oldDetails.dispatchEvent({type:"toggle",target:oldDetails});
+  oldDetails.open=false;oldDetails.dispatchEvent({type:"toggle",target:oldDetails});
+  await panel.refresh();assert.equal(panel.shadowRoot.querySelector("details").open,true);
+  const closing=panel.shadowRoot.querySelector("details"),summary=panel.shadowRoot.getElementById("settings-toggle");
+  summary.dispatchEvent({type:"click",target:summary,defaultPrevented:false});
+  assert.equal(closing.open,true);
+  await panel.refresh();assert.equal(panel.shadowRoot.querySelector("details").open,false);
+  closing.open=false;closing.dispatchEvent({type:"toggle",target:closing});
+  await panel.refresh();assert.equal(panel.shadowRoot.querySelector("details").open,false);
+});
+
 test("distinguishes selected target, forecast target, request, register and physical power",()=>{
   const {panel}=fixture();
   const html=panel.shadowRoot.innerHTML;
-  assert.match(html,/Wybrany cel SoC/);assert.match(html,/Modelowy cel SoC/);
+  assert.match(html,/Następny cel baterii/);assert.match(html,/Modelowy cel SoC/);
   assert.match(html,/ostatni poprawny plan/);
   assert.match(html,/Żądany limit ładowania/);assert.match(html,/Odczyt nastawy: 27 A/);
   assert.match(html,/pomiar baterii:/);
@@ -956,10 +998,12 @@ test("distinguishes selected target, forecast target, request, register and phys
 test("unverified fallback targets are not presented as forecasts",()=>{
   const {panel}=fixture();
   panel.payload.data.plan.quality="invalid";
+  panel.payload.data.plan.reason="incomplete_48h_forecast";
+  panel.payload.data.plan.source="own_conservative_fallback";
   panel.payload.data.plan.targets.night.soc_percent=95;
   panel.payload.data.control.target_soc=50;
   panel.render();
-  assert.match(panel.shadowRoot.innerHTML,/Wybrany cel SoC/);
+  assert.match(panel.shadowRoot.innerHTML,/Następny cel baterii/);
   assert.match(panel.shadowRoot.innerHTML,/Brak kompletnej prognozy/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML,/Modelowy cel SoC/);
 });
@@ -1015,10 +1059,10 @@ test("missing low-SOC readback disables the reserve save button",()=>{
   assert.match(panel.shadowRoot.innerHTML,/data-save="min_soc_percent" disabled/);
 });
 
-test("connection limits are visible for both topologies and permit sixteen kilowatts",()=>{
+test("connection limits remain editable under installation settings for both topologies and permit sixteen kilowatts",()=>{
   for(const topology of ["load_only","load_with_external_ct"]){
     const {panel}=fixture();panel.payload.options.topology=topology;panel.render();
-    const basic=panel.shadowRoot.innerHTML.split("<details>")[0];
+    const basic=panel.shadowRoot.innerHTML.split("<details>")[1];
     assert.match(basic,/Przyłącze sieciowe/);
     assert.match(basic,/data-key="grid_import_limit_kw" type="number" min="1" max="30"/);
     assert.match(basic,/data-key="grid_phase_limit_kw" type="number" min="0.5" max="15"/);
@@ -1661,9 +1705,9 @@ function sourceInput(panel,name,value){
   assert.ok(input,name);input.value=value;input.events.input();return input;
 }
 
-test("source configuration is visible and opens the native current-prefix field without changes",async()=>{
+test("source configuration stays in installation settings and opens the native current-prefix field without changes",async()=>{
   const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeSources(panel);
-  assert.match(panel.shadowRoot.innerHTML.split("<details>")[0],/Źródła danych/);
+  assert.match(panel.shadowRoot.innerHTML.split("<details>")[1],/Źródła danych/);
   await panel.shadowRoot.getElementById("sources-open").events.click();
   assert.equal(sourceInput(panel,"entity_prefix","existing_site_").value,"existing_site_");
   assert.match(panel.sourcesHtml(),/Prefiks encji Deye/);
@@ -2197,7 +2241,7 @@ function nativeTariff(panel,{plan,confirm,finish,catalogError=false}={}){
   const apiCalls=[],wsCalls=[],effects={writes:0};
   panel._hass.callWS=async message=>{wsCalls.push(message);if(message.type==="deye_ems/tariff_catalog"){
     if(catalogError)throw Error("private-catalog-body");
-    return {backend_version:"2.1.0",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:[{profile_id:"tauron_g13_2026",operator_id:"tauron_dystrybucja",label:"TAURON G13",tariff:"G13",supported:true,runtime_allowed:true,private_key:"must-not-retain"}],private_body:"must-not-retain"};}
+    return {backend_version:"2.1.1",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:[{profile_id:"tauron_g13_2026",operator_id:"tauron_dystrybucja",label:"TAURON G13",tariff:"G13",supported:true,runtime_allowed:true,private_key:"must-not-retain"}],private_body:"must-not-retain"};}
     return panel.payload;};
   panel._hass.callApi=async(method,route,data)=>{apiCalls.push({method,route,data});if(method==="DELETE")return {};
     if(route==="config/config_entries/options/flow")return {type:"menu",flow_id:"tariff-flow",step_id:"init",menu_options:["tariff","inverter","sources"]};
@@ -2293,16 +2337,16 @@ test("tariff edits participate in unsaved protection and disconnect cleanup whil
 function slotTarget(changes={}){return {start:"2026-11-10T21:00:00+01:00",end:"2026-11-11T06:00:00+01:00",zone:"low",tier:0,grid_charge_allowed:true,charge_target_soc_percent:76,reserve_soc_percent:45,projected_soc_start_percent:62,projected_soc_end_percent:76,projection_from:new Date(NOW).toISOString(),deadline:"2026-11-11T06:00:00+01:00",quality:"forecast",reason:"weekday",...changes};}
 test("actual tariff intervals show computed SoC and projection start without hardcoded morning targets",()=>{
   const {panel}=fixture();calendarData(panel,{profile_id:"pge_g12_2026",operator_label:"PGE Dystrybucja",tariff:"G12"});panel.payload.data.plan.tariff_slot_targets=[slotTarget()];panel.render();
-  const html=panel.tariffSlotTargetsHtml();assert.match(html,/21:00.*06:00/);assert.match(html,/>76<\/td>/);assert.match(html,/62 → 76 \(od 10\.11, 22:00\)/);assert.match(html,/Strefa niższa/);assert.match(html,/Rezerwa/);
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/21:00.*06:00/);assert.match(html,/aria-label="Cel ładowania: 76%"/);assert.match(html,/>62 → 76%<\/b>/);assert.match(html,/od 10\.11, 22:00/);assert.match(html,/Strefa niższa/);assert.match(html,/Rezerwa/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML,/Modelowy cel przed 07:00|Modelowy cel przed szczytem/);
 });
 test("conservative slot targets never masquerade as forecast while protected and past targets stay missing",()=>{
   const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({quality:"fallback",projected_soc_start_percent:0,projected_soc_end_percent:0}),slotTarget({tier:2,grid_charge_allowed:false,charge_target_soc_percent:90,quality:"unavailable"}),slotTarget({start:"2026-11-10T07:00:00+01:00",end:"2026-11-10T13:00:00+01:00",quality:"past",charge_target_soc_percent:0,reserve_soc_percent:0})];
-  const html=panel.tariffSlotTargetsHtml();assert.match(html,/76 \(zachowawczy\)/);assert.match(html,/brak pełnej prognozy/);assert.match(html,/Przedział miniony/);assert.doesNotMatch(html,/>0<\/td>|>90<\/td>|0 → 0/);
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/aria-label="Cel ładowania: 76%"/);assert.match(html,/Cel zachowawczy/);assert.match(html,/Brak wyliczonej projekcji/);assert.match(html,/Przedział miniony/);assert.doesNotMatch(html,/>0<\/td>|>90<\/td>|0 → 0/);
 });
 test("slot table rejects malformed intervals projections and values and escapes operator labels",()=>{
   const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({zone_label:'<img src=x>',charge_target_soc_percent:101,reserve_soc_percent:null,projection_from:"2026-11-10T20:00:00+01:00"}),slotTarget({start:"bad",end:"bad"})];
-  let html=panel.tariffSlotTargetsHtml();assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|101|62 → 76|bad/);
+  let html=panel.tariffSlotTargetsHtml();assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|aria-label="[^"]*101%|62 → 76|>bad</);
   panel.payload.data.updated_at=new Date(NOW-30001).toISOString();html=panel.tariffSlotTargetsHtml();assert.match(html,/Brak bieżącej tabeli/);assert.doesNotMatch(html,/76|21:00/);
 });
 test("generic model targets support multiple tariff deadlines and explicit virtual checkpoints",()=>{
@@ -2369,7 +2413,7 @@ test("unavailable tariff notices and TOU-readback waits use helpful Polish messa
 
 test("real backend numeric tariff tiers show allowed charge targets and never create protected targets",()=>{
   const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({tier:0,grid_charge_allowed:true,charge_target_soc_percent:75}),slotTarget({tier:1,grid_charge_allowed:false,charge_target_soc_percent:91}),slotTarget({tier:2,grid_charge_allowed:false,charge_target_soc_percent:92})];
-  const html=panel.tariffSlotTargetsHtml();assert.match(html,/>75<\/td>/);assert.doesNotMatch(html,/>91<\/td>|>92<\/td>/);assert.equal((html.match(/>75<\/td>/g)||[]).length,1);
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/aria-label="Cel ładowania: 75%"/);assert.doesNotMatch(html,/aria-label="[^"]*(91|92)%/);assert.equal((html.match(/aria-label="Cel ładowania: 75%"/g)||[]).length,1);
 });
 test("post-save pause failure remains a concrete blocker without claiming a physical stop",()=>{
   const {panel}=fixture();panel.payload.post_save_activation={status:"blocked",reason:"configuration_pause_failed",issues:[]};
@@ -2385,5 +2429,156 @@ test("a calendar requiring contract or meter-clock confirmation explains the blo
 
 test("an all-cheap G11 interval can keep its virtual planning deadline without inventing an operator boundary",()=>{
   const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({start:"2026-11-10T00:00:00+01:00",end:"2026-11-11T00:00:00+01:00",zone:"flat",tier:0,deadline:"2026-11-11T07:00:00+01:00"})];
-  const html=panel.tariffSlotTargetsHtml();assert.match(html,/Strefa całodobowa/);assert.match(html,/11\.11, 07:00/);assert.match(html,/terminu planu pokazanego w tabeli/);assert.doesNotMatch(html,/dotyczy końca taniego przedziału/);
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/Strefa całodobowa/);assert.match(html,/11\.11, 07:00/);assert.match(html,/terminu planu pokazanego na karcie/);assert.doesNotMatch(html,/dotyczy końca taniego przedziału/);
+});
+
+test("slot circles distinguish a protected minimum from a charge goal and never imply zero grid import",()=>{
+  const {panel,calls}=fixture();
+  panel.payload.data.plan.tariff_slot_targets=[slotTarget({grid_charge_allowed:false,tier:2,charge_target_soc_percent:91,reserve_soc_percent:30})];
+  const html=panel.tariffSlotTargetsHtml();
+  assert.match(html,/aria-label="Minimalny zapas: 30%"/);
+  assert.match(html,/Dom może korzystać z baterii do tego poziomu/);
+  assert.match(html,/Bez doładowania z sieci/);
+  assert.doesNotMatch(html,/Cel ładowania: 91|stroke-dasharray="91|Bez poboru|0 kWh|0 kW/);
+  assert.equal(calls.length,0);
+});
+
+test("unknown circles have no numeric arc while a genuine zero charge goal remains zero",()=>{
+  const {panel}=fixture();
+  let html=panel.slotGaugeHtml(null,"Cel ładowania");
+  assert.match(html,/brak danych/);assert.match(html,/>—<\/b>/);
+  assert.doesNotMatch(html,/gauge-value|stroke-dasharray/);
+  html=panel.slotGaugeHtml(0,"Cel ładowania");
+  assert.match(html,/aria-label="Cel ładowania: 0%"/);
+  assert.match(html,/stroke-dasharray="0 100"/);
+  for(const value of [-1,101,Infinity,NaN,{},true])assert.doesNotMatch(panel.slotGaugeHtml(value,"Cel"),/gauge-value|stroke-dasharray/);
+});
+
+test("slot cards follow seven actual operator intervals instead of six inverter entries",()=>{
+  const {panel}=fixture();
+  const rows=Array.from({length:7},(_,n)=>slotTarget({start:new Date(NOW+n*3600000).toISOString(),end:new Date(NOW+(n+1)*3600000).toISOString(),projection_from:new Date(NOW+n*3600000).toISOString(),grid_charge_allowed:n%2===0,tier:n%2}));
+  panel.payload.data.plan.tariff_slot_targets=rows;
+  const html=panel.tariffSlotTargetsHtml();
+  assert.equal((html.match(/data-tariff-slot="true"/g)||[]).length,7);
+  assert.equal((html.match(/aria-current="time"/g)||[]).length,1);
+  assert.match(html,/Dziś/);assert.match(html,/Jutro/);
+  assert.equal((html.match(/aria-label="Cel ładowania: 76%"/g)||[]).length,4);
+  assert.equal((html.match(/aria-label="Minimalny zapas: 45%"/g)||[]).length,3);
+});
+
+test("past slot cards never recover targets or reserve circles from current settings",()=>{
+  const {panel}=fixture();
+  panel.payload.data.plan.tariff_slot_targets=[slotTarget({start:"2026-11-10T07:00:00+01:00",end:"2026-11-10T13:00:00+01:00",charge_target_soc_percent:75,reserve_soc_percent:30,quality:"forecast"})];
+  const html=panel.tariffSlotTargetsHtml();
+  assert.match(html,/Zakończony/);assert.match(html,/Przedział miniony: brak danych/);
+  assert.doesNotMatch(html,/gauge-value|stroke-dasharray|aria-label="[^\"]*(75|30)%|aria-current/);
+});
+
+test("local day grouping still calls the next day tomorrow on a 25 hour Warsaw day",()=>{
+  const now=Date.parse("2026-10-25T00:30:00+02:00"),{panel}=fixture([],now);
+  panel.payload.data.updated_at=new Date(now).toISOString();
+  panel.payload.data.plan.tariff_slot_targets=[slotTarget({start:"2026-10-25T00:00:00+02:00",end:"2026-10-26T00:00:00+01:00",projection_from:new Date(now).toISOString()}),slotTarget({start:"2026-10-26T00:00:00+01:00",end:"2026-10-27T00:00:00+01:00",projection_from:"2026-10-26T00:00:00+01:00"})];
+  const html=panel.tariffSlotTargetsHtml();
+  assert.equal((html.match(/<h3>Dziś<\/h3>/g)||[]).length,1);
+  assert.equal((html.match(/<h3>Jutro<\/h3>/g)||[]).length,1);
+  assert.match(html,/GMT\+2/);assert.match(html,/GMT\+1/);
+});
+
+test("unknown protected reserve is not described as a usable discharge floor",()=>{
+  const {panel}=fixture();
+  panel.payload.data.plan.tariff_slot_targets=[slotTarget({grid_charge_allowed:false,reserve_soc_percent:null})];
+  const html=panel.tariffSlotTargetsHtml();
+  assert.match(html,/Minimalny zapas: brak danych/);
+  assert.match(html,/Brak potwierdzonego minimalnego zapasu/);
+  assert.doesNotMatch(html,/Dom może korzystać z baterii do tego poziomu/);
+});
+
+test("current ownership and feasibility warnings remain above the multi-day slot cards",()=>{
+  const {panel}=fixture();calendarData(panel);
+  panel.payload.data.conflicts=["automation.existing_controller"];
+  panel.payload.data.plan.unreachable=true;
+  panel.payload.data.plan.tariff_slot_targets=[slotTarget()];panel.render();
+  const html=panel.shadowRoot.innerHTML,cards=html.indexOf('data-tariff-slot="true"');
+  assert.ok(cards>0);
+  assert.ok(html.indexOf("Przejęcie sterowania blokują:")<cards);
+  assert.ok(html.indexOf("Dostępna energia lub moc może nie wystarczyć")<cards);
+});
+
+function fallbackNotice(panel,reason){
+  Object.assign(panel.payload.data.plan,{source:"own_conservative_fallback",status:"fallback",quality:"invalid",reason,rows:[]});
+  panel.payload.post_save_activation={status:"waiting",reason:"waiting_for_plan",plan_source:"own_conservative_fallback",plan_reason:reason,issues:[]};
+  panel.render();
+  return [panel.unavailablePlanHtml(),panel.postSaveHtml()];
+}
+
+test("incomplete forecast fallback identifies the missing 48 hour data on the plan and post-save notice",()=>{
+  const {panel,calls}=fixture();
+  for(const html of fallbackNotice(panel,"incomplete_48h_forecast")){
+    assert.match(html,/Brak kompletnej prognozy produkcji i zużycia na 48 godzin/);
+    assert.match(html,/planu zachowawczego/);assert.match(html,/Cele zachowawcze nie są wyliczoną projekcją/);
+    assert.match(html,/nie jest prognozą zerowego zużycia/);
+    assert.doesNotMatch(html,/nie było potwierdzonego limitu prądu/);
+  }
+  assert.equal(calls.length,0);
+});
+
+test("a missing battery charging limit at planning time never blames missing PV forecast",()=>{
+  const {panel,calls}=fixture();
+  for(const html of fallbackNotice(panel,"invalid_battery_charge_max_a")){
+    assert.match(html,/W chwili obliczania planu nie było potwierdzonego limitu prądu ładowania baterii/);
+    assert.match(html,/Cele zachowawcze/);
+    assert.doesNotMatch(html,/Brak kompletnej prognozy|brak pełnej prognozy|prognozy PV|invalid_battery_charge_max_a/);
+  }
+  assert.equal(panel.payload.data.control.target_soc,75);
+  assert.equal(calls.length,0);
+});
+
+test("unknown planning failures use safe generic copy without printing provider or API errors",()=>{
+  const {panel,calls}=fixture();
+  for(const reason of [undefined,null,"private-api-token <script>alert(1)</script> https://provider/private",{secret:"private-object"}]){
+    for(const html of fallbackNotice(panel,reason)){
+      assert.match(html,/Pełny plan nie jest dostępny. Sprawdź diagnostykę danych wejściowych/);
+      assert.doesNotMatch(html,/private|<script|provider|api-token|Brak kompletnej prognozy/);
+    }
+  }
+  assert.equal(calls.length,0);
+});
+
+test("slot card clocks use concise Warsaw hours and show the end of the day as 24:00",()=>{
+  const {panel}=fixture();
+  assert.equal(panel.tariffSlotHours({start:"2026-11-13T07:00:00+01:00",end:"2026-11-13T13:00:00+01:00"}),"07:00–13:00");
+  assert.equal(panel.tariffSlotHours({start:"2026-11-13T21:00:00+01:00",end:"2026-11-14T00:00:00+01:00"}),"21:00–24:00");
+  assert.equal(panel.tariffSlotHours({start:"2026-11-13T00:00:00+01:00",end:"2026-11-14T00:00:00+01:00"}),"00:00–24:00");
+  assert.equal(panel.tariffSlotHours({start:"unknown",end:"unknown"}),"—");
+});
+
+test("slot card clocks retain dates for overnight intervals beyond midnight and periods over 24 hours",()=>{
+  const {panel}=fixture();
+  assert.match(panel.tariffSlotHours({start:"2026-11-13T21:00:00+01:00",end:"2026-11-14T07:00:00+01:00"}),/13\.11, 21:00–14\.11, 07:00/);
+  assert.match(panel.tariffSlotHours({start:"2026-11-13T07:00:00+01:00",end:"2026-11-14T13:00:00+01:00"}),/13\.11, 07:00–14\.11, 13:00/);
+});
+
+test("concise slot clocks still identify both offsets across the repeated DST hour",()=>{
+  const {panel}=fixture();
+  const label=panel.tariffSlotHours({start:"2026-10-25T02:00:00+02:00",end:"2026-10-25T02:00:00+01:00"});
+  assert.match(label,/02:00 \(GMT\+2\)–02:00 \(GMT\+1\)/);
+  const full=panel.tariffSlotHours({start:"2026-10-25T00:00:00+02:00",end:"2026-10-26T00:00:00+01:00"});
+  assert.match(full,/25\.10/);assert.match(full,/26\.10/);assert.match(full,/GMT\+2/);assert.match(full,/GMT\+1/);
+});
+
+test("synthetic G13 preview uses a single cheap weekend interval without changing other calendar examples",()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../preview/index.html"),"utf8"),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1],nodes=new Map();
+  const now=Date.parse("2026-11-13T12:00:00+01:00");
+  class PreviewDate extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
+  const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{addEventListener(){},refresh(){return Promise.resolve();}});return nodes.get(id);}};
+  const context=vm.createContext({document,Date:PreviewDate,structuredClone,console,setTimeout(){return 1;},clearTimeout(){},fetch(){throw Error("Network forbidden");}});
+  vm.runInContext(script,context,{filename:"preview-weekend.js"});
+  const calendar=JSON.parse(vm.runInContext("JSON.stringify(example.options.tariff_calendar)",context));
+  assert.equal(calendar.today.length,5);assert.equal(calendar.tomorrow.length,1);
+  assert.equal(calendar.tomorrow[0].grid_charge_allowed,true);assert.equal(calendar.tomorrow[0].reason,"weekend");
+  assert.equal(calendar.tomorrow[0].start,"2026-11-13T23:00:00.000Z");
+  assert.equal(calendar.tomorrow[0].end,"2026-11-14T23:00:00.000Z");
+  vm.runInContext('applyPreviewScenario("seven","forecast",false)',context);
+  assert.equal(vm.runInContext("example.options.tariff_calendar.today.length",context),7);
+  assert.equal(vm.runInContext("example.options.tariff_calendar.tomorrow.length",context),7);
 });

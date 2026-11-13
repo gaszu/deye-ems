@@ -1,5 +1,11 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.1
+
+Aktualizacja zmienia panel i utrzymanie jego trasy podczas zapisu opcji. Nie wybiera innej taryfy, nie zmienia zegara, rezerwy, źródeł ani limitów i nie zastępuje sprawdzenia trybu po starcie. Zachowaj prywatną kopię ustawień bez danych dostępu i ZIP 2.1.0. Po instalacji sprawdź konfigurację, wykonaj wymagany restart oraz porównaj załadowaną wersję, przypisania i ustawienia. Dotychczasowy tryb przywracaj dopiero po zwykłej kontroli aktualnych pomiarów i planu.
+
+**Powrót do 2.1.0:** zachowaj istniejący wpis konfiguracji i dane runtime, zainstaluj poprzednie pliki przez Marketplace lub z zachowanego ZIP, sprawdź konfigurację i uruchom HA ponownie. Profil taryfy jest zgodny z 2.1.0. Sprawdź wersję, źródła, rezerwę, harmonogram, świeże pomiary i tryb; nie uruchamiaj równolegle drugiego wykonawcy. Sam odczyt nastawy nie dowodzi fizycznej reakcji baterii.
+
 ## Przejście na 2.1.0
 
 Przed zmianą zachowaj prywatną kopię ustawień bez danych dostępu, poprzedni ZIP i informacje o trybie oraz wpisach TOU. Zwykła aktualizacja nie wybiera operatora ani nowego harmonogramu: dotychczasowy `legacy_g13`, źródła, limity, rezerwa i topologia pozostają zachowane. Instalacja plików, załadowana wersja i tryb po starcie wymagają osobnego sprawdzenia.

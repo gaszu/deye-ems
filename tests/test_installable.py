@@ -1,5 +1,6 @@
 """Install/configuration boundary checks with HA interfaces stubbed."""
 import ast
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
@@ -295,4 +296,165 @@ class Installation(unittest.IsolatedAsyncioTestCase):
             for marker, field in result["data_schema"].items()}
         self.assertEqual(domains["asymmetric_phase_feeding"], "switch")
         self.assertEqual(domains["grid_power"], "sensor")
+
+
+class PanelReloadLifecycle(unittest.IsolatedAsyncioTestCase):
+    """An options save must not briefly remove the active frontend route."""
+
+    async def boundary(self, entry_ids=("one",)):
+        panel, remove = AsyncMock(), Mock()
+        manager = Mock()
+        manager.begin.side_effect = lambda entry: object()
+        manager.is_current.return_value = True
+        entries = {entry_id: SimpleNamespace(entry_id=entry_id, disabled_by=None,
+            state=SimpleNamespace(value="loaded"), async_on_unload=Mock(),
+            add_update_listener=Mock()) for entry_id in entry_ids}
+        updates = SimpleNamespace(async_start=Mock(), async_stop=AsyncMock())
+        h = SimpleNamespace(data={}, is_running=True,
+            bus=SimpleNamespace(async_listen_once=Mock(return_value=Mock())),
+            http=SimpleNamespace(async_register_static_paths=AsyncMock()),
+            config_entries=SimpleNamespace(async_get_entry=entries.get,
+                async_forward_entry_setups=AsyncMock(),
+                async_unload_platforms_or_raise=AsyncMock()))
+        m = load("__init__.py", {**C, "__name__": "offline_panel_reload",
+            "__file__": str(ROOT/"__init__.py"), "Path": Path,
+            "Platform": lambda value: value, "DeyeEMSCoordinator": Coordinator,
+            "AppearanceManager": lambda _: SimpleNamespace(async_load=AsyncMock()),
+            "DATA_APPEARANCE": "appearance", "UpdateManager": lambda _: updates,
+            "DATA_UPDATES": "updates", "StaticPathConfig": lambda *args: args,
+            "EVENT_HOMEASSISTANT_STARTED": "homeassistant_started",
+            "EVENT_HOMEASSISTANT_STOP": "homeassistant_stop",
+            "async_register": Mock(), "get_post_save_manager": lambda _: manager,
+            "cancel_post_save": Mock(),
+            "frontend": SimpleNamespace(async_remove_panel=remove),
+            "panel_custom": SimpleNamespace(async_register_panel=panel)})
+        for entry in entries.values():
+            await m["async_setup_entry"](h, entry)
+        return m, h, entries, manager, panel, remove
+
+    async def test_successful_options_reload_keeps_route_and_registers_static_assets_once(self):
+        m, h, entries, manager, panel, remove = await self.boundary()
+        entry = entries["one"]
+        async def reload(entry_id):
+            await m["async_unload_entry"](h, entry)
+            entry.state.value = "not_loaded"
+            self.assertTrue(h.data["deye_ems_panel"])
+            remove.assert_not_called()
+            await m["async_setup_entry"](h, entry)
+            entry.state.value = "loaded"
+            return True
+        h.config_entries.async_reload = reload
+        await m["_async_options_changed"](h, entry)
+        remove.assert_not_called()
+        self.assertEqual(panel.await_count, 1)
+        self.assertEqual(h.http.async_register_static_paths.await_count, 1)
+        self.assertNotIn("deye_ems_panel_reloads", h.data)
+        manager.after_reload.assert_called_once()
+        self.assertIs(manager.after_reload.call_args.args[1], True)
+
+    async def test_failed_reload_cleans_route_even_if_setup_inserted_a_partial_runtime(self):
+        for partial in (False, True):
+            with self.subTest(partial=partial):
+                m, h, entries, manager, _, remove = await self.boundary()
+                entry = entries["one"]
+                async def reload(_):
+                    await m["async_unload_entry"](h, entry)
+                    entry.state.value = "setup_error"
+                    if partial:
+                        h.data["deye_ems"]["one"] = object()
+                    return False
+                h.config_entries.async_reload = reload
+                await m["_async_options_changed"](h, entry)
+                remove.assert_called_once_with(h, "deye-ems")
+                self.assertNotIn("deye_ems_panel", h.data)
+                self.assertNotIn("deye_ems_panel_reloads", h.data)
+                self.assertIs(manager.after_reload.call_args.args[1], False)
+
+    async def test_exception_and_cancellation_release_navigation_lease(self):
+        for failure in (ValueError("synthetic setup failure"), asyncio.CancelledError()):
+            with self.subTest(failure=type(failure).__name__):
+                m, h, entries, manager, _, remove = await self.boundary()
+                entry = entries["one"]
+                async def reload(_):
+                    await m["async_unload_entry"](h, entry)
+                    entry.state.value = "not_loaded"
+                    raise failure
+                h.config_entries.async_reload = reload
+                with self.assertRaises(type(failure)):
+                    await m["_async_options_changed"](h, entry)
+                remove.assert_called_once_with(h, "deye-ems")
+                self.assertNotIn("deye_ems_panel_reloads", h.data)
+                self.assertIs(manager.after_reload.call_args.args[1], False)
+
+    async def test_failed_first_reload_does_not_remove_route_needed_by_concurrent_entry(self):
+        m, h, entries, _, panel, remove = await self.boundary(("one", "two"))
+        entered = {entry_id: asyncio.Event() for entry_id in entries}
+        release = {entry_id: asyncio.Event() for entry_id in entries}
+        async def reload(entry_id):
+            entry = entries[entry_id]
+            await m["async_unload_entry"](h, entry)
+            entry.state.value = "not_loaded"
+            entered[entry_id].set()
+            await release[entry_id].wait()
+            if entry_id == "one":
+                return False
+            await m["async_setup_entry"](h, entry)
+            entry.state.value = "loaded"
+            return True
+        h.config_entries.async_reload = reload
+        first = asyncio.create_task(m["_async_options_changed"](h, entries["one"]))
+        await entered["one"].wait()
+        second = asyncio.create_task(m["_async_options_changed"](h, entries["two"]))
+        await entered["two"].wait()
+        release["one"].set()
+        await first
+        self.assertTrue(h.data["deye_ems_panel"])
+        self.assertEqual(h.data["deye_ems_panel_reloads"], {"two": 1})
+        remove.assert_not_called()
+        release["two"].set()
+        await second
+        remove.assert_not_called()
+        self.assertEqual(panel.await_count, 1)
+        self.assertNotIn("deye_ems_panel_reloads", h.data)
+
+    async def test_nested_same_entry_failure_cannot_release_outer_reload_lease(self):
+        m, h, entries, _, panel, remove = await self.boundary()
+        entry, calls = entries["one"], 0
+        async def reload(_):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                self.assertEqual(h.data["deye_ems_panel_reloads"], {"one": 2})
+                return False
+            await m["async_unload_entry"](h, entry)
+            entry.state.value = "not_loaded"
+            await m["_async_options_changed"](h, entry)
+            self.assertEqual(h.data["deye_ems_panel_reloads"], {"one": 1})
+            self.assertTrue(h.data["deye_ems_panel"])
+            await m["async_setup_entry"](h, entry)
+            entry.state.value = "loaded"
+            return True
+        h.config_entries.async_reload = reload
+        await m["_async_options_changed"](h, entry)
+        remove.assert_not_called()
+        self.assertEqual(panel.await_count, 1)
+        self.assertNotIn("deye_ems_panel_reloads", h.data)
+
+    async def test_disable_and_real_removal_still_clean_the_last_panel(self):
+        for action in ("disable", "remove"):
+            with self.subTest(action=action):
+                m, h, entries, _, _, remove = await self.boundary()
+                entry = entries["one"]
+                h.data["deye_ems_panel_reloads"] = {"one": 1}
+                if action == "disable":
+                    entry.disabled_by = "user"
+                    await m["async_unload_entry"](h, entry)
+                else:
+                    await m["async_unload_entry"](h, entry)
+                    self.assertTrue(h.data["deye_ems_panel"])
+                    entries.pop("one")
+                    await m["async_remove_entry"](h, entry)
+                    await m["async_remove_entry"](h, entry)
+                remove.assert_called_once_with(h, "deye-ems")
+                self.assertNotIn("deye_ems_panel", h.data)
 

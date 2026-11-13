@@ -1,4 +1,12 @@
-# Specyfikacja Deye EMS 2.1.0
+# Specyfikacja Deye EMS 2.1.1
+
+## Panel i zachowanie konfiguracji — 2.1.1
+
+- Karty dni i kołowe wskaźniki powstają z `tariff_slot_targets`; rzeczywiste strefy operatora pozostają osobne od technicznych wpisów TOU. Jedna strefa całodobowa, wiele przedziałów i zmiany czasu nie wymagają stałego układu sześciu kart.
+- Koło celu ładowania, koło minimalnego zapasu, aktualny pomiar SoC i prognoza mają odrębne etykiety. Brak wartości nie staje się zerem. Cel zachowawczy nie jest przedstawiany jako projekcja ani dowód osiągalności.
+- Stan rozwinięcia ustawień jest zachowany podczas odświeżania oraz zmiany motywu. Opóźnione zdarzenia zastąpionego elementu nie zmieniają nowego widoku.
+- Zwykłe przeładowanie po zapisie opcji zachowuje istniejącą trasę panelu EMS. Zagnieżdżone lub równoległe przeładowania nie zwalniają cudzej rejestracji. Błąd, anulowanie, rzeczywiste wyłączenie lub usunięcie sprzątają nieużywany panel.
+- Nie zmieniono modelu energii, zasad taryf, rezerwy, ograniczeń prądu/mocy, mapowań, sposobu potwierdzania zapisów ani warunków uruchomienia sterowania.
 
 ## Taryfy i obsługa zapisu — 2.1.0
 

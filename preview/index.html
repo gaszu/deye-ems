@@ -7,10 +7,10 @@
   :root {color-scheme:light;--primary-background-color:#fafafa;--secondary-background-color:#e5e5e5;--card-background-color:#ffffff;--primary-text-color:#212121;--secondary-text-color:#727272;--divider-color:#e0e0e0;--primary-color:#03a9f4;--warning-color:#ffa600;--error-color:#db4437}
   body {margin:0;background:var(--primary-background-color);font:15px system-ui;color:var(--primary-text-color)}
   .demo {padding:12px 24px;background:var(--secondary-background-color);border-bottom:1px solid var(--divider-color);color:var(--primary-text-color);text-align:center;line-height:1.5}
-  .demo label {display:block;margin-top:8px}.demo select {padding:6px 10px;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px}
+  .demo-controls{display:flex;justify-content:center;gap:14px;flex-wrap:wrap}.demo label {display:block;margin-top:8px;font-size:12px}.demo select {padding:6px 10px;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px}
 </style>
-<div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.<label>Tryb profilu w podglądzie <select id="preview-theme-mode"><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label><label>Przykładowy układ <select id="preview-topology"><option value="load_only">LOAD</option><option value="load_with_external_ct">LOAD i CT</option></select></label></div>
-<deye-ems-panel-2-1-0 id="preview"></deye-ems-panel-2-1-0>
+<div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.<div class="demo-controls"><label>Motyw <select id="preview-theme-mode"><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label><label>Przykładowy układ <select id="preview-topology"><option value="load_only">LOAD</option><option value="load_with_external_ct">LOAD i CT</option></select></label><label>Przykład stref <select id="preview-schedule"><option value="g13">TAURON G13 — przykład zimowy</option><option value="g12">Inny operator — dwa tanie okna</option><option value="all_day">Jedna strefa całodobowa</option><option value="seven">Siedem przedziałów w dobie</option></select></label><label>Jakość planu <select id="preview-quality"><option value="forecast">Pełna prognoza</option><option value="fallback">Cel zachowawczy</option><option value="unavailable">Brak wyliczenia</option></select></label></div></div>
+<deye-ems-panel-2-1-1 id="preview"></deye-ems-panel-2-1-1>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -18,7 +18,7 @@
   const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
   const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
   const deadline=night.toISOString();
-  const example={entry_id:"preview-entry",backend_version:"2.1.0",updates:{status:"not_checked",latest_version:null,checked_at:null,retry_at:null,reason:null,release_url:null,marketplace_url:"/marketplace"},appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
+  const example={entry_id:"preview-entry",backend_version:"2.1.1",updates:{status:"not_checked",latest_version:null,checked_at:null,retry_at:null,reason:null,release_url:null,marketplace_url:"/marketplace"},appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,inverter_max_power_kw:12,reserve_margin_soc_percent:5,
     winter_weather_soc_percent:75,topology:"load_only",
     discharge_max_kw:10,grid_max_soc_percent:95,
@@ -36,15 +36,48 @@
         pv_kw:Math.max(0,5*Math.sin((i%48-12)/12)),load_kw:2.8,
         grid_import_kw:i<16?1.8:0}))}}};
   const previewOperators=[{operator_id:"tauron_dystrybucja",label:"TAURON Dystrybucja"},{operator_id:"pge_dystrybucja",label:"PGE Dystrybucja"},{operator_id:"enea_operator",label:"Enea Operator"},{operator_id:"energa_operator",label:"Energa Operator"},{operator_id:"pge_energetyka_kolejowa",label:"PGE Energetyka Kolejowa"}];
-  const previewCatalog={backend_version:"2.1.0",operators:previewOperators,profiles:previewOperators.map(row=>({profile_id:"demo_"+row.operator_id,operator_id:row.operator_id,label:row.label+" — profil syntetyczny",tariff:"G13 — przykład",supported:true,runtime_allowed:true}))};
-  const previewIntervals=[];
-  for(let day=0;day<2;day++)for(const [index,hour] of [0,7,13,16,21].entries()){
-    const next=[7,13,16,21,24][index],from=new Date(),to=new Date();from.setDate(from.getDate()+day);from.setHours(hour,0,0,0);to.setDate(to.getDate()+day);to.setHours(next,0,0,0);
-    const cheap=[0,2,4].includes(index);previewIntervals.push({start:from.toISOString(),end:to.toISOString(),zone:cheap?"off_peak":index===1?"morning_peak":"afternoon_peak",tier:cheap?0:2,grid_charge_allowed:cheap,reason:"weekday"});
+  const previewCatalog={backend_version:"2.1.1",operators:previewOperators,profiles:previewOperators.map(row=>({profile_id:"demo_"+row.operator_id,operator_id:row.operator_id,label:row.label+" — profil syntetyczny",tariff:"G13 — przykład",supported:true,runtime_allowed:true}))};
+  function applyPreviewScenario(kind="g13",quality="forecast",refresh=true){
+    const schedules={g13:{bounds:[0,7,13,16,21,24],cheap:[true,false,true,false,true],tariff:"G13 — przykład zimowy",operator:"TAURON Dystrybucja — dane syntetyczne"},
+      g12:{bounds:[0,6,13,15,22,24],cheap:[true,false,true,false,true],tariff:"Dwa tanie okna — przykład",operator:"Inny operator — dane syntetyczne"},
+      all_day:{bounds:[0,24],cheap:[true],tariff:"Strefa całodobowa — przykład",operator:"Przykładowy operator"},
+      seven:{bounds:[0,5,8,10,13,16,19,24],cheap:[true,false,true,false,true,false,true],tariff:"Siedem przedziałów — przykład",operator:"Przykładowy operator"}};
+    const schedule=schedules[kind]||schedules.g13,intervals=[],days=[];
+    const localDate=new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()).split("-").map(Number);
+    function wallTime(day,hour){
+      const desired=Date.UTC(localDate[0],localDate[1]-1,localDate[2]+day,hour),format=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"});
+      let candidate=desired;
+      for(let i=0;i<2;i++){
+        const p=Object.fromEntries(format.formatToParts(new Date(candidate)).map(row=>[row.type,row.value]));
+        candidate+=desired-Date.UTC(Number(p.year),Number(p.month)-1,Number(p.day),Number(p.hour),Number(p.minute),Number(p.second));
+      }
+      return new Date(candidate);
+    }
+    for(let day=0;day<2;day++){
+      const weekday=new Intl.DateTimeFormat("en-US",{timeZone:"Europe/Warsaw",weekday:"short"}).format(wallTime(day,0));
+      const freeDay=kind==="g13"&&["Sat","Sun"].includes(weekday);
+      const bounds=freeDay?[0,24]:schedule.bounds,cheapFlags=freeDay?[true]:schedule.cheap,dayRows=[];
+      for(let index=0;index<cheapFlags.length;index++){
+        const from=wallTime(day,bounds[index]),to=wallTime(day,bounds[index+1]),cheap=cheapFlags[index];
+        dayRows.push({start:from.toISOString(),end:to.toISOString(),zone:cheapFlags.length===1?"flat":cheap?"off_peak":"peak",tier:cheap?0:2,grid_charge_allowed:cheap,reason:freeDay?"weekend":"weekday"});
+      }
+      days.push(dayRows);intervals.push(...dayRows);
+    }
+    example.options.tariff_calendar={profile_id:"demo_"+kind,operator_id:"tauron_dystrybucja",operator_label:schedule.operator,tariff:schedule.tariff,label:"Profil demonstracyjny",version:"demo",clock_basis:"local",runtime_allowed:true,preview_only:false,current_zone:intervals.find(row=>Date.parse(row.start)<=Date.now()&&Date.parse(row.end)>Date.now())?.zone,next_change:intervals.find(row=>Date.parse(row.end)>Date.now())?.end,today:days[0],tomorrow:days[1]};
+    example.data.plan.tariff_slot_targets=intervals.map(row=>{
+      const past=Date.parse(row.end)<=Date.now(),known=quality!=="unavailable";
+      return {...row,charge_target_soc_percent:row.tier===0&&known?75:null,reserve_soc_percent:50,
+        projected_soc_start_percent:quality==="forecast"?64:null,projected_soc_end_percent:quality==="forecast"?(row.tier===0?75:58):null,
+        projection_from:quality==="forecast"?new Date(Math.max(Date.now(),Date.parse(row.start))).toISOString():null,
+        deadline:kind==="all_day"?deadline:row.end,quality:past?"past":quality};
+    });
+    example.data.plan.quality=quality==="forecast"?"valid":"invalid";
+    example.data.plan.rows=quality==="forecast"?example.data.plan.rows:[];
+    if(refresh)previewPanel.refresh();
   }
   example.post_save_activation={status:"idle",reason:null,issues:[],updated_at:null};
-  example.options.tariff_calendar={profile_id:"demo_tauron_dystrybucja",operator_id:"tauron_dystrybucja",operator_label:"TAURON Dystrybucja — podgląd syntetyczny",tariff:"G13 — przykład",label:"Profil demonstracyjny",version:"demo",clock_basis:"local",runtime_allowed:true,preview_only:false,current_zone:previewIntervals.find(row=>Date.parse(row.start)<=Date.now()&&Date.parse(row.end)>Date.now())?.zone,next_change:previewIntervals.find(row=>Date.parse(row.end)>Date.now())?.end,today:previewIntervals.slice(0,5),tomorrow:previewIntervals.slice(5)};
-  example.data.plan.tariff_slot_targets=previewIntervals.map(row=>({...row,charge_target_soc_percent:row.tier===0?75:null,reserve_soc_percent:50,projected_soc_start_percent:64,projected_soc_end_percent:row.tier===0?75:58,projection_from:new Date(Math.max(Date.now(),Date.parse(row.start))).toISOString(),deadline:row.end,quality:Date.parse(row.end)<=Date.now()?"past":"forecast"}));
+  const previewForecastRows=structuredClone(example.data.plan.rows);
+  applyPreviewScenario("g13","forecast",false);
   let previewActivationTimer=null;
   function previewActivateAfterSave(){
     clearTimeout(previewActivationTimer);example.post_save_activation={status:"waiting",reason:"waiting_for_measurements",issues:[],updated_at:new Date().toISOString()};
@@ -136,7 +169,7 @@
     previewActivateAfterSave();return {type:"create_entry",flow_id:id};
   },async callWS(message){
     if(message.type==="deye_ems/tariff_catalog")return structuredClone(previewCatalog);
-    if(message.command==="check_updates")example.updates={status:"current",latest_version:"2.1.0",checked_at:new Date().toISOString(),retry_at:new Date(Date.now()+60000).toISOString(),reason:null,release_url:"https://github.com/gaszu/deye-ems/releases/tag/v2.1.0",marketplace_url:"/marketplace",stale:false};
+    if(message.command==="check_updates")example.updates={status:"current",latest_version:"2.1.1",checked_at:new Date().toISOString(),retry_at:new Date(Date.now()+60000).toISOString(),reason:null,release_url:"https://github.com/gaszu/deye-ems/releases/tag/v2.1.1",marketplace_url:"/marketplace",stale:false};
     if(message.command==="appearance")example.appearance={theme:message.theme};
     if(["load_save","load_delete","load_toggle"].includes(message.command)){
       if(example.mode==="active")throw Error("Przejdź do obserwacji przed zmianą odbiorników.");
@@ -159,6 +192,12 @@
   }};
   const previewPanel=document.getElementById("preview");
   previewPanel.hass=previewHass;
+  function updatePreviewScenario(){
+    example.data.plan.rows=structuredClone(previewForecastRows);
+    applyPreviewScenario(document.getElementById("preview-schedule").value,document.getElementById("preview-quality").value);
+  }
+  document.getElementById("preview-schedule").addEventListener("change",updatePreviewScenario);
+  document.getElementById("preview-quality").addEventListener("change",updatePreviewScenario);
   document.getElementById("preview-topology").addEventListener("change",event=>{
     const ct=event.target.value==="load_with_external_ct";
     example.options.topology=event.target.value;
