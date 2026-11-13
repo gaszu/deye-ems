@@ -33,6 +33,7 @@ from .topology import ct_load_balance
 from .soc_policy import reserve_lower_bound
 from .inverter_models import hardware_profile, applied_limits
 from .tariff_calendar import describe_calendar
+from .telemetry_diagnostics import describe_telemetry, activation_diagnostics
 
 _LOGGER = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -783,6 +784,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if not hardware_valid:
             issues.append(dict(source="inverter_model", reason="invalid_or_unsupported"))
         inputs["telemetry_issues"] = issues
+        diagnostic_checks = {**checks, **{key: {} for key in native_flags}}
+        inputs["telemetry_details"], inputs["telemetry_hints"] = describe_telemetry(
+            self.hass, self._sources, diagnostic_checks, issues, now,
+            groups={"charge_power": charge_keys})
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):
@@ -887,14 +892,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if reference is None or not .1 <= reference <= 1000:
                 raise ValueError("A specific PV profile requires its reference capacity")
         inputs = self._read_inputs(now)
+        details = activation_diagnostics(inputs.get("telemetry_details", []))
         if inputs.get("topology_error"):
-            raise ValueError("Topologia CT: wymagane są osobne świeże pomiary CT i portu GRID (suma i fazy), zgodne kierunki i bilans faz")
+            raise ValueError("Topologia CT: wymagane są osobne świeże pomiary CT i portu GRID (suma i fazy), zgodne kierunki i bilans faz"
+                + (f". Źródła wymagające sprawdzenia: {details}." if details else ""))
         if not inputs["telemetry_valid"] or not inputs["soc_valid"]:
-            labels = {"soc": "SoC baterii", "voltage": "Napięcie baterii",
-                      "bms_charge_current": "Limit prądu ładowania BMS",
-                      "bms_blocking_charge": "Blokada ładowania BMS"}
-            invalid = dict.fromkeys(issue["source"] for issue in inputs.get("telemetry_issues", []))
-            details = ", ".join(f"{labels[key]} ({key})" if key in labels else key for key in invalid)
             raise ValueError("Nie można włączyć sterowania: wymagane są świeże, poprawne pomiary mocy i baterii. "
                 "W Źródłach wybierz encje swojej instalacji oraz sprawdź jednostki i aktualność odczytów."
                 + (f" Źródła wymagające sprawdzenia: {details}." if details else ""))

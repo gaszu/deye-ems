@@ -1,3 +1,13 @@
+# Wersja 2.0.1 — szczegóły pomiarów
+
+597 testów Python i 149 testów panelu przeszło lokalnie. Diagnostyka nie zmienia ograniczeń sterowania.
+
+- Przypisana encja, platforma z rejestru HA, skończona wartość i jednostka, czas raportu, wiek oraz dopuszczalny wiek; brak odczytu nie jest zerem. Dane dostępowe i surowe nieprawidłowe stany nie trafiają do szczegółów.
+- Podgląd przyczyn stale/wrong_unit/missing/restored/future/invalid, zduplikowanych przypisań i rozbieżności czasowej grupy mocy; obsługa pomiarów jednofazowych oraz faz CT. Dotychczasowe telemetry_issues i warunki regulatora pozostają źródłem decyzji.
+- Przypadek 175 s przy limicie 120 s, brak czasu/limitu, zero, błędne jednostki i niepoprawne źródła; wskazówki ESPHome wyłącznie dla faktycznej platformy encji.
+- Błędne wiersze widoczne od razu, prawidłowe rozwijane lokalnie; wybór i szkice pozostają po odświeżeniu. Stary lub przyszły cały snapshot ukrywa zapisane wcześniej szczegóły. Escapowanie treści i brak żądań sieciowych podczas renderowania.
+- Nie wykonywano celowych awarii ani zmian progów bezpieczeństwa na instalacji produkcyjnej.
+
 # Wersja 2.0.0 — modele i praca jednofazowa
 
 588 testów Python i 139 testów panelu przeszło lokalnie. Scenariusze są syntetyczne; nie oznaczają fizycznej walidacji wszystkich modeli i firmware.

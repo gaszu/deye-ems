@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-0-0";
-const PANEL_VERSION = "2.0.0";
+const PANEL_TAG = "deye-ems-panel-2-0-1";
+const PANEL_VERSION = "2.0.1";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -102,6 +102,7 @@ const hardwareMessages={
 };
 
 class DeyeEMSPanel extends HTMLElement {
+  telemetryExpanded=false;
   hardwareOpen=false;hardwareBusy=false;hardwareCommitting=false;hardwareFlow=null;
   hardwareDraft={};hardwareError="";hardwareNotice="";hardwareSequence=0;
   constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;this.sourceOpen=false;this.sourceBusy=false;this.sourceCommitting=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";this.sourceSequence=0;}
@@ -119,6 +120,47 @@ class DeyeEMSPanel extends HTMLElement {
     if(!Array.isArray(issues))return "";
     const messages=issues.filter(v=>v&&typeof v==="object"&&Object.hasOwn(sourceNames,v.source)&&Object.hasOwn(issueNames,v.reason)).map(v=>sourceNames[v.source]+": "+issueNames[v.reason]);
     return [...new Set(messages)].slice(0,3).join("; ");
+  }
+  telemetryDetailRows(){
+    const details=this.payload?.data?.inputs?.telemetry_details;
+    return (Array.isArray(details)?details:[]).slice(0,80).filter(row=>row&&typeof row==="object"&&!Array.isArray(row)&&typeof row.source==="string");
+  }
+  telemetryDiagnosticStage(){
+    return [this.snapshotFresh(),this.payload?.data?.inputs?.telemetry_valid,this.telemetryExpanded,
+      this.telemetryDetailRows().filter(row=>row.valid!==true).map(row=>row.source+":"+String(row.reason)).join("|")].join(":");
+  }
+  telemetryDiagnosticsHtml(){
+    const heading='<section aria-label="Diagnostyka pomiarów"><h2>Diagnostyka pomiarów</h2>';
+    if(!this.snapshotFresh())return heading+'<p class="notice warning">Brak bieżącej diagnostyki. Ostatni stan silnika jest nieaktualny lub ma nieprawidłowy czas. Oczekiwanie na świeży odczyt z HA.</p></section>';
+    const rows=this.telemetryDetailRows(),failed=rows.filter(row=>row.valid!==true),healthy=rows.length-failed.length;
+    if(!rows.length)return heading+'<p>Brak szczegółów pomiarów w bieżącym odczycie silnika.</p></section>';
+    const reasonNames={missing:"Brak odczytu",restored:"Odczyt przywrócony po uruchomieniu",wrong_unit:"Błędna jednostka",invalid:"Nieprawidłowa wartość",future:"Czas odczytu w przyszłości",stale:"Odczyt starszy niż dopuszczalny limit",time_skew:"Odczyty pochodzą z różnych chwil",alias:"Powtórzone przypisanie encji"};
+    const finite=value=>typeof value==="number"&&Number.isFinite(value);
+    const seconds=value=>finite(value)&&value>=0?num(value,1)+" s":"—";
+    const reported=value=>{const stamp=updateTimestamp(value);return stamp===null?"brak czasu odczytu":new Date(stamp).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});};
+    const visible=this.telemetryExpanded?rows:failed;
+    const table=visible.length?'<div class="table" id="telemetry-diagnostics-table"><table><thead><tr><th>Źródło / encja</th><th>Odczyt źródła</th><th>Ostatni raport</th><th>Wiek przy sprawdzeniu</th><th>Dopuszczalny wiek</th><th>Wynik kontroli</th></tr></thead><tbody>'+visible.map(row=>{
+      const unit=typeof row.unit==="string"?row.unit:"",entity=typeof row.entity_id==="string"&&row.entity_id?row.entity_id:"brak przypisanej encji";
+      const value=finite(row.value)?num(row.value,3):"—",platform=typeof row.platform==="string"&&row.platform?row.platform:null;
+      let reason=row.valid===true?"Prawidłowy":Object.hasOwn(reasonNames,row.reason)?reasonNames[row.reason]:"Wymaga sprawdzenia";
+      if(row.reason==="wrong_unit"&&typeof row.expected_unit==="string")reason+=" — oczekiwano "+row.expected_unit;
+      if(row.reason==="time_skew"&&finite(row.observed_time_skew_seconds)&&finite(row.max_time_skew_seconds))reason+=" — różnica "+seconds(row.observed_time_skew_seconds)+", limit "+seconds(row.max_time_skew_seconds);
+      return '<tr><td>'+esc(this.sourceFieldLabel(row.source))+'<br><code>'+esc(entity)+'</code>'+(platform?'<br><span class="legend">Integracja: '+esc(platform)+'</span>':'')+'</td><td>'+esc(value)+(unit?' '+esc(unit):'')+'</td><td>'+esc(reported(row.last_reported))+'</td><td>'+esc(seconds(row.age_seconds))+'</td><td>'+esc(row.max_age_seconds===null?'bez stałego limitu':seconds(row.max_age_seconds))+'</td><td>'+esc(reason)+'</td></tr>';
+    }).join("")+'</tbody></table></div>':'';
+    const hints=(Array.isArray(this.payload?.data?.inputs?.telemetry_hints)?this.payload.data.inputs.telemetry_hints:[]).slice(0,8).filter(hint=>hint&&["esphome","generic"].includes(hint.provider)&&["stale","time_skew"].includes(hint.reason)&&Array.isArray(hint.sources)).map(hint=>{
+      const relevant=hint.reason==="time_skew"?failed.some(row=>row.reason==="time_skew"):true;
+      const matches=relevant?rows.filter(row=>hint.sources.includes(row.source)&&(hint.reason!=="stale"||row.valid!==true&&row.reason==="stale")&&(hint.provider!=="esphome"||row.platform==="esphome")):[];
+      if(!matches.length)return "";
+      const names=[...new Set(matches.map(row=>this.sourceFieldLabel(row.source)))].join(", ");
+      const advice=hint.provider==="esphome"?'Źródło ESPHome: sprawdź częstotliwość publikacji pomiarów i ustawienia update_interval oraz force_update: true dla wskazanych czujników. Następnie sprawdź, czy HA otrzymuje nowe raporty.':'Sprawdź dostępność encji i częstotliwość raportowania w integracji źródłowej. Odświeżenie panelu nie odświeża fizycznego pomiaru.';
+      return '<p class="notice">'+esc(names)+': '+esc(advice)+'</p>';
+    });
+    const notice=failed.length?'<p class="notice warning">Pomiary wymagające sprawdzenia: '+failed.length+'. Szczegóły poniżej wyjaśniają blokadę; wartości źródłowe z błędem nie są potwierdzonym pomiarem do sterowania.</p>':this.payload?.data?.inputs?.telemetry_valid===true?'<p>Wszystkie pokazane źródła spełniają bieżące kontrole pomiarów.</p>':'<p class="notice warning">Lista szczegółów nie wskazuje błędnego odczytu, ale silnik nie potwierdza kompletu pomiarów. Sprawdź komunikat sterowania.</p>';
+    const button=healthy?'<button id="telemetry-diagnostics-toggle" class="secondary" aria-expanded="'+(this.telemetryExpanded?'true':'false')+'" aria-controls="telemetry-diagnostics-table">'+(this.telemetryExpanded?'Ukryj prawidłowe pomiary':failed.length?'Pokaż także prawidłowe pomiary ('+healthy+')':'Pokaż pomiary ('+healthy+')')+'</button>':'';
+    return heading+notice+'<p class="legend">Wiek dotyczy ostatniego sprawdzenia silnika: '+esc(reported(this.payload?.data?.updated_at))+'. Limity bezpieczeństwa pozostają bez zmian.</p>'+button+table+(failed.length||this.payload?.data?.inputs?.telemetry_valid!==true?[...new Set(hints)].join(""):'')+'</section>';
+  }
+  bindTelemetryDiagnostics(){
+    this.shadowRoot.getElementById("telemetry-diagnostics-toggle")?.addEventListener("click",()=>{this.telemetryExpanded=!this.telemetryExpanded;this.render();});
   }
   nextCurrentChangeText(){
     const at=updateTimestamp(this.payload?.data?.control?.next_current_change_at),now=Date.now();
@@ -876,12 +918,13 @@ class DeyeEMSPanel extends HTMLElement {
     const solcastStage=[this.solcastOpen,this.solcastFlow?.type,this.solcastFlow?.step_id,this.solcastConfirmDisable].join(":");
     const sourceStage=[this.sourceOpen,this.sourceFlow?.type,this.sourceFlow?.step_id,this.sourceError,this.sourceNotice,this.sourceFlow?.errors?.join("|")].join(":");
     const hardwareStage=[this.hardwareOpen,this.hardwareFlow?.type,this.hardwareFlow?.step_id,this.hardwareError,this.hardwareNotice,this.hardwareFlow?.errors?.join("|")].join(":");
+    const telemetryStage=this.telemetryDiagnosticStage();
     const appearanceStage=[this.savedPanelTheme(),this.appearanceMissing,this.panelThemeNames().join("|"),this.appearanceError,this.appearanceDraft].join(":");
-    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSourceStage!==sourceStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage||this.renderedHardwareStage!==hardwareStage;
+    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSourceStage!==sourceStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage||this.renderedHardwareStage!==hardwareStage||this.renderedTelemetryStage!==telemetryStage;
     if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-source-field],select[data-source-field],input[data-hardware-field],select[data-hardware-field],input[data-solcast-field],select[data-solcast-field],select[data-appearance-theme],select[data-topology]"))return;
     this.renderedMode=this.payload?.mode;this.renderedError=this.error;this.renderedLoadsReady=Array.isArray(this.payload?.effective_loads);
     this.renderedSolcastStage=solcastStage;this.renderedSolcastError=this.solcastError;this.renderedSolcastNotice=this.solcastNotice;
-    this.renderedSourceStage=sourceStage;this.renderedHardwareStage=hardwareStage;
+    this.renderedSourceStage=sourceStage;this.renderedHardwareStage=hardwareStage;this.renderedTelemetryStage=telemetryStage;
     this.renderedAppearanceStage=appearanceStage;
     const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{};
@@ -918,7 +961,7 @@ class DeyeEMSPanel extends HTMLElement {
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Wybrany cel SoC",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
       card("Tryb",active?"Aktywny":"Obserwacja","",active?"Sterowanie falownikiem":"Planowanie bez poleceń do falownika")+'</div>'+
-      this.updatesHtml()+this.topologyHtml()+this.hardwareHtml()+this.tariffCalendarHtml()+
+      this.updatesHtml()+this.telemetryDiagnosticsHtml()+this.topologyHtml()+this.hardwareHtml()+this.tariffCalendarHtml()+
       (!fresh?'<div class="notice warning">Brak aktualnego odczytu silnika. Pomiary wymagają aktualizacji z ostatnich 30 sekund.</div>':'')+
       '<div class="notice">'+esc(statusText)+'</div>'+
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
@@ -953,6 +996,7 @@ class DeyeEMSPanel extends HTMLElement {
     this.bindHardware();
     this.bindAppearance();
     this.bindUpdates();
+    this.bindTelemetryDiagnostics();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));
     this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active?"shadow":"active"}));
     this.shadowRoot.getElementById("topology")?.addEventListener("change",event=>{this.drafts.topology=event.target.value;});
