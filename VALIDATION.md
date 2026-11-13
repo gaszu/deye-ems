@@ -1,3 +1,13 @@
+# Wersja 2.1.2 — spójny nagłówek i działania aktualizacji
+
+**222 istniejące testy panelu i 18 testów instalowalności PASS** w sprawdzeniu offline. Samodzielny ZIP jest budowany przez build_release.py i porównywany ze źródłami.
+
+- Przeniesienie opisu panelu, obu wariantów LOAD/CT, sprzętu i aktualizacji do jednego istniejącego bloku ustawień zaawansowanych; pojedynczy przycisk trybu zostaje w przyklejonej karcie u góry.
+- Istniejące regresje zachowania rozwinięcia, odświeżania, kontroli aktualizacji, semantyki wersji i blokad formularzy pozostają skuteczne.
+- Przegląd wizualny na danych syntetycznych PASS: pulpit w jasnym i ciemnym motywie, LOAD i LOAD/CT, zachowanie rozwinięcia, przyklejona karta sterowania, równe kapsułki czterech działań oraz telefon 375 px bez poziomego przewijania. Nie potwierdza fizycznego działania falownika.
+
+Zmiana obejmuje wspólne style karty sterowania, kapsułek przycisków i odnośników oraz uporządkowanie sekcji panelu. Algorytm, konfiguracja, progi i źródła pozostają poza zakresem tej poprawki.
+
 # Wersja 2.1.1 — czytelniejsze karty planu i zachowanie panelu
 
 **804 testy Python i 222 testy panelu PASS** w końcowym sprawdzeniu offline.

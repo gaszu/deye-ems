@@ -1,5 +1,11 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.2
+
+Aktualizacja ujednolica kartę sterowania i odnośniki aktualizacji oraz przenosi opis panelu, układ LOAD/CT, sprzęt i aktualizacje do istniejących ustawień zaawansowanych. Zachowaj kopię ustawień bez danych dostępu oraz ZIP 2.1.1. Po instalacji sprawdź konfigurację, wymagany restart, załadowaną wersję silnika i panelu, przypisania, ustawienia oraz dotychczasowy tryb.
+
+**Powrót do 2.1.1:** zachowaj istniejący wpis i dane runtime, zainstaluj poprzedni ZIP, sprawdź konfigurację, uruchom HA ponownie i zweryfikuj wersję oraz tryb. Konfiguracja pozostaje zgodna z 2.1.1.
+
 ## Przejście na 2.1.1
 
 Aktualizacja zmienia panel i utrzymanie jego trasy podczas zapisu opcji. Nie wybiera innej taryfy, nie zmienia zegara, rezerwy, źródeł ani limitów i nie zastępuje sprawdzenia trybu po starcie. Zachowaj prywatną kopię ustawień bez danych dostępu i ZIP 2.1.0. Po instalacji sprawdź konfigurację, wykonaj wymagany restart oraz porównaj załadowaną wersję, przypisania i ustawienia. Dotychczasowy tryb przywracaj dopiero po zwykłej kontroli aktualnych pomiarów i planu.
