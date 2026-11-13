@@ -1,4 +1,4 @@
-# Specyfikacja Deye EMS 2.0.3
+# Specyfikacja Deye EMS 2.0.4
 
 ## Źródła i limity — rozszerzenie 2.0.3
 

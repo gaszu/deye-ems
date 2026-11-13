@@ -1,5 +1,5 @@
 """Read-only release signal in Home Assistant's native update list."""
-from homeassistant.components.update import UpdateEntity
+from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -20,7 +20,7 @@ class DeyeEMSReleaseUpdate(UpdateEntity):
     _attr_name = "Nowe wydanie"
     _attr_title = "Deye EMS"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_supported_features = 0
+    _attr_supported_features = UpdateEntityFeature(0)
 
     def __init__(self, manager, entry):
         self._manager = manager

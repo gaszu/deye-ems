@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.0.3
+# Instalacja i obsługa Deye EMS 2.0.4
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -12,14 +12,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.0.3**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.0.4**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.0.3.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.3/deye-ems-2.0.3.zip).
+1. Pobierz [deye-ems-2.0.4.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.4/deye-ems-2.0.4.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -132,7 +132,7 @@ Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga 
 
 EMS sprawdza najnowsze stabilne wydanie po uruchomieniu HA (około 30 s później), następnie co godzinę. Własna encja **Deye EMS — Nowe wydanie** przekazuje wynik do natywnej listy aktualizacji Home Assistanta bez funkcji instalowania. Sprawdzenie działa także po zamknięciu panelu i nie zależy od pracy regulatora. **Sprawdź aktualizacje** pozwala wywołać je wcześniej, z co najmniej 60 s przerwy i obsługą limitów GitHub.
 
-Marketplace ma odrębną listę wersji: repozytoria dodane z linku zwykle co 48 h, katalog co 6 h. Gdy administrator otworzy panel EMS i jest potwierdzone nowe wydanie, panel może sam odświeżyć metadane wyłącznie naszego repozytorium przez oficjalny protokół sklepu. Żądania są deduplikowane, mają ograniczone ponowienia i nie instalują plików. Brak uprawnień lub niedostępność sklepu nie blokuje sterowania. Przy zamkniętym panelu ten etap czeka na jego otwarcie; własna encja update nadal powiadamia o wydaniu. Starsza wersja EMS wymaga jednorazowego zainstalowania 2.0.3, aby uzyskać ten mechanizm.
+Marketplace ma odrębną listę wersji: repozytoria dodane z linku zwykle co 48 h, katalog co 6 h. Gdy administrator otworzy panel EMS i jest potwierdzone nowe wydanie, panel może sam odświeżyć metadane wyłącznie naszego repozytorium przez oficjalny protokół sklepu. Żądania są deduplikowane, mają ograniczone ponowienia i nie instalują plików. Brak uprawnień lub niedostępność sklepu nie blokuje sterowania. Przy zamkniętym panelu ten etap czeka na jego otwarcie; własna encja update nadal powiadamia o wydaniu. Starsza wersja EMS wymaga jednorazowego zainstalowania 2.0.4, aby uzyskać ten mechanizm.
 
 **Otwórz Marketplace** prowadzi do sklepu bieżącej instancji. Instalacja pozostaje jawną czynnością użytkownika. Przed nią zachowaj kopię ustawień i poprzednie wydanie, przejdź do obserwacji oraz potwierdź zatrzymanie doładowania. Po instalacji sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj pomiary, ustawienia i plan przed wznowieniem dotychczasowego trybu.
 

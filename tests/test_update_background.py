@@ -236,11 +236,16 @@ class FakeUpdateEntity:
 
 class NativeUpdateEntity(unittest.IsolatedAsyncioTestCase):
     async def test_update_entity_is_readonly_and_uses_the_existing_manager(self):
-        state = {"latest_version": "2.0.4", "release_url": "https://github.com/gaszu/deye-ems/releases/tag/v2.0.4",
+        from enum import IntFlag
+        class Features(IntFlag):
+            INSTALL = 1
+            PROGRESS = 4
+        state = {"latest_version": "2.0.5", "release_url": "https://github.com/gaszu/deye-ems/releases/tag/v2.0.5",
                  "status": "available", "checked_at": "2026-11-13T09:00:00+00:00", "automatic": True,
                  "interval_seconds": 3600, "next_check_at": "2026-11-13T10:00:00+00:00", "stale": False}
         manager = SimpleNamespace(status=state, async_check=AsyncMock(), async_add_listener=Mock(return_value=Mock()))
         values = {**C, "DATA_UPDATES": "deye_ems_updates", "UpdateEntity": FakeUpdateEntity,
+                  "UpdateEntityFeature": Features,
                   "EntityCategory": SimpleNamespace(DIAGNOSTIC="diagnostic"), "DeviceInfo": lambda **kw:kw,
                   "callback": lambda fn:fn}
         module = load("update.py", values)
@@ -249,9 +254,14 @@ class NativeUpdateEntity(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(entry_id="entry-one"), added.extend)
         entity = added[0]
         self.assertEqual(entity._attr_supported_features, 0)
+        # HA 2026.11 checks feature membership while adding an update entity.
+        # Bare int(0) compares equal but raises TypeError at this real boundary.
+        self.assertIsInstance(entity._attr_supported_features, IntFlag)
+        self.assertNotIn(Features.PROGRESS, entity._attr_supported_features)
+        self.assertNotIn(Features.INSTALL, entity._attr_supported_features)
         self.assertFalse(entity._attr_should_poll)
         self.assertEqual(entity.installed_version, C["VERSION"])
-        self.assertEqual(entity.latest_version, "2.0.4")
+        self.assertEqual(entity.latest_version, "2.0.5")
         self.assertEqual(entity._attr_device_info["identifiers"], {(C["DOMAIN"], "entry-one")})
         manager.async_check.assert_not_awaited()
         await entity.async_added_to_hass()
