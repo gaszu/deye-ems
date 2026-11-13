@@ -141,7 +141,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
         cached = {"status": "available", "latest_version": "1.0.18", "checked_at": "2026-11-12T12:00:00+00:00",
                   "retry_at": None, "reason": None,
-                  "release_url": "https://github.com/gaszu/ha-deye-ems/releases/tag/v1.0.18",
+                  "release_url": "https://github.com/gaszu/deye-ems/releases/tag/v1.0.18",
                   "marketplace_url": "/marketplace"}
 
         class CachedUpdates:

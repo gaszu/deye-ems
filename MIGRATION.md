@@ -2,6 +2,12 @@
 
 Instalacja Deye EMS nie wyłącza innych regulatorów. Poniższa procedura jest ogólną instrukcją dla operatora instalacji.
 
+## Aktualizacja adresu repozytorium w 1.0.21
+
+Repozytorium ma stały identyfikator i nowy adres `https://github.com/gaszu/deye-ems`. Zachowaj istniejący wpis integracji, źródła i magazyn runtime; nie instaluj drugiej kopii. Marketplace powinien rozpoznać zmianę przy odświeżeniu informacji. W razie niepowodzenia sprawdź adres i identyfikator repozytorium zamiast usuwać integrację.
+
+Powrót do 1.0.20 wykonuj standardowo: prywatna kopia ustawień, obserwacja i potwierdzone zatrzymanie doładowania sieciowego, instalacja zachowanej paczki, kontrola konfiguracji i sprawdzenie załadowanej wersji, pomiarów oraz planu przed jawnym przywróceniem poprzedniego trybu. Silnik i format ustawień pozostają zgodne.
+
 ## Powrót z 1.0.20 do 1.0.19
 
 Zachowaj prywatną kopię ustawień i runtime oraz paczkę 1.0.19. Przejdź do obserwacji, potwierdź zatrzymanie doładowania sieciowego i zainstaluj wcześniejsze wydanie. Sprawdź konfigurację i uruchom HA ponownie. Przed jawnym wznowieniem sterowania sprawdź zapisane źródła, dodatkowych odbiorników, pomiary i plan. Starsze wydanie ma dawne domyślne przypisania pompy dla nowych lub niepełnych konfiguracji, dlatego nie używaj go do czystej instalacji.

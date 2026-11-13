@@ -23,7 +23,7 @@ jobs:
     uses: ./.github/workflows/validate.yml
   release:
     needs: validation
-    if: github.repository == 'gaszu/ha-deye-ems' && github.ref == 'refs/heads/main'
+    if: github.repository == 'gaszu/deye-ems' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

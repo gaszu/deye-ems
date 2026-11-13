@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-20";
-const PANEL_VERSION = "1.0.20";
+const PANEL_TAG = "deye-ems-panel-1-0-21";
+const PANEL_VERSION = "1.0.21";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -192,7 +192,7 @@ class DeyeEMSPanel extends HTMLElement {
     }else if(good&&u.status==="available"&&compareVersions(latest,running)>0)message="Dostępna aktualizacja: "+latest+".";
     else if(good&&u.status==="current"&&compareVersions(latest,running)===0)message="Ostatnie sprawdzenie: brak nowszego wydania.";
     else if(good&&u.status==="ahead"&&compareVersions(latest,running)<0)message="Uruchomiona wersja HA jest nowsza niż ostatnie wydanie publiczne.";
-    const releaseLink=latest&&knownCheck?'<a href="https://github.com/gaszu/ha-deye-ems/releases/tag/v'+latest+'" target="_blank" rel="noopener noreferrer">Opis wydania '+esc(latest)+'</a>':'';
+    const releaseLink=latest&&knownCheck?'<a href="https://github.com/gaszu/deye-ems/releases/tag/v'+latest+'" target="_blank" rel="noopener noreferrer">Opis wydania '+esc(latest)+'</a>':'';
     const warning=mismatch?'<p class="notice warning">'+(comparison>0?'Otwarta karta ma starszy interfejs niż wersja uruchomiona w HA. Odśwież interfejs.':'Interfejs jest nowszy niż wersja uruchomiona w HA. Sprawdź w Marketplace, czy po aktualizacji wymagany jest restart HA.')+'</p>':'';
     const lastKnown=latest&&knownCheck&&(u.status==="error"||u.stale===true)?'<p class="legend">Ostatnio znane wydanie: '+esc(latest)+'. Ta informacja może być nieaktualna.</p>':'';
     const disabled=this.busy||pending||!running||retry>0;

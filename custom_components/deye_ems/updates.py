@@ -12,8 +12,8 @@ import re
 from .const import VERSION
 
 DATA_UPDATES = "deye_ems_updates"
-API_URL = "https://api.github.com/repos/gaszu/ha-deye-ems/releases/latest"
-RELEASE_ORIGIN = "https://github.com/gaszu/ha-deye-ems/releases/tag/"
+API_URL = "https://api.github.com/repos/gaszu/deye-ems/releases/latest"
+RELEASE_ORIGIN = "https://github.com/gaszu/deye-ems/releases/tag/"
 MARKETPLACE_URL = "/marketplace"
 COOLDOWN_SECONDS = 60
 MAX_BACKOFF_SECONDS = 3600

@@ -33,7 +33,7 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 
 ## Instalacja i niezależność
 
-- Instalowalna integracja Home Assistant 2026.11+, publiczny kod `gaszu/ha-deye-ems`, własne repozytorium Marketplace/HACS i paczka ZIP.
+- Instalowalna integracja Home Assistant 2026.11+, publiczny kod `gaszu/deye-ems`, własne repozytorium Marketplace/HACS i paczka ZIP.
 - Własny lokalny silnik, bez EMHASS, zewnętrznego solvera, pomocniczych automatyzacji i helperów EMS.
 - Własne encje integracji, prosty panel, konfiguracja przez interfejs HA; pierwszy start w obserwacji.
 - Istniejące sterowniki fizyczne Deye/ESPHome/MQTT/YamBMS oraz Recorder pozostają źródłami danych.
