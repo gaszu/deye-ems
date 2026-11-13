@@ -34,6 +34,8 @@ from .soc_policy import reserve_lower_bound
 from .inverter_models import hardware_profile, applied_limits
 from .tariff_calendar import describe_calendar
 from .telemetry_diagnostics import describe_telemetry, activation_diagnostics
+from .esphome_provider import async_create_adapter
+from .report_state import effective_state
 
 _LOGGER = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -69,7 +71,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     def __init__(self, hass, entry, *, store=None, clock=None,
                  planner=None, controller=None, statistics_provider=None,
-                 solcast_factory=None, solcast_fetcher=None):
+                 solcast_factory=None, solcast_fetcher=None, report_provider=None):
         self.entry = entry
         initial = dict(getattr(entry, "data", {}))
         self._options = {**DEFAULT_OPTIONS, **initial, **dict(entry.options)}
@@ -93,6 +95,12 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._plan_task = None
         self._planning_revision = 0
         self._stopped = False
+        self._report_provider = report_provider
+        self._report_setup_task = None
+        self._report_signature = None
+        self._report_pending = None
+        self._report_failed = False
+        self._report_retry_sleep = asyncio.sleep
         self._plan_due = 0.0
         self._memory = {"mode": "shadow", "target_cache": {}, "forecast_cache": {},
                         "load_profiles": {}, "ledger": {}, "plan": {}, "observed_owners": {},
@@ -215,6 +223,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     async def async_initialize(self):
         """Load state only. The caller performs the first coordinator refresh."""
+        self._ensure_report_configuration()
         saved = await self._store.async_load()
         if isinstance(saved, dict):
             for key in self._memory:
@@ -256,6 +265,17 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._pending_grid_reduction = None
         self._grid_reduction_chain = None
         await self._cancel_planning()
+        if self._report_setup_task is not None and not self._report_setup_task.done():
+            self._report_setup_task.cancel()
+            try:
+                await self._report_setup_task
+            except asyncio.CancelledError:
+                pass
+        if self._report_provider is not None:
+            try:
+                await self._report_provider.async_close()
+            except Exception:
+                self._last_error = "native_report_shutdown_failed"
         shutdown = getattr(super(), "async_shutdown", None)
         if shutdown is not None:
             await shutdown()
@@ -536,15 +556,124 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._last_error = f"background_plan_failed:{type(error).__name__}"
             self._plan_due = self._now().timestamp()+60
 
+    def _native_stream_checks(self):
+        """Exactly the existing age-limited power/voltage validators, no settings."""
+        try:
+            hardware = self._hardware()
+        except (ValueError, TypeError):
+            hardware = {}
+        checks = {key: dict(unit="W", age=30, low=-60000 if key.startswith("grid") else -200, high=60000)
+                  for key in self._native_power_keys()}
+        checks.update(battery_power=dict(unit="W", age=30, low=-60000, high=60000),
+                      voltage=dict(unit="V", age=120, low=hardware.get("battery_min_v", 40),
+                                   high=hardware.get("battery_max_v", 65)))
+        if self._options["topology"] == "load_with_external_ct":
+            keys = (("ct_grid_power",) if self._options.get("connection_phases", 3) == 1 else
+                    ("ct_grid_power", "ct_grid_l1_power", "ct_grid_l2_power", "ct_grid_l3_power"))
+            checks.update({key: dict(unit="W", age=30, low=-60000, high=60000) for key in keys})
+        return checks
+
+    def _ensure_report_configuration(self):
+        if self._stopped:
+            return
+        checks = self._native_stream_checks()
+        sources = {key: self._sources.get(key, "") for key in checks}
+        signature = (sources, checks)
+        if signature != self._report_signature:
+            if self._report_provider is not None and self._report_signature is not None:
+                self._report_provider.invalidate_all("binding_changed")
+            self._report_signature = deepcopy(signature)
+            self._report_pending = signature
+        can_create = (hasattr(self.hass, "bus") and callable(getattr(
+            self.hass.config_entries, "async_get_entry", None)))
+        if (self._report_pending is None or self._report_provider is None and not can_create
+                or self._report_setup_task is not None and not self._report_setup_task.done()):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        coroutine = self._async_configure_reports()
+        if hasattr(self.hass, "async_create_background_task"):
+            self._report_setup_task = self.hass.async_create_background_task(coroutine, "Deye EMS native telemetry")
+        elif hasattr(self.hass, "async_create_task"):
+            self._report_setup_task = self.hass.async_create_task(coroutine, "Deye EMS native telemetry")
+        else:
+            self._report_setup_task = asyncio.create_task(coroutine, name="Deye EMS native telemetry")
+
+    async def _async_configure_reports(self):
+        backoff = 5
+        while self._report_pending is not None and not self._stopped:
+            try:
+                if self._report_provider is None:
+                    self._report_provider = await async_create_adapter(self.hass, clock=self._now)
+                pending = self._report_pending
+                sources, checks = pending
+                await self._report_provider.async_configure(sources, checks)
+                if self._report_pending == pending:
+                    self._report_pending = None
+                self._report_failed = False
+                backoff = 5
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Retry only in the owned background task. Keep the latest
+                # pending configuration and never echo private provider errors.
+                self._report_failed = True
+                if not self._stopped and self._report_pending is not None:
+                    await self._report_retry_sleep(backoff)
+                    backoff = min(backoff * 2, 60)
+
+    def _report_stream_status(self):
+        empty = dict(status="unavailable" if self._report_failed else "connecting" if self._report_setup_task
+                     is not None and not self._report_setup_task.done() else "not_applicable",
+                     providers=0, connected_providers=0, bindings=0, verified_sources=0)
+        if self._report_provider is None:
+            return empty
+        try:
+            raw = self._report_provider.status
+            counts = {key: raw.get(key, 0) if isinstance(raw.get(key, 0), int) and not isinstance(
+                raw.get(key, 0), bool) and 0 <= raw.get(key, 0) <= 100000 else 0
+                for key in ("providers", "connected_providers", "bindings", "verified_sources")}
+            unavailable = self._report_failed or raw.get("closed") or any(raw.get("reasons", {}).get(key, 0)
+                for key in ("provider_not_loaded", "original_connection_offline", "entity_disabled", "missing_provider"))
+            status = ("unavailable" if unavailable else "connecting" if raw.get("refresh_pending") else
+                      "not_applicable" if not counts["providers"] else
+                      "connecting" if not counts["connected_providers"] else
+                      "ready" if counts["bindings"] and counts["verified_sources"] >= counts["bindings"] else "warming_up")
+            return dict(status=status, **counts)
+        except Exception:
+            return {**empty, "status": "unavailable"}
+
+    def _entity_state(self, entity_id, now):
+        original = self.hass.states.get(entity_id) if entity_id else None
+        if not isinstance(entity_id, str) or not entity_id.startswith("sensor."):
+            return original
+        if any(self._sources.get(key) == entity_id for key, default in DEFAULT_SOURCES.items()
+               if default.startswith(("number.", "switch.", "time.", "select."))):
+            # A malformed action alias must not turn receipt evidence into a
+            # setting acknowledgement, including in diagnostic state lookups.
+            return original
+        self._ensure_report_configuration()
+        checks = [validation for key, validation in self._native_stream_checks().items()
+                  if self._sources.get(key) == entity_id]
+        validation = checks[0] if checks and all(row == checks[0] for row in checks) else None
+        return effective_state(entity_id, original, self._report_provider, now, validation, number=_number, stamp=_stamp)
+
     def _state(self, key):
         entity_id = self._sources.get(key)
-        return self.hass.states.get(entity_id) if entity_id else None
+        if key not in self._native_stream_checks():
+            # Setpoint/time/switch acknowledgements always retain HA's own
+            # timestamp, even if a faulty mapping points at a sensor entity.
+            return self.hass.states.get(entity_id) if entity_id else None
+        return self._entity_state(entity_id, self._now())
 
     def _measurement(self, key, now, *, unit=None, age=None, low=None, high=None):
-        return self._entity_measurement(self._sources.get(key), now, unit=unit, age=age, low=low, high=high)
+        return self._entity_measurement(self._sources.get(key), now, unit=unit, age=age, low=low, high=high,
+                                        native_reports=key in self._native_stream_checks())
 
-    def _entity_measurement(self, entity_id, now, *, unit=None, age=None, low=None, high=None):
-        state = self.hass.states.get(entity_id) if entity_id else None
+    def _entity_measurement(self, entity_id, now, *, unit=None, age=None, low=None, high=None, native_reports=True):
+        state = self._entity_state(entity_id, now) if native_reports else self.hass.states.get(entity_id) if entity_id else None
         if state is None or state.attributes.get("restored", False):
             return None
         value = _number(state.state)
@@ -614,6 +743,19 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if state.attributes.get("restored", False):
             return None, "restored"
         report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        native_text = (self._options["battery_source_profile"] == "deye"
+                       and self._options.get("inverter_phases", 3) == 1
+                       and str(self._sources.get(key, "")).startswith("sensor."))
+        if native_text:
+            # The 1P Deye device status registers decode zero as literal OK.
+            # No other text grants permission. Active descriptions/Error block;
+            # missing/unknown/N/A and malformed timestamp/unit stay invalid.
+            value = state.state
+            if (report is None or report > now.timestamp() or not isinstance(value, str)
+                    or value.lower() in _BAD or value == "N/A"
+                    or state.attributes.get("unit_of_measurement") not in (None, "")):
+                return None, "future" if report is not None and report > now.timestamp() else "invalid"
+            return value != "OK", None
         if report is None or state.state not in ("on", "off"):
             return None, "invalid"
         if report > now.timestamp():
@@ -621,6 +763,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return state.state == "on", None
 
     def _read_inputs(self, now):
+        self._ensure_report_configuration()
         try:
             hardware = self._hardware()
             hardware_valid = hardware.get("control_supported") is True
@@ -657,20 +800,26 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                           and not self._sources.get("bms_blocking_charge"))
         native_flags = {key: self._battery_flag(key, now)
                         for key in ("battery_alarm", "battery_fault")} if native_battery else {}
+        limits = self._grid_charge_setting_limits(now, deye_live=all(v is not None for v in powers.values()))
+        native_ccl_missing = native_battery and (not self._sources.get("bms_charge_current")
+                                                  or self._state("bms_charge_current") is None)
+        battery_limit_source = ("deye_setting" if native_ccl_missing else
+                                "deye_bms" if native_battery else "external_bms")
         if native_battery:
-            bms_valid = voltage is not None and charge is not None and all(
+            native_limit = (limits["deye_max_charge_current_a"] if limits["grid_charge_limit_valid"] else None) if native_ccl_missing else charge
+            bms_valid = voltage is not None and native_limit is not None and all(
                 issue is None for _, issue in native_flags.values())
-            cap = charge if bms_valid and not any(flag for flag, _ in native_flags.values()) else 0
+            cap = native_limit if bms_valid and not any(flag for flag, _ in native_flags.values()) else 0
         else:
             bms_valid = voltage is not None and None not in (charge, block)
             cap = charge if bms_valid and block == 0 else 0
         current = self._measurement("grid_current_number", now, unit="A", low=0, high=1000)
         battery = self._measurement("battery_power", now, unit="W", age=30, low=-60000, high=60000)
         raw_load = powers["load_power"]
-        limits = self._grid_charge_setting_limits(now, deye_live=all(v is not None for v in powers.values()))
         limits["grid_charge_limit_valid"] = limits["grid_charge_limit_valid"] and current is not None
         inputs = {**powers, "soc": soc, "soc_valid": bool(soc_valid), "voltage": voltage,
                 "current_a": current, "bms_cap_a": cap, "bms_valid": bms_valid,
+                "battery_limit_source": battery_limit_source,
                 **limits,
                 "battery_power": battery,
                 "outside_load_w": 0, "outside_power_valid": True, "raw_load_power": raw_load,
@@ -749,9 +898,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         checks = {key: dict(unit="W", age=30, low=-60000 if key.startswith("grid") else -200, high=60000)
                   for key in self._native_power_keys()}
         checks.update(battery_power=dict(unit="W", age=30, low=-60000, high=60000),
-                      voltage=dict(unit="V", age=120, low=voltage_low, high=voltage_high),
-                      bms_charge_current=dict(unit="A", low=0, high=1000),
-                      grid_current_number=dict(unit="A", low=0, high=1000),
+                      voltage=dict(unit="V", age=120, low=voltage_low, high=voltage_high))
+        if not native_ccl_missing:
+            checks["bms_charge_current"] = dict(unit="A", low=0, high=1000)
+        checks.update(grid_current_number=dict(unit="A", low=0, high=1000),
                       max_charge_current_number=dict(unit="A", low=0, high=1000),
                       battery_low_soc=dict(unit="%", low=0, high=85),
                       soc=dict(unit="%", age=None if voltage is not None else 1200, low=0, high=100))
@@ -787,7 +937,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         diagnostic_checks = {**checks, **{key: {} for key in native_flags}}
         inputs["telemetry_details"], inputs["telemetry_hints"] = describe_telemetry(
             self.hass, self._sources, diagnostic_checks, issues, now,
-            groups={"charge_power": charge_keys})
+            groups={"charge_power": charge_keys}, state_lookup=lambda entity: self._entity_state(entity, now))
+        inputs["report_stream"] = self._report_stream_status()
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):

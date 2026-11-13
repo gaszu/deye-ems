@@ -373,7 +373,8 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance", "backend_version", "updates"})
         self.assertEqual(payload["appearance"], {"theme": ""})
         self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]) | {
-            "effective_min_soc_percent", "min_soc_bound_valid", "min_soc_lower_bound"})
+            "effective_min_soc_percent", "min_soc_bound_valid", "min_soc_lower_bound",
+            "hardware_profile", "effective_hardware_limits", "tariff_calendar"})
         self.assertEqual(payload["options"]["min_soc_percent"], 50)
         self.assertEqual(payload["sources"]["soc"], "sensor.test_soc")
         serialized = json.dumps(payload)

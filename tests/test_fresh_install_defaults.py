@@ -185,8 +185,11 @@ class FreshInstallDefaults(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError) as error:
             h.co._preflight()
         self.assertIn("W Źródłach wybierz encje swojej instalacji", str(error.exception))
-        for key in ("soc", "voltage", "bms_charge_current"):
+        for key in ("soc", "voltage"):
             self.assertIn(f"({key})", str(error.exception))
+        # An absent native CCL can use the independent Deye setting, but never
+        # substitutes missing SoC, voltage or alarm/fault measurements.
+        self.assertNotIn("(bms_charge_current)", str(error.exception))
         self.assertEqual(h.co.mode, "shadow")
         self.assertEqual(h.calls, [])
         self.assertEqual(h.store.history, [])
@@ -215,7 +218,7 @@ class FreshInstallDefaults(unittest.IsolatedAsyncioTestCase):
                     h.set(key, state, attributes=attributes)
                     self.assertEqual(h.co._read_inputs(h.now)["bms_cap_a"], 0)
                     self.assertEqual(h.calls, [])
-        for key in ("battery_alarm", "battery_fault", "bms_charge_current"):
+        for key in ("battery_alarm", "battery_fault"):
             with self.subTest(missing=key):
                 h = fresh_harness()
                 del h.states[h.co._sources[key]]
@@ -225,6 +228,14 @@ class FreshInstallDefaults(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError):
                     h.co._preflight()
                 self.assertEqual(h.calls, [])
+        h = fresh_harness()
+        del h.states[h.co._sources["bms_charge_current"]]
+        inputs = h.co._read_inputs(h.now)
+        self.assertTrue(inputs["bms_valid"])
+        self.assertEqual(inputs["battery_limit_source"], "deye_setting")
+        self.assertEqual(inputs["bms_cap_a"], inputs["deye_max_charge_current_a"])
+        h.co._preflight()
+        self.assertEqual(h.calls, [])
         h = fresh_harness()
         h.set("bms_charge_current", 0, "A")
         self.assertEqual(h.co._read_inputs(h.now)["bms_cap_a"], 0)

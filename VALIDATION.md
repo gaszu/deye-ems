@@ -1,3 +1,16 @@
+# Wersja 2.0.3 — limit Deye, natywne raporty i automatyczne sprawdzanie wydań
+
+**683 testy Python i 173 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Wynik nie oznacza fizycznego testu wszystkich urządzeń i firmware.
+
+- Odczyt ESPHome tylko do raportowania: przypisania z rejestru HA, zgodność urządzenia/klucza/jednostki/wartości, dwa raporty, wcześniejszy czas odbioru, reset dowodów po rozłączeniu i zmianie źródeł oraz zamknięcie klienta EMS po utracie oryginalnego połączenia HA. Nie zmieniano firmware.
+- Pierwotne stany HA, dostępność, zakresy, jednostki, oryginalne potwierdzenia nastaw i istniejące progi bezpieczeństwa pozostają wymagane. Native fallback limitu Deye dotyczy wyłącznie braku dedykowanego CCL; błąd istniejącego CCL i jego zero nie są omijane.
+- Lista odpowiedzi WS udostępnia model/limity/kalendarz, zachowuje ochronę sekretów. Podgląd źródeł jednofazowych i kontrolowane aliasy nie zapisują mapowań bez potwierdzenia.
+- Updater: start dopiero po HA started, 30 s opóźnienia, interwał 1 h, pojedyncze współdzielone żądanie, cooldown/backoff, odroczenie już oczekującego timera po limicie ręcznej próby, anulowanie przy unload/stop i diagnostyczna encja update bez INSTALL. Odczyty właściwości nie wykonują HTTP.
+- Synchronizacja Marketplace: wyłącznie metadane własnego zainstalowanego repozytorium, exact identity, sprawdzenie wersji przed i po, admin, potwierdzone nowe wydanie, pojedyncze żądanie, 3 ograniczone próby, timeout i backoff; namespace HACS tylko po unknown_command. Brak instalacji, restartu lub zmian w obcych repozytoriach.
+- UI: oddzielne źródło limitu, efektywny czas odbioru i pierwotny czas HA, odrzucenie pojedynczego/future pakietu, starego całego stanu i błędnych liczników, zachowanie szkiców i lokalnego rozwinięcia, ochrona prywatnych danych i bezpieczne błędy.
+
+Testy awarii były syntetyczne. Publiczny ZIP i rzeczywiście serwowany panel są porównywane ze źródłami; publikację, pliki, załadowaną wersję HA, przyjęcie polecenia, odczyt rejestru i fizyczną reakcję raportuje się oddzielnie.
+
 # Wersja 2.0.2 — katalog SG05LP3-EU-SM2
 
 599 testów Python i 149 testów panelu przeszło lokalnie. Nowe modele nie zmieniają istniejącej konfiguracji ani warunków bezpieczeństwa.

@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-0-2";
-const PANEL_VERSION = "2.0.2";
+const PANEL_TAG = "deye-ems-panel-2-0-3";
+const PANEL_VERSION = "2.0.3";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -26,7 +26,7 @@ const ranges = {
 const reasons = {
   planned:"Plan gotowy", initializing:"Uruchamianie", shadow:"Obserwacja",
   telemetry_invalid:"Brak poprawnych, świeżych pomiarów",
-  bms_blocked:"BMS blokuje ładowanie", grid_headroom:"Ograniczenie poborem z sieci",
+  bms_blocked:"Blokada ładowania baterii", grid_headroom:"Ograniczenie poborem z sieci",
   connection_other_phase_headroom:"Ograniczenie przyłącza na fazie poza falownikiem — ładowanie wstrzymane",
   deye_charge_cap:"Limit Deye po odjęciu 5%", actuator_cap:"Zakres nastawy ładowania w Deye",
   inverter_grid_headroom:"Limit mocy pobieranej przez port GRID falownika",
@@ -60,6 +60,8 @@ const time = v => v && Number.isFinite(new Date(v).getTime()) ? new Date(v).toLo
 const releaseVersion = value => typeof value==="string"&&/^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})$/.test(value)?value:null;
 const compareVersions = (a,b) => {const left=a.split(".").map(Number),right=b.split(".").map(Number);for(let i=0;i<3;i++)if(left[i]!==right[i])return Math.sign(left[i]-right[i]);return 0;};
 const updateTimestamp = value => typeof value==="string"&&/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
+const STORE_REPOSITORY_ID="1451991710",STORE_REPOSITORY_NAME="gaszu/deye-ems";
+const storeVersion=value=>releaseVersion(typeof value==="string"&&value.startsWith("v")?value.slice(1):value);
 const solcastFields = {
   api_key:"Klucz API Solcast",resource_ids:"Identyfikatory instalacji (puste: wykrywanie)",
   poll_interval_minutes:"Odstęp pobierania (minuty)",max_requests_per_day:"Limit zapytań na dobę UTC",
@@ -105,11 +107,12 @@ class DeyeEMSPanel extends HTMLElement {
   telemetryExpanded=false;
   hardwareOpen=false;hardwareBusy=false;hardwareCommitting=false;hardwareFlow=null;
   hardwareDraft={};hardwareError="";hardwareNotice="";hardwareSequence=0;
+  storeSyncSequence=0;storeSyncFlight=null;storeSyncAttempts=new Map();storeSyncTimer=null;storeRequestCancel=null;storeSyncStatus="";
   constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;this.sourceOpen=false;this.sourceBusy=false;this.sourceCommitting=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";this.sourceSequence=0;}
   set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
-  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);}
-  async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=this.mergeUpdateStatus(payload);this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}this.render();}
+  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;this.cancelStoreSync();clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);}
+  async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=this.mergeUpdateStatus(payload);this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}void this.syncStoreMetadata();this.render();}
   async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=this.mergeUpdateStatus(await this._hass.callWS({type:"deye_ems/command",...args}));if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
@@ -125,39 +128,66 @@ class DeyeEMSPanel extends HTMLElement {
     const details=this.payload?.data?.inputs?.telemetry_details;
     return (Array.isArray(details)?details:[]).slice(0,80).filter(row=>row&&typeof row==="object"&&!Array.isArray(row)&&typeof row.source==="string");
   }
+  nativeReportProof(row){
+    const at=updateTimestamp(row?.last_reported);
+    return row?.timestamp_source==="esphome_live"&&row.platform==="esphome"&&Number.isSafeInteger(row.stream_samples)&&row.stream_samples>=2&&
+      at!==null&&at<=Date.now()&&typeof row.age_seconds==="number"&&Number.isFinite(row.age_seconds)&&row.age_seconds>=0;
+  }
+  telemetryRowValid(row){return row?.valid===true&&(row.timestamp_source===undefined||row.timestamp_source==="home_assistant"||this.nativeReportProof(row));}
+  reportStreamHtml(){
+    const stream=this.payload?.data?.inputs?.report_stream;
+    if(!stream||typeof stream!=="object"||Array.isArray(stream))return "";
+    const heading='<div aria-label="Raporty ESPHome"><h3>Raporty ESPHome</h3>';
+    if(!this.snapshotFresh())return heading+'<p>Brak bieżącego statusu odbioru raportów.</p></div>';
+    const count=value=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0&&value<=1000000?value:null;
+    const providers=count(stream.providers),connected=count(stream.connected_providers),bindings=count(stream.bindings),verified=count(stream.verified_sources);
+    const coherent=providers!==null&&connected!==null&&bindings!==null&&verified!==null&&connected<=providers&&verified<=bindings;
+    const statuses={ready:coherent&&connected>0&&verified>0?"Odbiór raportów działa.":"Oczekiwanie na potwierdzenie odbioru raportów.",warming_up:"Oczekiwanie na kolejne zgodne raporty.",connecting:"Łączenie ze źródłem ESPHome.",not_applicable:"Dla tych przypisań nie jest używany dodatkowy odbiór ESPHome; obowiązują znaczniki HA.",unavailable:"Dodatkowy odbiór ESPHome jest niedostępny; obowiązują pierwotne kontrole znaczników HA."};
+    const status=Object.hasOwn(statuses,stream.status)?statuses[stream.status]:"Brak potwierdzonego statusu odbioru raportów.";
+    return heading+'<p role="status">'+esc(status)+'</p><p>Połączenia: '+num(connected,0)+' / '+num(providers,0)+' · przypisane źródła: '+num(bindings,0)+' · źródła z potwierdzonym odbiorem: '+num(verified,0)+'.</p>'+
+      '<p class="legend">EMS korzysta z dodatkowego połączenia tylko do odczytu, używając konfiguracji ESPHome zapisanej w HA. Nie wymaga zmian firmware ani nie zapisuje stanów encji. Pierwszy stan po połączeniu może pochodzić z pamięci urządzenia i nie wystarcza do potwierdzenia; potrzebne są dwa kolejne zgodne raporty. EMS używa zachowawczo starszego czasu ich odbioru. Czas oznacza odbiór raportu przez EMS, nie czas odczytu Modbus. Odbiór raportów sam nie włącza sterowania.</p></div>';
+  }
   telemetryDiagnosticStage(){
     return [this.snapshotFresh(),this.payload?.data?.inputs?.telemetry_valid,this.telemetryExpanded,
-      this.telemetryDetailRows().filter(row=>row.valid!==true).map(row=>row.source+":"+String(row.reason)).join("|")].join(":");
+      this.telemetryDetailRows().filter(row=>!this.telemetryRowValid(row)).map(row=>row.source+":"+String(row.reason)+":"+String(row.timestamp_source)).join("|")].join(":");
   }
   telemetryDiagnosticsHtml(){
     const heading='<section aria-label="Diagnostyka pomiarów"><h2>Diagnostyka pomiarów</h2>';
     if(!this.snapshotFresh())return heading+'<p class="notice warning">Brak bieżącej diagnostyki. Ostatni stan silnika jest nieaktualny lub ma nieprawidłowy czas. Oczekiwanie na świeży odczyt z HA.</p></section>';
-    const rows=this.telemetryDetailRows(),failed=rows.filter(row=>row.valid!==true),healthy=rows.length-failed.length;
-    if(!rows.length)return heading+'<p>Brak szczegółów pomiarów w bieżącym odczycie silnika.</p></section>';
+    const stream=this.reportStreamHtml(),rows=this.telemetryDetailRows(),failed=rows.filter(row=>!this.telemetryRowValid(row)),healthy=rows.length-failed.length;
+    if(!rows.length)return heading+stream+'<p>Brak szczegółów pomiarów w bieżącym odczycie silnika.</p></section>';
     const reasonNames={missing:"Brak odczytu",restored:"Odczyt przywrócony po uruchomieniu",wrong_unit:"Błędna jednostka",invalid:"Nieprawidłowa wartość",future:"Czas odczytu w przyszłości",stale:"Odczyt starszy niż dopuszczalny limit",time_skew:"Odczyty pochodzą z różnych chwil",alias:"Powtórzone przypisanie encji"};
     const finite=value=>typeof value==="number"&&Number.isFinite(value);
     const seconds=value=>finite(value)&&value>=0?num(value,1)+" s":"—";
     const reported=value=>{const stamp=updateTimestamp(value);return stamp===null?"brak czasu odczytu":new Date(stamp).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});};
     const visible=this.telemetryExpanded?rows:failed;
-    const table=visible.length?'<div class="table" id="telemetry-diagnostics-table"><table><thead><tr><th>Źródło / encja</th><th>Odczyt źródła</th><th>Ostatni raport</th><th>Wiek przy sprawdzeniu</th><th>Dopuszczalny wiek</th><th>Wynik kontroli</th></tr></thead><tbody>'+visible.map(row=>{
+    const table=visible.length?'<div class="table" id="telemetry-diagnostics-table"><table><thead><tr><th>Źródło / encja</th><th>Odczyt źródła</th><th>Znacznik raportu</th><th>Wiek przy sprawdzeniu</th><th>Dopuszczalny wiek</th><th>Wynik kontroli</th></tr></thead><tbody>'+visible.map(row=>{
       const unit=typeof row.unit==="string"?row.unit:"",entity=typeof row.entity_id==="string"&&row.entity_id?row.entity_id:"brak przypisanej encji";
       const value=finite(row.value)?num(row.value,3):"—",platform=typeof row.platform==="string"&&row.platform?row.platform:null;
-      let reason=row.valid===true?"Prawidłowy":Object.hasOwn(reasonNames,row.reason)?reasonNames[row.reason]:"Wymaga sprawdzenia";
+      const native=this.nativeReportProof(row),unproved=row.timestamp_source==="esphome_live"&&!native;
+      const unknownStamp=row.timestamp_source!==undefined&&!["home_assistant","esphome_live"].includes(row.timestamp_source);
+      const primaryAt=unproved||unknownStamp?row.ha_last_reported:row.last_reported,primaryAge=unproved||unknownStamp?row.ha_age_seconds:row.age_seconds;
+      let reason=this.telemetryRowValid(row)?"Prawidłowy":Object.hasOwn(reasonNames,row.reason)?reasonNames[row.reason]:"Wymaga sprawdzenia";
+      if(unproved)reason+=" — oczekiwanie na dwa zgodne raporty ESPHome";
+      if(unknownStamp)reason+=" — źródło znacznika czasu niepotwierdzone";
       if(row.reason==="wrong_unit"&&typeof row.expected_unit==="string")reason+=" — oczekiwano "+row.expected_unit;
       if(row.reason==="time_skew"&&finite(row.observed_time_skew_seconds)&&finite(row.max_time_skew_seconds))reason+=" — różnica "+seconds(row.observed_time_skew_seconds)+", limit "+seconds(row.max_time_skew_seconds);
-      return '<tr><td>'+esc(this.sourceFieldLabel(row.source))+'<br><code>'+esc(entity)+'</code>'+(platform?'<br><span class="legend">Integracja: '+esc(platform)+'</span>':'')+'</td><td>'+esc(value)+(unit?' '+esc(unit):'')+'</td><td>'+esc(reported(row.last_reported))+'</td><td>'+esc(seconds(row.age_seconds))+'</td><td>'+esc(row.max_age_seconds===null?'bez stałego limitu':seconds(row.max_age_seconds))+'</td><td>'+esc(reason)+'</td></tr>';
+      const olderHA=native&&finite(row.ha_age_seconds)&&row.ha_age_seconds>=0&&row.ha_age_seconds>primaryAge;
+      const atHtml='<span class="legend">'+(native?'Raport odebrany przez EMS':'Znacznik HA')+'</span><br>'+esc(reported(primaryAt))+(olderHA?'<br><span class="legend">Znacznik HA: '+esc(reported(row.ha_last_reported))+'</span>':'');
+      const ageHtml=esc(seconds(primaryAge))+(olderHA?'<br><span class="legend">Wiek znacznika HA: '+esc(seconds(row.ha_age_seconds))+'</span>':'');
+      return '<tr><td>'+esc(this.sourceFieldLabel(row.source))+'<br><code>'+esc(entity)+'</code>'+(platform?'<br><span class="legend">Integracja: '+esc(platform)+'</span>':'')+'</td><td>'+esc(value)+(unit?' '+esc(unit):'')+'</td><td>'+atHtml+'</td><td>'+ageHtml+'</td><td>'+esc(row.max_age_seconds===null?'bez stałego limitu':seconds(row.max_age_seconds))+'</td><td>'+esc(reason)+'</td></tr>';
     }).join("")+'</tbody></table></div>':'';
     const hints=(Array.isArray(this.payload?.data?.inputs?.telemetry_hints)?this.payload.data.inputs.telemetry_hints:[]).slice(0,8).filter(hint=>hint&&["esphome","generic"].includes(hint.provider)&&["stale","time_skew"].includes(hint.reason)&&Array.isArray(hint.sources)).map(hint=>{
       const relevant=hint.reason==="time_skew"?failed.some(row=>row.reason==="time_skew"):true;
       const matches=relevant?rows.filter(row=>hint.sources.includes(row.source)&&(hint.reason!=="stale"||row.valid!==true&&row.reason==="stale")&&(hint.provider!=="esphome"||row.platform==="esphome")):[];
       if(!matches.length)return "";
       const names=[...new Set(matches.map(row=>this.sourceFieldLabel(row.source)))].join(", ");
-      const advice=hint.provider==="esphome"?'Źródło ESPHome: sprawdź częstotliwość publikacji pomiarów i ustawienia update_interval oraz force_update: true dla wskazanych czujników. Następnie sprawdź, czy HA otrzymuje nowe raporty.':'Sprawdź dostępność encji i częstotliwość raportowania w integracji źródłowej. Odświeżenie panelu nie odświeża fizycznego pomiaru.';
+      const advice=hint.provider==="esphome"?'Sprawdź stan sekcji Raporty ESPHome i przypisanie encji. EMS może odebrać kolejne raporty przez dodatkowe połączenie tylko do odczytu; zmiana firmware nie jest wymagana. Sam stan pochodzący z pamięci urządzenia nie potwierdza nowego raportu.':'Sprawdź dostępność encji i częstotliwość raportowania w integracji źródłowej. Odświeżenie panelu nie odświeża fizycznego pomiaru.';
       return '<p class="notice">'+esc(names)+': '+esc(advice)+'</p>';
     });
     const notice=failed.length?'<p class="notice warning">Pomiary wymagające sprawdzenia: '+failed.length+'. Szczegóły poniżej wyjaśniają blokadę; wartości źródłowe z błędem nie są potwierdzonym pomiarem do sterowania.</p>':this.payload?.data?.inputs?.telemetry_valid===true?'<p>Wszystkie pokazane źródła spełniają bieżące kontrole pomiarów.</p>':'<p class="notice warning">Lista szczegółów nie wskazuje błędnego odczytu, ale silnik nie potwierdza kompletu pomiarów. Sprawdź komunikat sterowania.</p>';
     const button=healthy?'<button id="telemetry-diagnostics-toggle" class="secondary" aria-expanded="'+(this.telemetryExpanded?'true':'false')+'" aria-controls="telemetry-diagnostics-table">'+(this.telemetryExpanded?'Ukryj prawidłowe pomiary':failed.length?'Pokaż także prawidłowe pomiary ('+healthy+')':'Pokaż pomiary ('+healthy+')')+'</button>':'';
-    return heading+notice+'<p class="legend">Wiek dotyczy ostatniego sprawdzenia silnika: '+esc(reported(this.payload?.data?.updated_at))+'. Limity bezpieczeństwa pozostają bez zmian.</p>'+button+table+(failed.length||this.payload?.data?.inputs?.telemetry_valid!==true?[...new Set(hints)].join(""):'')+'</section>';
+    return heading+notice+stream+'<p class="legend">Wiek dotyczy ostatniego sprawdzenia silnika: '+esc(reported(this.payload?.data?.updated_at))+'. Limity bezpieczeństwa pozostają bez zmian.</p>'+button+table+(failed.length||this.payload?.data?.inputs?.telemetry_valid!==true?[...new Set(hints)].join(""):'')+'</section>';
   }
   bindTelemetryDiagnostics(){
     this.shadowRoot.getElementById("telemetry-diagnostics-toggle")?.addEventListener("click",()=>{this.telemetryExpanded=!this.telemetryExpanded;this.render();});
@@ -221,6 +251,7 @@ class DeyeEMSPanel extends HTMLElement {
       }
       // A long release check must not replace newer mode, settings or telemetry.
       this.payload=this.mergeUpdateStatus({...this.payload,updates:response.updates});
+      void this.syncStoreMetadata();
       return true;
     }catch{
       if(request===this.updatesSequence)this.updatesError="Nie udało się sprawdzić aktualizacji. Spróbuj ponownie później.";
@@ -232,6 +263,76 @@ class DeyeEMSPanel extends HTMLElement {
   reloadInterface(){
     if(this.busy||this.hasUnsavedChanges())return false;
     globalThis.location?.reload();return true;
+  }
+  storeSyncRelease(){
+    const p=this.payload,u=p?.updates,running=releaseVersion(p?.backend_version),latest=releaseVersion(u?.latest_version),checked=updateTimestamp(u?.checked_at),now=Date.now();
+    return this.isConnected&&this._hass?.user?.is_admin===true&&u?.status==="available"&&u.stale!==true&&running&&latest&&compareVersions(latest,running)>0&&checked!==null&&checked<=now&&now-checked<=7200000?latest:null;
+  }
+  cancelStoreSync(){++this.storeSyncSequence;clearTimeout(this.storeSyncTimer);this.storeSyncTimer=null;this.storeRequestCancel?.();this.storeRequestCancel=null;}
+  storeSyncCurrent(sequence,version){return sequence===this.storeSyncSequence&&this.storeSyncRelease()===version;}
+  storeMetadataCall(message){
+    return new Promise((resolve,reject)=>{
+      let settled=false,timer;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);if(this.storeRequestCancel===cancel)this.storeRequestCancel=null;fn(value);};
+      const cancel=()=>finish(reject,{code:"cancelled"});this.storeRequestCancel=cancel;
+      timer=setTimeout(()=>finish(reject,{code:"timeout"}),30000);
+      try{Promise.resolve(this._hass.callWS(message)).then(value=>finish(resolve,value),error=>finish(reject,error));}catch(error){finish(reject,error);}
+    });
+  }
+  ownStoreRepository(rows){
+    if(!Array.isArray(rows)||rows.length>20000)return null;
+    const own=rows.filter(row=>row&&typeof row==="object"&&!Array.isArray(row)&&
+      (typeof row.id==="string"||Number.isSafeInteger(row.id))&&String(row.id)===STORE_REPOSITORY_ID&&
+      row.full_name===STORE_REPOSITORY_NAME&&row.category==="integration"&&row.domain==="deye_ems"&&row.installed===true);
+    return own.length===1?own[0]:null;
+  }
+  syncStoreMetadata(){
+    const version=this.storeSyncRelease();
+    if(!version){if(this.storeSyncFlight)this.cancelStoreSync();this.storeSyncStatus="";return Promise.resolve(false);}
+    if(this.storeSyncFlight)return this.storeSyncFlight;
+    let attempt=this.storeSyncAttempts.get(version);
+    if(!attempt){attempt={tries:0,next:0,done:false};this.storeSyncAttempts.set(version,attempt);if(this.storeSyncAttempts.size>8)this.storeSyncAttempts.delete(this.storeSyncAttempts.keys().next().value);}
+    if(attempt.done||attempt.tries>=3||attempt.next>Date.now())return Promise.resolve(false);
+    clearTimeout(this.storeSyncTimer);this.storeSyncTimer=null;
+    const sequence=++this.storeSyncSequence;attempt.tries++;this.storeSyncStatus="checking";
+    const flight=(async()=>{
+      let platform="marketplace";
+      try{
+        for(let fallback=0;fallback<2;fallback++){
+          let rows;
+          try{rows=await this.storeMetadataCall({type:platform+"/repositories/list",categories:["integration"]});}
+          catch(error){if(platform==="marketplace"&&error?.code==="unknown_command"&&this.storeSyncCurrent(sequence,version)){platform="hacs";continue;}throw error;}
+          if(!this.storeSyncCurrent(sequence,version))return false;
+          const repository=this.ownStoreRepository(rows),cached=storeVersion(repository?.available_version);
+          if(!repository||!cached){attempt.done=true;this.storeSyncStatus="not_found";return false;}
+          if(compareVersions(cached,version)>=0){attempt.done=true;this.storeSyncStatus="current";return true;}
+          try{await this.storeMetadataCall({type:platform+"/repository/refresh",repository:STORE_REPOSITORY_ID});}
+          catch(error){if(platform==="marketplace"&&error?.code==="unknown_command"&&this.storeSyncCurrent(sequence,version)){platform="hacs";continue;}throw error;}
+          if(!this.storeSyncCurrent(sequence,version))return false;
+          rows=await this.storeMetadataCall({type:platform+"/repositories/list",categories:["integration"]});
+          if(!this.storeSyncCurrent(sequence,version))return false;
+          const refreshed=this.ownStoreRepository(rows),offered=storeVersion(refreshed?.available_version);
+          attempt.done=true;this.storeSyncStatus=offered&&compareVersions(offered,version)>=0?"updated":"checked";
+          return this.storeSyncStatus==="updated";
+        }
+        throw {code:"unknown_command"};
+      }catch(error){
+        if(!this.storeSyncCurrent(sequence,version))return false;
+        const code=error?.code,permission=["unauthorized","forbidden","not_admin"].includes(code),unsupported=code==="unknown_command",limited=["github_rate_limited","rate_limited"].includes(code);
+        if(permission||unsupported){attempt.done=true;this.storeSyncStatus=permission?"permission":"unsupported";}
+        else{
+          this.storeSyncStatus=limited?"rate_limited":"retry";
+          const delay=limited?3600000:attempt.tries===1?300000:900000;attempt.next=Date.now()+delay;
+          if(attempt.tries<3)this.storeSyncTimer=setTimeout(()=>{this.storeSyncTimer=null;if(this.storeSyncCurrent(sequence,version))void this.syncStoreMetadata();},delay);
+        }
+        return false;
+      }finally{if(sequence===this.storeSyncSequence)this.render();}
+    })();
+    this.storeSyncFlight=flight;void flight.finally(()=>{if(this.storeSyncFlight===flight)this.storeSyncFlight=null;});return flight;
+  }
+  storeSyncHtml(){
+    const messages={checking:"Sprawdzanie metadanych naszego repozytorium w Marketplace…",updated:"Marketplace otrzymał aktualne metadane wydania.",current:"Marketplace zna już to wydanie.",checked:"Metadane Marketplace odświeżono. Sprawdź dostępne wersje i zgodność wydania w Marketplace.",not_found:"Nie potwierdzono zainstalowanego repozytorium Deye EMS w Marketplace.",permission:"Odświeżenie metadanych Marketplace wymaga uprawnień administratora.",unsupported:"Ta instancja nie udostępnia obsługi odświeżania metadanych Marketplace.",rate_limited:"Limit zapytań Marketplace: ponowna próba później.",retry:"Nie odświeżono metadanych Marketplace. Próba zostanie ponowiona w ograniczonym zakresie."};
+    return Object.hasOwn(messages,this.storeSyncStatus)?'<p class="legend">'+esc(messages[this.storeSyncStatus])+'</p>':"";
   }
   updatesHtml(){
     const p=this.payload||{},u=p.updates||{},running=releaseVersion(p.backend_version),latest=releaseVersion(u.latest_version);
@@ -253,15 +354,23 @@ class DeyeEMSPanel extends HTMLElement {
     const warning=mismatch?'<p class="notice warning">'+(comparison>0?'Otwarta karta ma starszy interfejs niż wersja uruchomiona w HA. Odśwież interfejs.':'Interfejs jest nowszy niż wersja uruchomiona w HA. Sprawdź w Marketplace, czy po aktualizacji wymagany jest restart HA.')+'</p>':'';
     const lastKnown=latest&&knownCheck&&(u.status==="error"||u.stale===true)?'<p class="legend">Ostatnio znane wydanie: '+esc(latest)+'. Ta informacja może być nieaktualna.</p>':'';
     const disabled=this.busy||pending||!running||retry>0;
+    const next=updateTimestamp(u.next_check_at),automatic=u.automatic===true&&u.interval_seconds===3600;
+    const automaticNote=automatic?'<p class="legend">Automatyczne sprawdzanie wydań co godzinę'+(next!==null&&next>Date.now()&&next-Date.now()<=7200000?' · następne: '+esc(time(u.next_check_at)):'')+'.</p>':'';
     return '<section aria-label="Wersja i aktualizacje"><h2>Wersja i aktualizacje</h2><p>Uruchomiona w HA: <b>'+esc(running)+'</b> · Interfejs tej karty: <b>'+PANEL_VERSION+'</b>.</p>'+warning+
       '<p role="status">'+esc(message)+'</p>'+lastKnown+(knownCheck?'<p class="legend">Ostatnia próba sprawdzenia: '+esc(time(u.checked_at))+(u.stale===true?' · wynik nieaktualny':'')+'.</p>':'')+
-      (retry?'<p class="legend">Ponowne sprawdzenie za '+retry+' s.</p>':'')+
+      (retry?'<p class="legend">Ponowne sprawdzenie za '+retry+' s.</p>':'')+automaticNote+this.storeSyncHtml()+
       '<div class="actions"><button id="updates-check" class="secondary" '+(disabled?'disabled':'')+'>'+(pending?'Sprawdzanie…':'Sprawdź aktualizacje')+'</button><a href="/marketplace">Otwórz Marketplace</a>'+releaseLink+
       '<button id="updates-reload" class="secondary" '+(this.busy||this.hasUnsavedChanges()?'disabled':'')+'>Odśwież interfejs</button></div><p class="legend">Sprawdzenie odczytuje publiczne wydania GitHub. Instalację i ewentualny restart wykonuje się w Marketplace tej instancji. Przed odświeżeniem interfejsu zapisz lub anuluj edytowane zmiany.</p></section>';
   }
   bindUpdates(){
     this.shadowRoot.getElementById("updates-check")?.addEventListener("click",()=>this.checkUpdates());
     this.shadowRoot.getElementById("updates-reload")?.addEventListener("click",()=>this.reloadInterface());
+  }
+  batteryLimitInfo(){
+    const source=this.payload?.data?.inputs?.battery_limit_source;
+    const labels={deye_setting:["Limit z nastawy Deye","Brak osobnej encji CCL BMS. Odczyt maksymalnego prądu Deye; limit ładowania z sieci −5% jest pokazany osobno."],deye_bms:["Limit BMS z Deye","Bieżący dopuszczalny prąd BMS odczytany przez falownik."],external_bms:["Limit z zewnętrznego BMS","Dopuszczalny prąd odrębnego źródła BMS."]};
+    const [label,note]=Object.hasOwn(labels,source)?labels[source]:["Limit baterii","Źródło ograniczenia baterii wymaga potwierdzenia."];
+    return {label,note,forecast:source==="deye_setting"?"Prognoza SoC wyznacza moc ładowania z aktualnego limitu Deye oraz napięcia baterii.":"Prognoza SoC wyznacza moc ładowania z aktualnych limitów Deye i BMS oraz napięcia baterii."};
   }
   pvPriorityHtml(){
     const d=this.payload?.data,c=d?.control;
@@ -927,7 +1036,7 @@ class DeyeEMSPanel extends HTMLElement {
     this.renderedSourceStage=sourceStage;this.renderedHardwareStage=hardwareStage;this.renderedTelemetryStage=telemetryStage;
     this.renderedAppearanceStage=appearanceStage;
     const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
-    const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{};
+    const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{},batteryLimit=this.batteryLimitInfo();
     const active=p.mode==="active", targets=plan.targets||{}, rows=plan.rows||[];
     const lowerBound=numeric(o.min_soc_lower_bound),boundValid=o.min_soc_bound_valid===true&&lowerBound!==null&&lowerBound>=5&&lowerBound<=90;
     const rawFloor=numeric(o.effective_min_soc_percent)??numeric(o.min_soc_percent),floor=rawFloor!==null&&rawFloor>=5&&rawFloor<=90?rawFloor:null;
@@ -970,7 +1079,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       this.sourcesHtml()+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+
-      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.')+card("Limit BMS",num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A","Dopuszczalny prąd baterii.")+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu BMS, falownika i przyłącza.")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. Prognoza SoC wyznacza moc ładowania z aktualnych limitów Deye i BMS oraz napięcia baterii; ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+this.pvPriorityHtml()+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
+      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.')+card(batteryLimit.label,num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A",batteryLimit.note)+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu ograniczeń baterii, falownika i przyłącza.")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. '+esc(batteryLimit.forecast)+' Ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+this.pvPriorityHtml()+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
       '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
       this.solcastUsageHtml()+
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p>'+this.solcastHtml()+'</section>'+

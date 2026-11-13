@@ -1,6 +1,7 @@
 {
   "domain": "deye_ems",
   "name": "Deye EMS",
+  "after_dependencies": ["esphome", "zeroconf"],
   "codeowners": [
     "@gaszu"
   ],
@@ -16,5 +17,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/gaszu/deye-ems/issues",
   "requirements": [],
-  "version": "2.0.2"
+  "version": "2.0.3"
 }

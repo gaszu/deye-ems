@@ -3,7 +3,7 @@ from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP, Platform
 
 from .appearance import AppearanceManager, DATA_APPEARANCE
 from .const import DOMAIN, PLATFORMS, VERSION
@@ -16,7 +16,7 @@ PANEL_PATH = "deye-ems"
 
 async def async_setup_entry(hass, entry):
     if DATA_UPDATES not in hass.data:
-        # Manual checks are app-wide and never run as part of EMS refreshes.
+        # Release checks are app-wide and never run in the EMS refresh path.
         hass.data[DATA_UPDATES] = UpdateManager(hass)
     if DATA_APPEARANCE not in hass.data:
         appearance = AppearanceManager(hass)
@@ -36,6 +36,36 @@ async def async_setup_entry(hass, entry):
         hass.data[DOMAIN + "_static"] = True
     if not hass.data.get(DOMAIN + "_panel"):
         await async_update_panel(hass)
+    await _async_enable_update_checks(hass)
+
+
+async def _async_enable_update_checks(hass):
+    """Tie the independent checker to HA lifecycle, not the control driver."""
+    manager = hass.data[DATA_UPDATES]
+    if DOMAIN + "_updates_stop" not in hass.data:
+        async def stop_updates(_event):
+            await _async_disable_update_checks(hass)
+
+        hass.data[DOMAIN + "_updates_stop"] = hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STOP, stop_updates)
+    if hass.is_running:
+        manager.async_start()
+    elif DOMAIN + "_updates_start" not in hass.data:
+        async def start_updates(_event):
+            hass.data.pop(DOMAIN + "_updates_start", None)
+            manager.async_start()
+
+        hass.data[DOMAIN + "_updates_start"] = hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STARTED, start_updates)
+
+
+async def _async_disable_update_checks(hass):
+    for suffix in ("_updates_start", "_updates_stop"):
+        cancel = hass.data.pop(DOMAIN + suffix, None)
+        if cancel is not None:
+            cancel()
+    if manager := hass.data.get(DATA_UPDATES):
+        await manager.async_stop()
 
 
 async def async_update_panel(hass):
@@ -62,6 +92,7 @@ async def async_unload_entry(hass, entry):
     await entry.runtime_data.async_shutdown()
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
+        await _async_disable_update_checks(hass)
         frontend.async_remove_panel(hass, PANEL_PATH)
         # Static paths and websocket handlers are registered once per HA process.
         hass.data.pop(DOMAIN + "_panel", None)

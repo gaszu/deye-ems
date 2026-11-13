@@ -138,7 +138,7 @@ class TelemetryDiagnostics(unittest.IsolatedAsyncioTestCase):
             hint = inputs["telemetry_hints"][0]
             self.assertEqual((hint["provider"], hint["reason"], hint["sources"]),
                              ("esphome", "stale", ["voltage"]))
-            self.assertIn("force_update: true", hint["message"])
+            self.assertIn("bez zmiany firmware", hint["message"])
             self.assertFalse(inputs["telemetry_valid"])
         # An ESPHome-looking entity name alone is not provider evidence.
         self.assertTrue(all(hint["provider"] == "generic"
