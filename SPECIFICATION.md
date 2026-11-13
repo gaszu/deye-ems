@@ -1,4 +1,10 @@
-# Specyfikacja Deye EMS 2.1.1
+# Specyfikacja Deye EMS 2.1.2
+
+## Wygląd panelu — 2.1.2
+
+- Przyklejona karta sterowania ze stanem trybu i przyciskiem korzysta ze wspólnych zmiennych kart HA: powierzchni, obramowania, promienia, cienia, filtra i odstępów.
+- Opis panelu, topologia LOAD/CT, sprzęt i aktualizacje są przeniesione do jednego istniejącego bloku ustawień zaawansowanych. Stan rozwinięcia oraz sprawdzanie wydań w tle są zachowane.
+- Odnośniki Marketplace i opisu wydania mają ten sam styl, typografię, odstępy, fokus i zachowanie hover co sąsiednie przyciski. Pozostają natywnymi odnośnikami z dotychczasowymi adresami i otwieraniem strony wydania w nowej karcie.
 
 ## Panel i zachowanie konfiguracji — 2.1.1
 

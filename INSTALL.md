@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.1
+# Instalacja i obsługa Deye EMS 2.1.2
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -12,14 +12,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.1**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.2**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.1.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.1/deye-ems-2.1.1.zip).
+1. Pobierz [deye-ems-2.1.2.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.2/deye-ems-2.1.2.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -126,7 +126,7 @@ Moc odbiorów między CT a GRID = CT − GRID. Przykład: CT0W i GRID−2000W oz
 
 Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRID muszą mieścić się w10s. Wymagana jest zgodność sum i faz (tolerancja większa z300W i10% sumy) oraz nieujemny bilans odbiorów między CT a GRID (do200W tolerancji). Sterowanie nie zakłada bilansowania faz CT na podstawie przełącznika dotyczącego LOAD: zwiększenia prądu stosują zachowawczy model fazowy. Tryb wymagany w tej topologii to **Zero Export To CT**; EMS nie przełącza go sam.
 
-Zmiana topologii lub przypisań unieważnia stary plan i cache celu. Zapis kreatora lub zmienionych opcji, także selektora LOAD/CT w panelu, może wznowić sterowanie dopiero po ponownym sprawdzeniu warunków. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** pozostaje zawsze widoczna na głównym ekranie i opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
+Zmiana topologii lub przypisań unieważnia stary plan i cache celu. Zapis kreatora lub zmienionych opcji, także selektora LOAD/CT w panelu, może wznowić sterowanie dopiero po ponownym sprawdzeniu warunków. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** w **Ustawieniach zaawansowanych i szczegółach** opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
 
 ## Operator, taryfa i automatyczny start po zapisie
 
