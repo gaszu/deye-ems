@@ -10,7 +10,7 @@
   .demo label {display:block;margin-top:8px}.demo select {padding:6px 10px;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px}
 </style>
 <div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.<label>Tryb profilu w podglądzie <select id="preview-theme-mode"><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label><label>Przykładowy układ <select id="preview-topology"><option value="load_only">LOAD</option><option value="load_with_external_ct">LOAD i CT</option></select></label></div>
-<deye-ems-panel-2-0-0 id="preview"></deye-ems-panel-2-0-0>
+<deye-ems-panel-2-0-1 id="preview"></deye-ems-panel-2-0-1>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -18,7 +18,7 @@
   const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
   const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
   const deadline=night.toISOString();
-  const example={entry_id:"preview-entry",backend_version:"2.0.0",updates:{status:"not_checked",latest_version:null,checked_at:null,retry_at:null,reason:null,release_url:null,marketplace_url:"/marketplace"},appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
+  const example={entry_id:"preview-entry",backend_version:"2.0.1",updates:{status:"not_checked",latest_version:null,checked_at:null,retry_at:null,reason:null,release_url:null,marketplace_url:"/marketplace"},appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,inverter_max_power_kw:12,reserve_margin_soc_percent:5,
     winter_weather_soc_percent:75,topology:"load_only",
     discharge_max_kw:10,grid_max_soc_percent:95,
@@ -107,7 +107,7 @@
     example.data.updated_at=new Date().toISOString();example.data.plan.generated_at=new Date().toISOString();
     return {type:"create_entry",flow_id:id};
   },async callWS(message){
-    if(message.command==="check_updates")example.updates={status:"current",latest_version:"2.0.0",checked_at:new Date().toISOString(),retry_at:new Date(Date.now()+60000).toISOString(),reason:null,release_url:"https://github.com/gaszu/deye-ems/releases/tag/v2.0.0",marketplace_url:"/marketplace",stale:false};
+    if(message.command==="check_updates")example.updates={status:"current",latest_version:"2.0.1",checked_at:new Date().toISOString(),retry_at:new Date(Date.now()+60000).toISOString(),reason:null,release_url:"https://github.com/gaszu/deye-ems/releases/tag/v2.0.1",marketplace_url:"/marketplace",stale:false};
     if(message.command==="appearance")example.appearance={theme:message.theme};
     if(["load_save","load_delete","load_toggle"].includes(message.command)){
       if(example.mode==="active")throw Error("Przejdź do obserwacji przed zmianą odbiorników.");

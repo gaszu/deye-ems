@@ -40,13 +40,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-0-0");
+  const Panel = registry.get("deye-ems-panel-2-0-1");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"2.0.0",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.0.1",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -62,8 +62,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-0-0"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.0\.0/);
+  assert.notEqual(registry.get("deye-ems-panel-2-0-1"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.0\.1/);
 });
 
 function apiUsage(panel,changes={}){
@@ -81,8 +81,8 @@ test("software version and manual update check are visible without opening advan
   const {panel,calls,reloads}=fixture();
   const html=panel.shadowRoot.innerHTML.split("<details>")[0];
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>2\.0\.0<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>2\.0\.0<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.0\.1<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.0\.1<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -91,18 +91,18 @@ test("software version and manual update check are visible without opening advan
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"2.0.0",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.0.1",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
-  html=updateInfo(panel,{status:"available",latest_version:"2.0.100",checked_at});
-  assert.match(html,/Dostępna aktualizacja: 2\.0\.100/);
+  html=updateInfo(panel,{status:"available",latest_version:"2.0.200",checked_at});
+  assert.match(html,/Dostępna aktualizacja: 2\.0\.200/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"2.0.1",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.0.2",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"2.0.0"},
-    {status:"current",latest_version:"2.0.0",checked_at:"0"},
-    {status:"current",latest_version:"2.0.0",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"2.0.0",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.0.1"},
+    {status:"current",latest_version:"2.0.1",checked_at:"0"},
+    {status:"current",latest_version:"2.0.1",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.0.1",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -110,12 +110,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="2.0.1";panel.render();
+  panel.payload.backend_version="2.0.2";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v2.0.0","2.0.0-beta","02.0.0"]){
+  for(const value of [undefined,null,17,"unknown","v2.0.1","2.0.1-beta","02.0.1"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -125,22 +125,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.0.1",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.0.2",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 2\.0\.1/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.0\.2/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.0\.1"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.0\.2"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['2.0.1\" onclick=\"unexpected()','<img src=x>','2.0.1/../../x',"v2.0.1",true,18,"2.0.1-beta","999999999.0.1"]){
+  for(const latest_version of ['2.0.2\" onclick=\"unexpected()','<img src=x>','2.0.2/../../x',"v2.0.2",true,18,"2.0.2-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -159,9 +159,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.0.1");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.0.2");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -171,9 +171,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"2.0.1",updates:{status:"not_checked"}};
-  finish({backend_version:"2.0.0",updates:{status:"current",latest_version:"2.0.0",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.0.1");
+  panel.payload={...panel.payload,backend_version:"2.0.2",updates:{status:"not_checked"}};
+  finish({backend_version:"2.0.1",updates:{status:"current",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.0.2");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -208,20 +208,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.0.2",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"2.0.1");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"2.0.1",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.0.2");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.0.2",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="2.0.1";
+  panel.payload.backend_version="2.0.2";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -428,6 +428,93 @@ test("first start is preparation and unknown diagnostic values are not rendered"
   assert.match(text,/Przygotowanie pierwszego startu w tanim oknie/);assert.doesNotMatch(text,/jest włączone/);
   text=currentStatus(panel,{current_hold_reason:"private_internal_value",next_current_change_at:null});
   assert.doesNotMatch(text,/private_internal_value/);
+});
+
+function telemetryRow(changes={}){
+  return {source:"voltage",entity_id:"sensor.site_battery_voltage",value:53.7,unit:"V",expected_unit:"V",
+    last_reported:new Date(NOW-175000).toISOString(),age_seconds:175,max_age_seconds:120,
+    valid:false,reason:"stale",platform:"esphome",...changes};
+}
+function telemetryData(panel,rows=[telemetryRow()],hints=[]){
+  panel.payload.data.inputs.telemetry_details=rows;panel.payload.data.inputs.telemetry_hints=hints;
+  panel.payload.data.inputs.telemetry_valid=rows.every(row=>row.valid===true);panel.render();return panel.telemetryDiagnosticsHtml();
+}
+test("measurement diagnostics identify the stale 175 second voltage and unchanged 120 second limit",()=>{
+  const {panel,calls}=fixture();const html=telemetryData(panel);
+  assert.match(html,/Diagnostyka pomiarów/);assert.match(html,/sensor\.site_battery_voltage/);assert.match(html,/Napięcie baterii/);
+  assert.match(html,/53,7 V/);assert.match(html,/>175 s<\/td>/);assert.match(html,/>120 s<\/td>/);
+  assert.match(html,/Odczyt starszy niż dopuszczalny limit/);assert.match(html,/Wiek dotyczy ostatniego sprawdzenia silnika/);
+  assert.ok(panel.shadowRoot.innerHTML.indexOf("Diagnostyka pomiarów")<panel.shadowRoot.innerHTML.indexOf("Harmonogram taryfy"));
+  assert.equal(calls.length,0);
+});
+test("wrong units and absent report time remain distinct without inventing zero age or a threshold",()=>{
+  const {panel}=fixture();let html=telemetryData(panel,[telemetryRow({reason:"wrong_unit",unit:"mV",expected_unit:"V",value:53700})]);
+  assert.match(html,/53[\s\u00a0]700 mV/);assert.match(html,/Błędna jednostka — oczekiwano V/);
+  html=telemetryData(panel,[telemetryRow({last_reported:null,age_seconds:null,max_age_seconds:null,value:null,reason:"missing"})]);
+  assert.match(html,/brak czasu odczytu/);assert.match(html,/bez stałego limitu/);assert.match(html,/Brak odczytu/);
+  assert.doesNotMatch(html,/>0 s<\/td>/);assert.doesNotMatch(html,/>0 V<\/td>/);
+});
+test("group time coherence diagnostics show observed and allowed skew without changing guards",()=>{
+  const {panel}=fixture();const html=telemetryData(panel,[telemetryRow({source:"charge_power",entity_id:null,value:null,unit:null,
+    reason:"time_skew",last_reported:null,age_seconds:null,max_age_seconds:null,platform:null,
+    observed_time_skew_seconds:17.5,max_time_skew_seconds:10})]);
+  assert.match(html,/Odczyty pochodzą z różnych chwil — różnica 17,5 s, limit 10 s/);
+  assert.match(html,/brak przypisanej encji/);
+});
+test("ESPHome update hints require an actual ESPHome source while generic diagnostics never assume that platform",()=>{
+  const {panel}=fixture(),hint={provider:"esphome",reason:"stale",sources:["voltage"],message:"private-provider-message"};
+  let html=telemetryData(panel,[telemetryRow()],[hint]);assert.match(html,/force_update: true/);assert.match(html,/update_interval/);
+  assert.doesNotMatch(html,/private-provider-message/);
+  html=telemetryData(panel,[telemetryRow({platform:"mqtt"})],[hint]);assert.doesNotMatch(html,/force_update|update_interval/);
+  html=telemetryData(panel,[telemetryRow({platform:"mqtt"})],[{provider:"generic",reason:"stale",sources:["voltage"],message:"private-provider-message"}]);
+  assert.match(html,/częstotliwość raportowania w integracji źródłowej/);assert.doesNotMatch(html,/force_update|ESPHome|private-provider-message/);
+  html=telemetryData(panel,[telemetryRow({valid:true,reason:null,age_seconds:1}),telemetryRow({source:"grid_power",platform:"mqtt"})],[hint]);
+  assert.doesNotMatch(html,/force_update|update_interval/);
+});
+test("stale future and missing whole snapshots never present cached telemetry ages values or repair hints as current",()=>{
+  const {panel}=fixture();telemetryData(panel,[telemetryRow()],[{provider:"esphome",reason:"stale",sources:["voltage"]}]);
+  for(const stamp of [new Date(NOW-30001).toISOString(),new Date(NOW+1).toISOString(),"unknown",null]){
+    panel.payload.data.updated_at=stamp;const html=panel.telemetryDiagnosticsHtml();
+    assert.match(html,/Brak bieżącej diagnostyki/);assert.doesNotMatch(html,/175 s|53,7|sensor\.site_battery_voltage|force_update/);
+  }
+});
+test("diagnostic healthy rows expand locally and preserve expansion and focused drafts during polling",async()=>{
+  const {panel,calls}=fixture();telemetryData(panel,[telemetryRow(),telemetryRow({source:"grid_power",entity_id:"sensor.site_grid_power",value:0,unit:"W",reason:null,valid:true,age_seconds:4,max_age_seconds:30})]);
+  assert.doesNotMatch(panel.telemetryDiagnosticsHtml(),/sensor\.site_grid_power/);
+  panel.shadowRoot.getElementById("telemetry-diagnostics-toggle").events.click();
+  assert.equal(panel.telemetryExpanded,true);assert.match(panel.telemetryDiagnosticsHtml(),/sensor\.site_grid_power/);
+  assert.match(panel.telemetryDiagnosticsHtml(),/>0 W<\/td>/);assert.equal(calls.length,0);
+  const field=panel.shadowRoot.querySelector('input[data-key="capacity_kwh"]');field.value="88";field.events.input();panel.shadowRoot.activeElement=field;
+  const html=panel.shadowRoot.innerHTML;await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);assert.equal(panel.telemetryExpanded,true);assert.equal(panel.drafts.capacity_kwh,"88");
+  panel.shadowRoot.activeElement=null;panel.render();assert.equal(panel.shadowRoot.querySelector('input[data-key="capacity_kwh"]').value,"88");
+  panel.shadowRoot.getElementById("telemetry-diagnostics-toggle").events.click();assert.equal(panel.telemetryExpanded,false);
+  assert.doesNotMatch(panel.telemetryDiagnosticsHtml(),/sensor\.site_grid_power/);assert.match(panel.telemetryDiagnosticsHtml(),/sensor\.site_battery_voltage/);
+  assert.equal(panel.shadowRoot.nodes.filter(node=>node.attrs.tag==="details").length,1);
+});
+test("new failed diagnostics become visible despite a focused settings field and no automatic control requests",async()=>{
+  const {panel,calls}=fixture();telemetryData(panel,[telemetryRow({valid:true,reason:null,age_seconds:4})]);
+  panel.shadowRoot.activeElement=panel.shadowRoot.querySelector('input[data-key="capacity_kwh"]');
+  panel._hass.callWS=async()=>({...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,telemetry_valid:false,telemetry_details:[telemetryRow()]}}});
+  await panel.refresh();assert.match(panel.shadowRoot.innerHTML,/175 s/);assert.match(panel.shadowRoot.innerHTML,/Odczyt starszy niż dopuszczalny limit/);
+  assert.equal(calls.length,0);
+});
+test("diagnostics escape identifiers units platforms and reason metadata but never print raw invalid sensor strings",()=>{
+  const {panel}=fixture();const html=telemetryData(panel,[telemetryRow({source:'<img src=x>',entity_id:'sensor.bad" onclick="x',value:'<script>secret-value</script>',unit:'<svg onload=x>',
+    platform:'<img src=x>',reason:"wrong_unit",expected_unit:'V<script>x</script>'})]);
+  assert.match(html,/&lt;img/);assert.match(html,/sensor\.bad&quot;/);assert.match(html,/&lt;svg/);assert.match(html,/V&lt;script/);
+  assert.doesNotMatch(html,/<img|<svg|<script|secret-value/);
+});
+test("healthy diagnostic lists stay collapsed by default and unknown detail formats do not trigger requests",()=>{
+  const {panel,calls}=fixture();let html=telemetryData(panel,[telemetryRow({valid:true,reason:null,age_seconds:3})]);
+  assert.match(html,/Wszystkie pokazane źródła/);assert.doesNotMatch(html,/sensor\.site_battery_voltage/);assert.equal(panel.telemetryExpanded,false);
+  for(const details of [null,"unexpected",{},[null,1,"wrong",{}]]){
+    panel.payload.data.inputs.telemetry_details=details;html=panel.telemetryDiagnosticsHtml();assert.match(html,/Brak szczegółów pomiarów/);
+  }
+  assert.equal(calls.length,0);
+});
+test("healthy individual rows cannot override an unconfirmed overall telemetry result",()=>{
+  const {panel}=fixture();telemetryData(panel,[telemetryRow({valid:true,reason:null,age_seconds:1})]);panel.payload.data.inputs.telemetry_valid=false;
+  const html=panel.telemetryDiagnosticsHtml();assert.match(html,/silnik nie potwierdza kompletu pomiarów/);assert.doesNotMatch(html,/Wszystkie pokazane źródła spełniają/);
 });
 
 test("automatic Deye ceiling shows a missing value when invalid or stale",()=>{
