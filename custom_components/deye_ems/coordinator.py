@@ -27,7 +27,8 @@ from .grid_control import (calculate_grid_charge_cap, calculate_grid_charge_incr
                            calculate_grid_charge as calculate_grid_charge_demand)
 from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready, initial_dispatch_ready,
                                 describe_current_wait, DEADBAND_A, QUANTUM_A)
-from .planner import plan_energy
+from .planner import (plan_energy, tariff_context, tariff_identity, tariff_target_items,
+                      physical_tariff_tou, tariff_slot_targets)
 from .slot_meter import update_slot_measurements
 from .topology import ct_load_balance
 from .soc_policy import reserve_lower_bound
@@ -36,6 +37,7 @@ from .tariff_calendar import describe_calendar
 from .telemetry_diagnostics import describe_telemetry, activation_diagnostics
 from .esphome_provider import async_create_adapter
 from .report_state import effective_state
+from .post_save import cancel_post_save, get_post_save_status, configuration_requires_reload
 
 _LOGGER = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -75,6 +77,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self.entry = entry
         initial = dict(getattr(entry, "data", {}))
         self._options = {**DEFAULT_OPTIONS, **initial, **dict(entry.options)}
+        self._tariff_clock_explicit = "tariff_clock_basis" in initial or "tariff_clock_basis" in dict(entry.options)
         self._options["battery_source_profile"] = battery_source_profile(initial, dict(entry.options))
         self._sources = {**DEFAULT_SOURCES, **initial.get("sources", {}),
                          **dict(entry.options).get("sources", {})}
@@ -110,6 +113,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "metering_context": {}, "soc_floor_guard": {}}
         self._last_save_ts = 0
         self._last_error = None
+        self._tariff_runtime_cache = {}
+        self._configuration_pause_sleep = asyncio.sleep
         # Evidence of an accepted service call, never a physical charging ACK.
         # Kept only in RAM: a restart must re-establish settled readback.
         self._pending_grid_reduction = None
@@ -173,7 +178,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         except (ValueError, TypeError):
             public["hardware_profile"] = {"control_supported": False, "error": "invalid_inverter_profile"}
             public["effective_hardware_limits"] = {}
-        public["tariff_calendar"] = describe_calendar(self._now())
+        try:
+            public["tariff_calendar"] = describe_calendar(self._now(),
+                self._options.get("tariff_profile", "legacy_g13"), self._options.get("tariff_clock_basis", "local"))
+        except (ValueError, TypeError, KeyError):
+            public["tariff_calendar"] = {"within_validity": False, "issue": "invalid_tariff_configuration", "today": [], "tomorrow": []}
+        if self._real_tariff():
+            public["tariff_calendar"].update(valid=self._tariff_context(self._now()).get("valid") is True,
+                issue=self._tariff_context(self._now()).get("issue"))
+            public["physical_tou"] = self._tou_program(self._now())
         return self._redact(public)
 
     def _soc_lower_bound(self):
@@ -251,6 +264,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             dispatch.update(outcome="uncertain", possible_at=self._now().timestamp())
         # A restart does not grant authority over another controller, nor does
         # a restored active mode allow writes with unavailable telemetry.
+        if self.mode == "active" and self._post_save_status().get("status") in ("waiting", "checking"):
+            self._memory["mode"] = "shadow"
+            await self._save()
         if self.mode == "active":
             try:
                 self._preflight()
@@ -285,6 +301,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             raise ValueError("Unknown EMS setting")
         if key in ("inverter_model", "inverter_phases", "connection_phases", "inverter_phase"):
             raise ValueError("Model i fazy zmień przez kreator falownika w trybie obserwacji.")
+        if key in ("tariff_profile", "tariff_clock_basis", "tariff_contract_confirmed"):
+            raise ValueError("Operatora, taryfę i zegar zmień przez kreator taryfy w trybie obserwacji.")
         if key == "extra_loads":
             async with self._lock:
                 await self._commit_loads_locked(value)
@@ -478,12 +496,31 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             await self._commit_loads_locked(channels)
         await self.async_request_refresh()
 
-    async def async_set_mode(self, mode):
+    def _post_save_status(self):
+        return (get_post_save_status(self.hass, self.entry.entry_id)
+                if isinstance(getattr(self.hass, "data", None), dict) else {"status": "idle"})
+
+    async def async_set_mode(self, mode, *, activation_guard=None):
         if mode not in ("shadow", "active"):
             raise ValueError("Choose shadow or active")
+        # A manual stop invalidates a queued activation before waiting for its
+        # lock or storage write. Cancellation never interrupts the Store itself.
+        if mode == "shadow" and activation_guard is None and isinstance(getattr(self.hass, "data", None), dict):
+            cancel_post_save(self.hass, self.entry.entry_id, "manual_stop")
+        def permitted():
+            try:
+                return activation_guard is None or activation_guard() is True
+            except Exception:
+                return False
         async with self._lock:
+            if mode == "shadow" and activation_guard is not None and not permitted():
+                raise ValueError("activation_cancelled")
             if mode == "active":
+                if not permitted():
+                    raise ValueError("activation_cancelled")
                 self._preflight(retake=True)
+                if not permitted():
+                    raise ValueError("activation_cancelled")
                 self._memory["observed_owners"] = {entity: True for entity in OWNER_ENTITIES
                                                     if self.hass.states.get(entity) is not None}
                 if self.mode != "active" and self._memory["initial_charge_window"] == {}:
@@ -504,12 +541,105 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._disable_gc()
                 await self._grid_attempt(0, self._now().timestamp(), force=True)
             self._memory["mode"] = mode
-            await self._save()
+            try:
+                await self._save()
+            except BaseException:
+                if activation_guard is not None and mode == "active":
+                    self._memory["mode"] = "shadow"
+                raise
+            if activation_guard is not None and not permitted():
+                self._memory["mode"] = "shadow"
+                await self._save()
+                raise ValueError("activation_cancelled")
+            if mode == "shadow" and activation_guard is not None:
+                # Native reports can arrive after service acceptance. Wait only
+                # for RAM readbacks; never repeat commands or saves in this loop.
+                for attempt in range(31):
+                    if not permitted():
+                        raise ValueError("activation_cancelled")
+                    current = self._measurement("grid_current_number", self._now(), unit="A", low=0, high=1000)
+                    if current == 0 and all((state := self._state(f"tou_gc_{i}")) is not None and state.state == "off"
+                            and not state.attributes.get("restored", False) for i in range(1,7)):
+                        break
+                    if attempt == 30:
+                        raise ValueError("configuration_pause_unconfirmed")
+                    await self._configuration_pause_sleep(1)
             if mode == "active" and self._last_error == "restored_active_preflight_failed":
                 # An explicit, validated activation with a successful mode
                 # save supersedes only this historical startup diagnostic.
                 self._last_error = None
         await self.async_request_refresh()
+
+    async def async_prepare_activation(self, *, recalculate=True):
+        """Prepare a saved intent using ordinary guards and a dated own plan.
+
+        This method never activates control or writes the inverter. Forecast
+        data gaps may use the same explicit conservative plan as manual control;
+        invalid configuration, hardware limits and timestamps cannot qualify.
+        """
+        recalculated = False
+        snapshot = deepcopy(self._options)
+        source_snapshot = dict(self._sources)
+        def verdict(reason, inputs=None):
+            issues = [{"source": row["source"], "reason": row["reason"]}
+                      for row in (inputs or {}).get("telemetry_details", [])
+                      if row.get("valid") is False and row.get("reason")]
+            return dict(ready=False, reason=reason, issues=issues, recalculated=recalculated)
+        now = self._now()
+        inputs = self._read_inputs(now)
+        if snapshot != self._options or source_snapshot != self._sources:
+            return verdict("activation_conditions_failed")
+        try:
+            self._preflight(retake=True)
+        except ValueError:
+            return verdict("waiting_for_measurements" if not inputs.get("telemetry_valid") or not inputs.get("soc_valid")
+                           else "activation_conditions_failed", inputs)
+        if self._stopped:
+            return verdict("activation_conditions_failed")
+        if recalculate:
+            # A scheduled background plan might still hold an older snapshot.
+            # Join/cancel it before the one deliberate post-save recalculation.
+            await self._cancel_planning()
+            await self._make_plan(now, inputs)
+            recalculated = True
+        now = self._now()
+        inputs = self._read_inputs(now)
+        if snapshot != self._options or source_snapshot != self._sources:
+            return verdict("activation_conditions_failed")
+        try:
+            self._preflight(retake=True)
+        except ValueError:
+            return verdict("waiting_for_measurements" if not inputs.get("telemetry_valid") or not inputs.get("soc_valid")
+                           else "activation_conditions_failed", inputs)
+        plan = self._memory.get("plan", {})
+        generated = _stamp(plan.get("generated_at"))
+        missing_forecast = {"incomplete_48h_forecast", "invalid_forecast_row", "stale_or_discontinuous_forecast_axis",
+            "invalid_aware_timestamp", "invalid_pv_p10_kw", "invalid_pv_p50_kw", "invalid_load_kw",
+            "pv_p10_exceeds_p50", "forecast_capacity_mismatch", "forecast_missing_protected_window",
+            "missing_next_night_or_peak_deadline"}
+        deterministic = (plan.get("source") == "own_deterministic_planner" and plan.get("quality") == "valid"
+                         and plan.get("status") in ("ok", "unreachable"))
+        conservative = (plan.get("source") == "own_conservative_fallback" and plan.get("status") == "fallback"
+                        and plan.get("quality") == "invalid" and plan.get("reason") in missing_forecast)
+        if (self._stopped or generated is None or not 0 <= now.timestamp()-generated <= 300
+                or not (deterministic or conservative) or self._plan_task is not None and not self._plan_task.done()):
+            return verdict("waiting_for_plan")
+        targets = plan.get("targets")
+        deadlines = self._deadlines(now)
+        key = self._target_key(now)
+        if not isinstance(targets, dict) or key not in targets:
+            return verdict("waiting_for_plan")
+        floor = self._effective_min_soc()
+        for target_key, record in targets.items():
+            value = _number(record.get("soc_percent")) if isinstance(record, dict) else None
+            if (value is None or not floor <= value <= self._options["grid_max_soc_percent"]
+                    or target_key not in deadlines or _stamp(record.get("deadline")) != deadlines[target_key]
+                    or record.get("source") not in ("own_deterministic_planner", "own_conservative_fallback")
+                    or not self._pv_metadata_matches(record)
+                    or self._real_tariff() and not self._tariff_metadata_matches(record, now)):
+                return verdict("waiting_for_plan")
+        return dict(ready=True, reason=None, issues=[], recalculated=recalculated,
+                    plan_source=plan["source"], plan_reason=plan.get("reason"))
 
     async def async_recalculate(self):
         self._plan_due = 0
@@ -1016,14 +1146,22 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return issues
 
     def _clocks_ok(self, now):
-        winter = self._window(now)[0]
-        clocks = ("00:00:00", "04:00:00", "07:00:00", "13:00:00",
-                  "16:00:00" if winter else "19:00:00", "21:00:00" if winter else "22:00:00")
+        program = self._tou_program(now)
+        if program.get("valid") is not True:
+            return False
+        clocks = [row["time"] for row in program["rows"]]
         return all((state := self._state(f"tou_time_{slot}")) is not None and
                    state.state == clock and not state.attributes.get("restored", False)
                    for slot, clock in enumerate(clocks, 1))
 
     def _preflight(self, *, retake=False):
+        if configuration_requires_reload(self.hass, self.entry.entry_id, self):
+            raise ValueError("Zapisano nową konfigurację, ale nie została jeszcze załadowana. Ponów zapis lub przeładuj integrację przed włączeniem sterowania.")
+        if self._real_tariff():
+            context, program = self._tariff_context(self._now()), self._tou_program(self._now())
+            if context.get("valid") is not True or program.get("valid") is not True:
+                raise ValueError("Nie można włączyć sterowania: sprawdź taryfę, potwierdzenie umowy i zegar licznika. "
+                                 + str(context.get("issue") or program.get("issue")))
         try:
             if self._hardware().get("control_supported") is not True:
                 raise ValueError("unsupported_inverter_model")
@@ -1127,7 +1265,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         _, night, afternoon, _, _ = self._window(now)
         if not (night or afternoon):
             return False
-        if afternoon:
+        if self._real_tariff():
+            window = self._tariff_context(now).get("charge_window") or {}
+            begin_stamp = _stamp(window.get("start"))
+            begin = datetime.fromtimestamp(begin_stamp, _TZ) if begin_stamp is not None else None
+        elif afternoon:
             begin = now.replace(hour=13, minute=0, second=0, microsecond=0)
         else:
             # Before07:00 the night began on the previous calendar date;
@@ -1140,7 +1282,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             own = None
         history = self._dispatch_history(now, own_attempt=own)
         return history["known"] and (history.get("possible_at") is None or
-                                      history["possible_at"] < begin.timestamp())
+                                      begin is not None and history["possible_at"] < begin.timestamp())
 
     def _initial_window_started(self, now):
         record = self._memory.get("initial_charge_window")
@@ -1202,7 +1344,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         winter, night, afternoon, _, active_slot = self._window(now)
         target, emergency, _ = self._target(now)
         floor = self._effective_min_soc()
-        allowed = (night or afternoon) and (winter or emergency or
+        allowed = (night or afternoon) and self._tariff_control_ok(now) and (winter or emergency or
                    inputs["soc"] is not None and inputs["soc"] < floor)
         live_grid = self._grid_input(inputs, now, target, emergency)
         cap = calculate_grid_charge_cap(live_grid)
@@ -1256,14 +1398,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 return False
             requested = self._memory["ledger"].get(self._sources["grid_current_number"], {}).get("a", 0)
             setting = self._measurement(f"tou_soc_{active_slot}", now, unit="%", low=0, high=100)
-            expected_time = ("00:00:00", "04:00:00", "07:00:00", "13:00:00",
-                             "16:00:00" if winter else "19:00:00", "21:00:00" if winter else "22:00:00")[active_slot - 1]
+            rows = self._tou_program(now).get("rows", [])
+            expected_time = rows[active_slot - 1].get("time") if len(rows) == 6 else None
             clock = self._state(f"tou_time_{active_slot}")
             starting = self._grid_input(inputs, now, target, emergency)
             starting["current_a"] = 0
             start_cap = calculate_grid_charge_increase_cap(starting)["increase_cap_a"]
             pending = starting["pending_current_a"]
-            if not (entity_id == self._sources[f"tou_gc_{active_slot}"] and active_slot not in (3, 5)
+            if not (entity_id == self._sources[f"tou_gc_{active_slot}"] and self._slot_charge_eligible(now, active_slot)
                     and allowed and self._hardware_modes_ok() and self._clocks_ok(now) and inputs["soc_valid"]
                     and inputs["soc"] < target and
                     live_need > 0 and requested <= rounded_need and
@@ -1276,8 +1418,16 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if entity_id in [self._sources[f"tou_soc_{slot}"] for slot in range(1, 7)]:
             if value < floor or not self._hardware_modes_ok():
                 return False
-        if entity_id in [self._sources[f"tou_time_{slot}"] for slot in range(1, 7)] and not self._hardware_modes_ok():
+        if entity_id in [self._sources[f"tou_time_{slot}"] for slot in range(1, 7)] and (not self._hardware_modes_ok() or not self._tariff_control_ok(now)):
             return False
+        if self._real_tariff() and entity_id in [self._sources[f"tou_time_{slot}"] for slot in range(1, 7)]:
+            program = self._tou_program(now)
+            expected = next((row["time"] for row in program.get("rows", [])
+                             if self._sources[f"tou_time_{row['slot']}"] == entity_id), None)
+            if value != expected or any((state := self._state(f"tou_gc_{i}")) is None or state.state != "off"
+                    or state.attributes.get("restored", False) for i in range(1, 7)):
+                self._last_error = "last_moment_tariff_program_guard"
+                return False
         domain = entity_id.split(".", 1)[0]
         data = {"entity_id": entity_id}
         if value is not None:
@@ -1447,7 +1597,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._attempt(self._sources[key], "set_value", floor, now.timestamp(),
                                     cooldown=600, force=True)
         # Protected slots are restored before selecting or persisting any plan.
-        for slot in (3, 5):
+        protected = ([row["slot"] for row in self._tou_program(now).get("rows", [])
+                      if row["grid_charge_allowed"] is not True] if self._real_tariff() else (3, 5))
+        for slot in protected:
             await self._gc(slot, False)
             key = f"tou_soc_{slot}"
             value = self._measurement(key, now, unit="%", low=0, high=100)
@@ -1455,8 +1607,51 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._attempt(self._sources[key], "set_value", floor,
                                     now.timestamp(), cooldown=600)
 
-    @staticmethod
-    def _window(now):
+    def _real_tariff(self):
+        return self._options.get("tariff_profile", "legacy_g13") != "legacy_g13"
+
+    def _tariff_context(self, now):
+        key = (self._options.get("tariff_profile"), self._options.get("tariff_clock_basis"),
+               self._options.get("tariff_contract_confirmed"), self._tariff_clock_explicit, int(now.timestamp()) // 60)
+        if self._tariff_runtime_cache.get("key") != key:
+            self._tariff_runtime_cache = {"key": key, "context": tariff_context(now, self._calendar_options())}
+        return self._tariff_runtime_cache["context"]
+
+    def _calendar_options(self):
+        if self._real_tariff() and not self._tariff_clock_explicit:
+            return {k: v for k, v in self._options.items() if k != "tariff_clock_basis"}
+        return self._options
+
+    def _tou_program(self, now):
+        if self._real_tariff():
+            self._tariff_context(now)
+            if "program" not in self._tariff_runtime_cache:
+                self._tariff_runtime_cache["program"] = physical_tariff_tou(now, self._calendar_options())
+            return self._tariff_runtime_cache["program"]
+        winter = now.month in (10, 11, 12, 1, 2, 3)
+        clocks = ("00:00:00", "04:00:00", "07:00:00", "13:00:00",
+                  "16:00:00" if winter else "19:00:00", "21:00:00" if winter else "22:00:00")
+        return {"valid": True, "rows": [dict(slot=i, time=clock, grid_charge_allowed=i not in (3, 5))
+                                         for i, clock in enumerate(clocks, 1)]}
+
+    def _tariff_control_ok(self, now):
+        return not self._real_tariff() or (self._tariff_context(now).get("valid") is True
+                                           and self._tou_program(now).get("valid") is True)
+
+    def _slot_charge_eligible(self, now, slot):
+        return any(row["slot"] == slot and row["grid_charge_allowed"] is True
+                   for row in self._tou_program(now).get("rows", []))
+
+    def _window(self, now):
+        if self._real_tariff():
+            context, program = self._tariff_context(now), self._tou_program(now)
+            window = context.get("charge_window") or {}
+            cheap = context.get("valid") is True and program.get("valid") is True and bool(window)
+            items = tariff_target_items(now, self._calendar_options())
+            end = _stamp(window.get("end"))
+            deadline = (datetime.fromtimestamp(end, _TZ) if cheap and end is not None else
+                        items[0]["at"].astimezone(_TZ) if items else now + timedelta(hours=1))
+            return now.month in (10, 11, 12, 1, 2, 3), cheap, False, deadline, program.get("active_slot", 1)
         winter = now.month in (10, 11, 12, 1, 2, 3)
         peak, late = (16, 21) if winter else (19, 22)
         hour = now.hour + now.minute / 60 + now.second / 3600
@@ -1493,13 +1688,19 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     and gc_report is not None and gc_report <= now.timestamp() and inputs["telemetry_valid"])
         initial_started = self._initial_window_started(now)
         policy = {**self._memory["current_policy"], "initial_started": initial_started}
+        remaining = (deadline.timestamp() - now.timestamp()) / 3600
+        if self._real_tariff():
+            items = tariff_target_items(now, self._calendar_options())
+            if items:
+                remaining = min(24, remaining, (items[0]["at"].timestamp()-now.timestamp())/3600)
         return {"now_ts": now.timestamp(), "winter": winter, "cheap_window": night or afternoon,
+                "tariff_window_valid": self._tariff_control_ok(now) if self._real_tariff() else False,
                 "inverter_phases": self._options.get("inverter_phases", 3),
                 "connection_phases": self._options.get("connection_phases", 3),
                 "inverter_phase_index": {"L1": 0, "L2": 1, "L3": 2}.get(self._options.get("inverter_phase", "L1"), -1),
                 "policy_deadline": deadline.isoformat(),
                 "current_policy": policy, "initial_window_started": initial_started,
-                "hardware_ok": self._hardware_modes_ok(),
+                "hardware_ok": self._hardware_modes_ok() and self._tariff_control_ok(now),
                 "ordinary_history_known": history["known"],
                 "ordinary_last_possible_ts": history.get("possible_at"),
                 "ordinary_last_not_sent_ts": history.get("not_sent_at"),
@@ -1510,7 +1711,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     and gc_report <= now.timestamp() and inputs["telemetry_valid"] else None),
                 "emergency_allowed": emergency, "safety_only": safety_only,
                 "soc_valid": inputs["soc_valid"], "soc": inputs["soc"], "target_soc": target,
-                "remaining_h": (deadline.timestamp() - now.timestamp()) / 3600,
+                "remaining_h": remaining,
                 "minimum_soc_percent": self._effective_min_soc(),
                 "minimum_soc_lower_bound": self._soc_lower_bound(),
                 "capacity_kwh": self._options["capacity_kwh"],
@@ -1594,17 +1795,56 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     async def _run_driver(self, inputs, control, target, emergency, now):
         winter, night, afternoon, _, active_slot = self._window(now)
+        program = self._tou_program(now)
+        if program.get("valid") is not True:
+            await self._disable_gc()
+            await self._grid_attempt(0, now.timestamp(), force=True)
+            control["runtime_reason"] = program.get("issue") or "invalid_tariff_configuration"
+            return
+        if self._real_tariff() and not self._clocks_ok(now):
+            # Updating a sorted circular program is a transition, not six
+            # independent clock writes. Disable charging and confirm OFF first.
+            await self._disable_gc()
+            await self._grid_attempt(0, now.timestamp(), force=True)
+            if any((state := self._state(f"tou_gc_{i}")) is None or state.state != "off"
+                   or state.attributes.get("restored", False) for i in range(1, 7)):
+                control["runtime_reason"] = "waiting_tou_charge_off_readback"
+                return
+            old = []
+            for i in range(1, 7):
+                state = self._state(f"tou_time_{i}")
+                value = getattr(state, "state", "")
+                if (state is None or state.attributes.get("restored", False)
+                        or not isinstance(value, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d:00", value)):
+                    control["runtime_reason"] = "invalid_tou_clock_readback"
+                    return
+                old.append(int(value[:2])*60+int(value[3:5]))
+            if old != sorted(set(old)):
+                control["runtime_reason"] = "invalid_tou_clock_readback"
+                return
+            wanted = [row["minute"] for row in program["rows"]]
+            order = [i for i in range(6) if wanted[i] < old[i]] + [i for i in reversed(range(6)) if wanted[i] > old[i]]
+            for index in order:
+                entity = self._sources[f"tou_time_{index+1}"]
+                clock = program["rows"][index]["time"]
+                await self._attempt(entity, "set_value", clock, self._now().timestamp(), cooldown=600)
+                state = self._state(f"tou_time_{index+1}")
+                if state is None or state.state != clock or state.attributes.get("restored", False):
+                    control["runtime_reason"] = "waiting_tou_clock_readback"
+                    return
+            control["runtime_reason"] = "tariff_program_updated"
+            return  # Fresh control/SoC observations are required after conversion.
         floor = self._effective_min_soc()
         if control.get("write"):
             await self._grid_attempt(control["next_a"], now.timestamp(), force=control.get("safety", False))
-        times = ("00:00:00", "04:00:00", "07:00:00", "13:00:00",
-                 "16:00:00" if winter else "19:00:00", "21:00:00" if winter else "22:00:00")
+        times = [row["time"] for row in program["rows"]]
         for slot, clock in enumerate(times, 1):
             key = f"tou_time_{slot}"
             state = self._state(key)
             if state is not None and state.state not in _BAD and state.state != clock:
                 await self._attempt(self._sources[key], "set_value", clock, now.timestamp(), cooldown=600)
-            value = target if (night and slot in (1, 2, 6) or afternoon and slot == 4) else floor
+            value = ((target if (night or afternoon) and self._slot_charge_eligible(now, slot) else floor)
+                     if self._real_tariff() else (target if (night and slot in (1, 2, 6) or afternoon and slot == 4) else floor))
             old = self._measurement(f"tou_soc_{slot}", now, unit="%", low=0, high=100)
             if old is not None and abs(old - value) >= 2:
                 await self._attempt(self._sources[f"tou_soc_{slot}"], "set_value", value,
@@ -1619,7 +1859,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                  and clock_read is not None and clock_read.state == times[active_slot - 1]
                  and control.get("telemetry_ok", False) and self._hardware_modes_ok() and self._clocks_ok(self._now()))
         current_winter, current_night, current_afternoon, _, _ = self._window(self._now())
-        permitted = (current_night or current_afternoon) and (current_winter or emergency or
+        permitted = (current_night or current_afternoon) and self._tariff_control_ok(self._now()) and (current_winter or emergency or
                                               observed["soc"] is not None and observed["soc"] < floor)
         active_gc = self._state(f"tou_gc_{active_slot}")
         observed_grid = self._grid_input(observed, self._now(), target, emergency)
@@ -1653,7 +1893,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                       clock_read is not None and clock_read.state == times[active_slot - 1] and
                       self._hardware_modes_ok() and self._clocks_ok(self._now()))
         for slot in range(1, 7):
-            await self._gc(slot, bool((ready or continuing) and permitted and slot == active_slot and slot not in (3, 5)))
+            await self._gc(slot, bool((ready or continuing) and permitted and slot == active_slot and self._slot_charge_eligible(self._now(), slot)))
         control["setting_settled"] = bool(ready)
         control["reduction_pending"] = pending_reduction
         control["actual_battery_w"] = observed["battery_power"]
@@ -1678,7 +1918,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._memory["slot_measurements"] = update_slot_measurements(
             self._memory["slot_measurements"], {"at": now,
                 "battery_w": inputs["battery_power"], "grid_w": inputs["grid_power"],
-                "telemetry_valid": inputs["telemetry_valid"] and inputs["battery_power"] is not None and inputs["grid_power"] is not None})
+                "telemetry_valid": inputs["telemetry_valid"] and inputs["battery_power"] is not None and inputs["grid_power"] is not None},
+                self._calendar_options() if self._real_tariff() else None)
 
     async def _solcast_fetch_json(self, url, *, headers, params):
         """HA HTTP boundary: fixed official host, TLS, no redirects or key URL."""
@@ -1939,7 +2180,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         config = {key: self._options.get(key) for key in (
                     "capacity_kwh", "winter_weather_soc_percent",
                     "discharge_max_kw", "grid_max_soc_percent",
-                    "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode")}
+                    "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode",
+                    "tariff_profile", "tariff_clock_basis", "tariff_contract_confirmed")}
+        if self._real_tariff() and not self._tariff_clock_explicit:
+            config.pop("tariff_clock_basis", None)
         hardware_limits = self._effective_hardware_limits()
         rated = hardware_limits["inverter_max_power_kw"]
         if self._options["topology"] == "load_with_external_ct":
@@ -2003,6 +2247,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return plan
 
     def _deadlines(self, now):
+        if self._real_tariff():
+            return {item["key"]: item["at"].timestamp() for item in tariff_target_items(now, self._calendar_options())}
         peak = 16 if now.month in (10, 11, 12, 1, 2, 3) else 19
         return {key: (at if at > now else at + timedelta(days=1)).timestamp()
                 for key, hour in (("night", 7), ("peak", peak))
@@ -2022,13 +2268,16 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             value, deadline = _number(record.get("soc_percent")), _stamp(record.get("deadline"))
             if (key in deadlines and value is not None and self._effective_min_soc() <= value <= 95
                     and deadline == deadlines[key] and record.get("unreachable") is False
-                    and record.get("source") == "own_deterministic_planner" and self._pv_metadata_matches(record)):
+                    and record.get("source") == "own_deterministic_planner" and self._pv_metadata_matches(record)
+                    and (not self._real_tariff() or self._tariff_metadata_matches(record, now))):
                 self._memory["target_cache"][key] = {**record, "soc_percent": value,
                     "deadline": datetime.fromtimestamp(deadline, _TZ).isoformat(),
                     "accepted_at": generated, "season": plan.get("season"),
                     "source": "own_deterministic_planner", "generated_at": plan["generated_at"]}
 
     def _target(self, now):
+        if self._real_tariff():
+            return self._tariff_target(now)
         winter, night, _, _, _ = self._window(now)
         key = "night" if night else "peak"
         saved = self._memory["target_cache"].get(key, {})
@@ -2087,10 +2336,56 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return None
         value = _number(record.get("soc_percent"))
         if (value is None or not self._effective_min_soc() <= value <= 95 or
-                _stamp(record.get("deadline")) != self._deadlines(now)[key] or
+                key not in self._deadlines(now) or _stamp(record.get("deadline")) != self._deadlines(now)[key] or
                 record.get("source") != "own_deterministic_planner" or not self._pv_metadata_matches(record)):
             return None
+        if self._real_tariff() and not self._tariff_metadata_matches(record, now):
+            return None
         return record
+
+    def _tariff_metadata_matches(self, record, now):
+        identity = tariff_identity(self._options, self._tariff_context(now))
+        return all(record.get(key) == value for key, value in identity.items())
+
+    def _target_key(self, now):
+        if not self._real_tariff():
+            return "night" if self._window(now)[1] else "peak"
+        deadlines = self._deadlines(now)
+        return min(deadlines, key=deadlines.get) if deadlines else None
+
+    def _tariff_target(self, now):
+        floor = self._effective_min_soc()
+        if not self._tariff_control_ok(now):
+            return floor, False, "invalid_tariff_configuration"
+        key = self._target_key(now)
+        winter = self._window(now)[0]
+        cache = self._memory["target_cache"].get(key, {})
+        value, created, deadline = _number(cache.get("soc_percent")), _stamp(cache.get("generated_at")), _stamp(cache.get("deadline"))
+        minimum = min(self._options["grid_max_soc_percent"], floor + self._options["reserve_margin_soc_percent"])
+        valid = (key is not None and value is not None and floor <= value <= self._options["grid_max_soc_percent"]
+                 and (value >= minimum or not winter and value == floor and cache.get("emergency") is False)
+                 and created is not None and 0 <= now.timestamp()-created <= 86400
+                 and deadline == self._deadlines(now)[key] and created < deadline
+                 and cache.get("source") == "own_deterministic_planner" and cache.get("unreachable") is False
+                 and cache.get("season") == ("winter" if winter else "summer")
+                 and isinstance(cache.get("emergency"), bool) and isinstance(cache.get("grid_charge_allowed"), bool)
+                 and self._pv_metadata_matches(cache) and self._tariff_metadata_matches(cache, now))
+        live = self._live_record(self._memory.get("plan", {}), key, now) if key is not None else None
+        retained = [self._measurement(f"tou_soc_{row['slot']}", now, unit="%", low=floor, high=95)
+                    for row in self._tou_program(now).get("rows", []) if row["grid_charge_allowed"]]
+        fallback = (min(self._options["grid_max_soc_percent"], max(self._options["winter_weather_soc_percent"],
+                    minimum, *(v for v in retained if v is not None))) if winter else self._options["grid_max_soc_percent"])
+        selected, emergency, source = (value, cache["emergency"], "own_plan" if live else "dated_cache") if valid else (
+            fallback, not winter, "winter_fallback" if winter else "summer_emergency_fallback")
+        raised = self._memory["safety_raise"].get(key, {})
+        rv, generated = _number(raised.get("soc_percent")), _stamp(raised.get("generated_at"))
+        if (key is not None and rv is not None and selected < rv <= self._options["grid_max_soc_percent"]
+                and _stamp(raised.get("deadline")) == self._deadlines(now)[key]
+                and generated is not None and 0 <= now.timestamp()-generated <= 86400
+                and raised.get("source") == "own_deterministic_planner"
+                and self._pv_metadata_matches(raised) and self._tariff_metadata_matches(raised, now)):
+            return rv, not winter, "unreachable_plan_raise"
+        return selected, emergency, source
 
     def _pv_metadata_matches(self, record):
         mode = self._options.get("pv_forecast_mode", "whole_system")
@@ -2129,6 +2424,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 # A later explicit hardware choice invalidates old forecasts
                 # and targets, without resetting Solcast request accounting.
                 context["hardware"] = hardware_context
+            if self._real_tariff():
+                context["tariff"] = {key: self._options.get(key) for key in
+                    ("tariff_profile", "tariff_clock_basis", "tariff_contract_confirmed")}
             previous_context = self._memory["metering_context"]
             if context != previous_context:
                 if previous_context or self._options["topology"] == "load_with_external_ct":
@@ -2138,6 +2436,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     self._memory["safety_raise"] = {}
                     self._memory["load_profiles"] = {}
                     self._memory["current_policy"] = {}
+                    if context.get("tariff") != previous_context.get("tariff"):
+                        self._memory["initial_charge_window"] = {}
                     self._plan_due = 0
                 self._memory["metering_context"] = deepcopy(context)
             self._ensure_forecast_context()
@@ -2198,12 +2498,17 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     await self._save()
                 except Exception:
                     self._last_error = "periodic_store_failed"
-            target_key = "night" if self._window(now)[1] else "peak"
-            target_deadline = datetime.fromtimestamp(self._deadlines(now)[target_key], _TZ).isoformat()
+            target_key = self._target_key(now)
+            target_deadline = (datetime.fromtimestamp(self._deadlines(now)[target_key], _TZ).isoformat()
+                               if target_key is not None else None)
+            public_plan = deepcopy(plan)
+            public_plan["tariff_slot_targets"] = tariff_slot_targets(now, self._options, public_plan,
+                inputs["soc"] if inputs["soc_valid"] else None, floor)
             return {"mode": self.mode, "owner": {"active": active, "conflicts": self._owner_conflicts()},
                     "status": control.get("runtime_reason", "active" if active else "shadow"),
                     "error": self._last_error, "conflicts": conflicts,
-                    "inputs": inputs, "plan": plan, "control": {**control, "target_soc": target,
+                    "inputs": inputs, "plan": public_plan, "tariff_calendar": self.options["tariff_calendar"],
+                    "control": {**control, "target_soc": target,
                         "target_source": target_source, "deadline": target_deadline,
                         "target_deadline": target_deadline, "target_key": target_key,
                         "requested_a": control.get("next_a"), "read_setting_a": inputs["current_a"],
@@ -2212,6 +2517,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "profiles": deepcopy(self._memory["load_profiles"]),
                     "effective_loads": self.effective_loads, "loads_revision": self.loads_revision,
                     "planning": self._plan_task is not None and not self._plan_task.done(),
+                    "post_save_activation": self._post_save_status(),
                     "solcast": {**self._redact(self._solcast_status),
                         "api_configured": bool(self._options.get("solcast", {}).get("api_key")),
                         "api_enabled": self._solcast_configured()},

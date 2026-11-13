@@ -154,6 +154,7 @@ class EntityPrefix(unittest.IsolatedAsyncioTestCase):
         _, values = self.flow()
         flow = values["DeyeEMSConfigFlow"]()
         result = await flow.async_step_user({"entity_prefix": "second", "min_soc_percent": 40})
+        result = await boundary.complete_initial_tariff(flow, result)
         self.assertEqual(result["type"], "create_entry")
         self.assertEqual(result["data"]["sources"]["work_mode"], "select.second_system_work_mode")
         self.assertEqual(result["data"]["entity_prefix"], "second_")

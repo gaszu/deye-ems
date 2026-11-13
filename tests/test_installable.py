@@ -1,6 +1,7 @@
 """Install/configuration boundary checks with HA interfaces stubbed."""
 import ast
 from copy import deepcopy
+from datetime import datetime, timezone
 import json
 import importlib.util
 from pathlib import Path
@@ -30,6 +31,28 @@ spec.loader.exec_module(IMPORTER)
 spec = importlib.util.spec_from_file_location("offline_inverter_models", ROOT/"inverter_models.py")
 MODELS = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(MODELS)
+spec = importlib.util.spec_from_file_location("offline_install_tariff_calendar", ROOT/"tariff_calendar.py")
+CALENDAR = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(CALENDAR)
+spec = importlib.util.spec_from_file_location("offline_install_tariff_settings", ROOT/"tariff_settings.py")
+TARIFF_SETTINGS = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(TARIFF_SETTINGS)
+
+
+async def complete_initial_tariff(flow, result):
+    """Complete the real mandatory tariff wizard, preserving prior assertions."""
+    flow._tariff_time = lambda: datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
+    if result.get("type") != "form" or result.get("step_id") != "tariff_operator":
+        return result
+    result = await flow.async_step_tariff_operator({"operator_id": "tauron_dystrybucja"})
+    assert result.get("step_id") == "tariff_plan", result
+    result = await flow.async_step_tariff_plan({"profile_id": "tauron_g13_2026", "clock_basis": "local"})
+    assert result.get("step_id") == "tariff_confirm", result
+    result = await flow.async_step_tariff_confirm({"confirm_tariff": True})
+    assert result.get("type") == "create_entry", result
+    assert result["data"]["tariff_contract_confirmed"] is True
+    assert result["data"]["activate_after_install"] is True
+    return result
 
 def load(filename, values):
     tree = ast.parse((ROOT/filename).read_text(encoding="utf-8"))
@@ -65,7 +88,11 @@ class Coordinator:
 
 class Installation(unittest.IsolatedAsyncioTestCase):
     def flow(self):
-        return load("config_flow.py", {**C, "__name__":"offline_flow",
+        module = load("config_flow.py", {**C, "__name__":"offline_flow",
+            "datetime": datetime, "timezone": timezone,
+            **{name:getattr(CALENDAR, name) for name in ("calendar_operators", "calendar_profiles", "describe_calendar")},
+            **{name:getattr(TARIFF_SETTINGS, name) for name in
+                ("selected_tariff", "tariff_revision", "validate_tariff_draft", "tariff_preview")},
             **{name: getattr(MODELS, name) for name in
                 ("HARDWARE_KEYS", "applied_limits", "hardware_profile", "model_choices", "model_selection")},
             "reserve_bound_from_state": SOC_POLICY.reserve_bound_from_state,
@@ -76,10 +103,14 @@ class Installation(unittest.IsolatedAsyncioTestCase):
             "vol": SimpleNamespace(Required=Marker,Optional=Marker,Secret=lambda k:k,Schema=Schema),
             "selector": Selectors(),
             "callback": lambda f:f, "config_entries": SimpleNamespace(ConfigFlow=Flow,OptionsFlow=Flow)})
+        module["TariffFlowMixin"]._tariff_time = lambda _: datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
+        return module
 
     async def test_setup_keeps_entered_minimum_without_helper_or_active_mode(self):
-        result = await self.flow()["DeyeEMSConfigFlow"]().async_step_user(
+        flow = self.flow()["DeyeEMSConfigFlow"]()
+        result = await flow.async_step_user(
             dict(min_soc_percent=60,capacity_kwh=99,grid_import_limit_kw=12,grid_phase_limit_kw=5))
+        result = await complete_initial_tariff(flow, result)
         self.assertEqual(result["data"]["min_soc_percent"],60)
         self.assertEqual(result["data"]["capacity_kwh"],99)
         self.assertNotIn("active",result["data"])

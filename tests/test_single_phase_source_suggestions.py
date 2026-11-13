@@ -130,6 +130,7 @@ class SinglePhaseSuggestions(unittest.IsolatedAsyncioTestCase):
             "entity_prefix": self.prefix, "battery_source_profile": "deye", "min_soc_percent": 40})
         self.assertEqual(form["step_id"], "user_inverter_confirm")
         result = await flow.async_step_user_inverter_confirm({"confirm_model": True})
+        result = await boundary.complete_initial_tariff(flow, result)
         self.assertEqual(result["data"]["inverter_phases"], 1)
         self.assertEqual(result["data"]["sources"]["soc"], "sensor.sample_battery")
         self.assertEqual(result["data"]["sources"]["tou_gc_1"], "switch.sample_time_of_use_1_charge_enable")

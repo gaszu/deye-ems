@@ -230,7 +230,8 @@ def describe_current_wait(g):
     eligible = max(eligible, retry)
     try:
         deadline = datetime.fromisoformat(g["policy_deadline"])
-        if deadline.tzinfo is None or not now < deadline.timestamp() <= now+86400:
+        max_window = 15*86400 if g.get("tariff_window_valid") is True else 86400
+        if deadline.tzinfo is None or not now < deadline.timestamp() <= now+max_window:
             return status
     except (KeyError, TypeError, ValueError, OverflowError):
         return status

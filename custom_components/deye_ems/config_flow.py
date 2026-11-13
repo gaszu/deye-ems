@@ -1,6 +1,7 @@
 """Configure a local EMS; setup never takes ownership of the inverter."""
 from __future__ import annotations
 from uuid import uuid4
+from datetime import datetime, timezone
 
 import probatio as vol
 from homeassistant import config_entries
@@ -19,6 +20,9 @@ from . import async_update_panel
 from .soc_policy import reserve_bound_from_state
 from .inverter_models import (HARDWARE_KEYS, applied_limits, hardware_profile,
                               model_choices, model_selection)
+from .tariff_calendar import calendar_operators, calendar_profiles, describe_calendar
+from .tariff_settings import (selected_tariff, tariff_revision, validate_tariff_draft,
+                              tariff_preview)
 
 
 def _hardware_fields(values):
@@ -172,7 +176,130 @@ def _solcast_input(user_input, previous):
     return result
 
 
-class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class TariffFlowMixin:
+    """Explicit, revision-checked tariff selection for install and options flows."""
+
+    _tariff_is_options = False
+
+    def _tariff_values(self):
+        if self._tariff_is_options:
+            return {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
+        return {**DEFAULT_OPTIONS, **getattr(self, "_initial_draft", {})}
+
+    def _tariff_locked(self):
+        return self._tariff_is_options and self._mapping_locked()
+
+    def _tariff_time(self):
+        return datetime.now(timezone.utc)
+
+    async def async_step_tariff(self, user_input=None):
+        if self._tariff_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        self._tariff_entry_revision = tariff_revision(self._tariff_values())
+        self._tariff_selection_draft = None
+        return await self.async_step_tariff_operator(user_input)
+
+    async def async_step_tariff_operator(self, user_input=None):
+        if self._tariff_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        if not hasattr(self, "_tariff_entry_revision"):
+            self._tariff_entry_revision = tariff_revision(self._tariff_values())
+        operators = [row for row in calendar_operators()
+                     if self._tariff_is_options or row["operator_id"] != "custom"]
+        errors = {}
+        if user_input is not None:
+            operator_id = user_input.get("operator_id")
+            if operator_id not in {row["operator_id"] for row in operators}:
+                errors["operator_id"] = "invalid_tariff_operator"
+            else:
+                self._tariff_operator_draft = operator_id
+                self._tariff_selection_draft = None
+                return await self.async_step_tariff_plan()
+        marker = vol.Required("operator_id")
+        if self._tariff_is_options:
+            try:
+                current = selected_tariff(calendar_profiles(), self._tariff_values()["tariff_profile"])
+                marker = vol.Required("operator_id", default=current["operator_id"])
+            except ValueError:
+                pass  # A damaged/removed profile must still be repairable.
+        return self.async_show_form(step_id="tariff_operator", errors=errors,
+            data_schema=vol.Schema({marker: selector.SelectSelector(selector.SelectSelectorConfig(
+                options=[{"value": row["operator_id"], "label": row["label"]} for row in operators]))}))
+
+    async def async_step_tariff_plan(self, user_input=None):
+        if self._tariff_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        operator = getattr(self, "_tariff_operator_draft", None)
+        if operator is None:
+            return await self.async_step_tariff_operator()
+        profiles = calendar_profiles(operator)
+        offered = [row for row in profiles if row["runtime_allowed"] is True and row["supported"] is True]
+        errors = {}
+        if user_input is not None:
+            try:
+                draft, preview = validate_tariff_draft(calendar_profiles(), operator,
+                    user_input.get("profile_id"), user_input.get("clock_basis"),
+                    now=self._tariff_time(), describe=describe_calendar)
+                self._tariff_selection_draft, self._tariff_calendar_preview = draft, preview
+                return await self.async_step_tariff_confirm()
+            except ValueError as error:
+                errors["base"] = str(error)
+        current = self._tariff_values()
+        try:
+            same_operator = selected_tariff(calendar_profiles(), current["tariff_profile"])["operator_id"] == operator
+        except ValueError:
+            same_operator = False
+        profile_marker, clock_marker = vol.Required("profile_id"), vol.Required("clock_basis")
+        if self._tariff_is_options and same_operator:
+            profile_marker = vol.Required("profile_id", default=current["tariff_profile"])
+            clock_marker = vol.Required("clock_basis", default=current["tariff_clock_basis"])
+        if user_input is not None:
+            if user_input.get("profile_id") in {row["profile_id"] for row in offered}:
+                profile_marker = vol.Required("profile_id", default=user_input["profile_id"])
+            if user_input.get("clock_basis") in ("local", "fixed_cet"):
+                clock_marker = vol.Required("clock_basis", default=user_input["clock_basis"])
+        clocks = [{"value": "local", "label": "Czas lokalny Polski — automatyczna zmiana lato/zima"}]
+        if operator != "custom":
+            clocks.append({"value": "fixed_cet", "label": "Stały czas zimowy CET — bez zmiany zegara licznika"})
+        blocked = [row["tariff"] + ": " + str(row.get("blocked_reason") or "brak zweryfikowanego harmonogramu")
+                   for row in profiles if row not in offered]
+        return self.async_show_form(step_id="tariff_plan", errors=errors, data_schema=vol.Schema({
+            profile_marker: selector.SelectSelector(selector.SelectSelectorConfig(options=[
+                {"value": row["profile_id"], "label": row["label"]} for row in offered])),
+            clock_marker: selector.SelectSelector(selector.SelectSelectorConfig(options=clocks))}),
+            description_placeholders={"tariff_notices": "\n".join(blocked) if blocked else ""})
+
+    async def async_step_tariff_confirm(self, user_input=None):
+        if self._tariff_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        draft = getattr(self, "_tariff_selection_draft", None)
+        if draft is None:
+            return await self.async_step_tariff_plan()
+        errors = {}
+        if user_input is not None:
+            if user_input.get("confirm_tariff") is not True:
+                errors["base"] = "confirm_tariff"
+            elif tariff_revision(self._tariff_values()) != self._tariff_entry_revision:
+                return self.async_abort(reason="tariff_configuration_changed")
+            else:
+                try:
+                    draft, preview = validate_tariff_draft(calendar_profiles(), self._tariff_operator_draft,
+                        draft["tariff_profile"], draft["tariff_clock_basis"],
+                        now=self._tariff_time(), describe=describe_calendar)
+                except ValueError as error:
+                    return self.async_abort(reason=str(error))
+                if self._tariff_is_options:
+                    return self.async_create_entry(title="", data={**dict(self.config_entry.options), **draft})
+                await self.async_set_unique_id("deye_ems_local")
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(title="Deye EMS", data={
+                    **dict(self._initial_draft), **draft, "activate_after_install": True})
+        return self.async_show_form(step_id="tariff_confirm", errors=errors,
+            data_schema=vol.Schema({vol.Required("confirm_tariff", default=False): selector.BooleanSelector()}),
+            description_placeholders={"tariff_preview": tariff_preview(self._tariff_calendar_preview)})
+
+
+class DeyeEMSConfigFlow(TariffFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
@@ -206,10 +333,7 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "battery_source_profile": profile, "sources": {**DEFAULT_SOURCES, **mapping}}
                 if draft["inverter_model"] != "custom" or draft["inverter_phases"] == 1:
                     return await self.async_step_user_inverter_confirm()
-                await self.async_set_unique_id("deye_ems_local")
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(title="Deye EMS", data={
-                    **self._initial_draft})
+                return await self.async_step_tariff()
         return self.async_show_form(step_id="user", errors=errors, data_schema=_schema(
             {**(user_input or DEFAULT_OPTIONS), "min_soc_lower_bound": bound}, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
                 "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]).extend({
@@ -225,9 +349,7 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if draft is None:
             return await self.async_step_user()
         if user_input is not None and user_input.get("confirm_model") is True:
-            await self.async_set_unique_id("deye_ems_local")
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="Deye EMS", data=dict(draft))
+            return await self.async_step_tariff()
         return self.async_show_form(step_id="user_inverter_confirm", data_schema=vol.Schema({
             vol.Required("confirm_model", default=False): selector.BooleanSelector()}),
             errors={"base": "confirm_inverter_model"} if user_input is not None else {},
@@ -239,7 +361,15 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return DeyeEMSOptionsFlow()
 
 
-class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
+class DeyeEMSOptionsFlow(TariffFlowMixin, config_entries.OptionsFlow):
+    _tariff_is_options = True
+
+    def async_create_entry(self, *, data, **kwargs):
+        # HA does not notify options listeners for an identical dictionary.
+        # A confirmed Save is still a new, explicitly authorized activation
+        # intent; draft edits and cancellation never reach this boundary.
+        return super().async_create_entry(data={**dict(data),
+            "_configuration_save_id": uuid4().hex}, **kwargs)
     def _mapping_locked(self):
         runtime = getattr(self.config_entry, "runtime_data", None)
         return runtime is not None and runtime.mode == "active"
@@ -252,7 +382,7 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return battery_source_profile(self.config_entry.data, self.config_entry.options)
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["sidebar", "inverter", "topology", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
+        return self.async_show_menu(step_id="init", menu_options=["sidebar", "tariff", "inverter", "topology", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
 
     async def async_step_inverter(self, user_input=None):
         if self._mapping_locked():

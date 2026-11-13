@@ -24,6 +24,9 @@ from datetime import datetime, timedelta
 import math
 from zoneinfo import ZoneInfo
 
+if __package__:
+    from .tariff_calendar import calendar_context, describe_calendar
+
 
 TZ = ZoneInfo("Europe/Warsaw")
 MAX_INTERVAL_SECONDS = 30.0
@@ -51,7 +54,17 @@ def _stamp(value):
     return dt.timestamp()
 
 
-def _slot(at):
+def _slot(at, options=None):
+    if options is not None and options.get("tariff_profile", "legacy_g13") != "legacy_g13":
+        local = datetime.fromtimestamp(at, TZ)
+        calendar = describe_calendar(local, options["tariff_profile"], options.get("tariff_clock_basis", "local"))
+        if calendar.get("within_validity") is not True:
+            raise ValueError("tariff_outside_validity")
+        for index, row in enumerate(calendar["today"], 1):
+            start, end = _stamp(row["start"]), _stamp(row["end"])
+            if start <= at < end:
+                return index, datetime.fromtimestamp(start, TZ), datetime.fromtimestamp(end, TZ)
+        raise ValueError("timestamp_outside_slot")
     local = datetime.fromtimestamp(at, TZ)
     midnight = datetime.combine(local.date(), datetime.min.time(), tzinfo=TZ)
     winter = local.month in (10, 11, 12, 1, 2, 3)
@@ -75,17 +88,29 @@ def _positive_integral(a, b, seconds):
     return b * .5 * seconds * b / (b - a)
 
 
-def _record(slots, at):
-    slot, start, end = _slot(at)
-    key = start.isoformat()
+def _record_key(start, options=None):
+    return (f"{options['tariff_profile']}|{options.get('tariff_clock_basis', 'local')}|{start.isoformat()}"
+            if options is not None and options.get("tariff_profile", "legacy_g13") != "legacy_g13" else start.isoformat())
+
+
+def _record(slots, at, options=None):
+    slot, start, end = _slot(at, options)
+    key = _record_key(start, options)
     if key not in slots:
         # No record means no observed history before this instant in this slot.
-        slots[key] = dict(slot=slot, start=key, end=end.isoformat(),
+        slots[key] = dict(slot=slot, start=start.isoformat(), end=end.isoformat(),
                           duration_seconds=end.timestamp() - start.timestamp(),
                           seconds_valid=0., seconds_missing=max(at - start.timestamp(), 0.),
                           grid_import_kwh=0., battery_discharge_kwh=0.,
                           battery_charge_kwh=0., complete=False, closed=False,
                           coverage=0., reason="partial_unobserved_start")
+        if options is not None and options.get("tariff_profile", "legacy_g13") != "legacy_g13":
+            calendar = describe_calendar(start, options["tariff_profile"], options.get("tariff_clock_basis", "local"))
+            logical = calendar["today"][slot-1]
+            slots[key].update(profile_id=options["tariff_profile"], tariff_version=calendar.get("version"),
+                clock_basis=options.get("tariff_clock_basis", "local"), calendar_date=start.date().isoformat(),
+                tariff_date=logical.get("clock_date", start.date().isoformat()), zone=logical["zone"],
+                tier=logical.get("tier"), grid_charge_allowed=logical["grid_charge_allowed"])
     return slots[key], end.timestamp()
 
 
@@ -96,7 +121,9 @@ def _clean_slots(memory):
             continue
         try:
             start, end = _stamp(record.get("start")), _stamp(record.get("end"))
-            expected_slot, expected_start, expected_end = _slot(start)
+            options = ({"tariff_profile": record["profile_id"], "tariff_clock_basis": record.get("clock_basis", "local")}
+                       if record.get("profile_id") else None)
+            expected_slot, expected_start, expected_end = _slot(start, options)
         except (ValueError, TypeError, OverflowError, OSError):
             continue
         if (end <= start or not all(_number(record.get(k)) and record[k] >= 0 for k in _COUNTERS)
@@ -106,17 +133,17 @@ def _clean_slots(memory):
                 or expected_start.timestamp() != start or expected_end.timestamp() != end
                 or record["seconds_valid"] + record["seconds_missing"] > end - start + .001):
             continue
-        result[expected_start.isoformat()] = deepcopy(record)
+        result[_record_key(expected_start, options)] = deepcopy(record)
     return result
 
 
-def _finish(result, now):
+def _finish(result, now, options=None):
     slots = result["slots"]
     retained = [(key, record) for key, record in slots.items()
                 if _stamp(record["end"]) > now - RETENTION_SECONDS
                 and _stamp(record["start"]) <= now]
     retained.sort(key=lambda pair: _stamp(pair[1]["start"]))
-    result["slots"] = dict(retained[-MAX_SLOTS:])
+    result["slots"] = dict(retained[-(168 if options is not None else MAX_SLOTS):])
     for record in result["slots"].values():
         duration = record["duration_seconds"]
         record["closed"] = now >= _stamp(record["end"])
@@ -129,13 +156,13 @@ def _finish(result, now):
             record["reason"] = "incomplete_coverage"
         else:
             record["reason"] = "measuring"
-    key = _slot(now)[1].isoformat()
+    key = _record_key(_slot(now, options)[1], options)
     result["current_slot"] = key if key in result["slots"] else None
     result["completed_slots"] = [key for key, row in result["slots"].items() if row["closed"]]
     return result
 
 
-def update_slot_measurements(memory: dict, sample: dict) -> dict:
+def update_slot_measurements(memory: dict, sample: dict, options=None) -> dict:
     """Integrate one actual interval, or attribute it to missing coverage."""
     memory = memory if isinstance(memory, dict) else {}
     sample = sample if isinstance(sample, dict) else {}
@@ -149,6 +176,15 @@ def update_slot_measurements(memory: dict, sample: dict) -> dict:
         result.update(reason="invalid_timestamp", current_slot=memory.get("current_slot"),
                       completed_slots=deepcopy(memory.get("completed_slots", [])))
         return result
+    if options is not None and options.get("tariff_profile", "legacy_g13") != "legacy_g13":
+        try:
+            context = calendar_context(datetime.fromtimestamp(now, TZ), options)
+            if context.get("valid") is not True:
+                raise ValueError("invalid_tariff_configuration")
+        except (ValueError, TypeError, KeyError):
+            result.update(previous=None, reason="invalid_tariff_configuration", current_slot=None,
+                          completed_slots=deepcopy(memory.get("completed_slots", [])))
+            return result
     previous = result["previous"]
     before = None
     if isinstance(previous, dict):
@@ -160,17 +196,20 @@ def update_slot_measurements(memory: dict, sample: dict) -> dict:
              and _number(sample.get("grid_w")))
     if before is not None and now <= before:
         result["reason"] = "non_monotonic_timestamp"
-        return _finish(result, before)
+        return _finish(result, before, options)
     if before is not None:
         dt = now - before
         was_valid = (previous.get("telemetry_valid") is True
                      and _number(previous.get("battery_w")) and _number(previous.get("grid_w")))
         integrate = 0 < dt <= MAX_INTERVAL_SECONDS and valid and was_valid
+        signature = ([options.get("tariff_profile"), options.get("tariff_clock_basis", "local")] if options is not None else None)
+        if previous.get("calendar_signature") != signature:
+            integrate = False
         result["reason"] = ("integrated" if integrate else "gap_above_30s" if dt > 30
                             else "invalid_telemetry")
         cursor = max(before, now - RETENTION_SECONDS)
         while cursor < now:
-            record, end = _record(result["slots"], cursor)
+            record, end = _record(result["slots"], cursor, options)
             finish = min(now, end)
             seconds = finish - cursor
             if integrate:
@@ -187,10 +226,12 @@ def update_slot_measurements(memory: dict, sample: dict) -> dict:
             else:
                 record["seconds_missing"] += seconds
             cursor = finish
-    _record(result["slots"], now)
+    _record(result["slots"], now, options)
     result["previous"] = dict(at=now, battery_w=sample.get("battery_w") if valid else None,
                               grid_w=sample.get("grid_w") if valid else None,
                               telemetry_valid=valid)
+    if options is not None:
+        result["previous"]["calendar_signature"] = [options.get("tariff_profile"), options.get("tariff_clock_basis", "local")]
     if before is None and not valid:
         result["reason"] = "invalid_telemetry"
-    return _finish(result, now)
+    return _finish(result, now, options)

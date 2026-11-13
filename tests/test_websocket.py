@@ -9,6 +9,7 @@ import asyncio
 from copy import deepcopy
 from functools import wraps
 import json
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -18,6 +19,10 @@ from unittest.mock import AsyncMock, Mock
 ROOT = Path(__file__).resolve().parents[1] / "custom_components/deye_ems"
 CONSTANTS = {}
 exec((ROOT / "const.py").read_text(encoding="utf-8"), CONSTANTS)
+from test_installable import CALENDAR
+_post_spec = importlib.util.spec_from_file_location("offline_ws_post_save", ROOT / "post_save.py")
+POST_SAVE = importlib.util.module_from_spec(_post_spec)
+_post_spec.loader.exec_module(POST_SAVE)
 
 
 class Unauthorized(Exception):
@@ -109,6 +114,10 @@ def load_module():
         "HomeAssistantError": HomeAssistantError,
         "DATA_APPEARANCE": "deye_ems_appearance",
         "DATA_UPDATES": "deye_ems_updates",
+        "calendar_operators": CALENDAR.calendar_operators,
+        "calendar_profiles": CALENDAR.calendar_profiles,
+        "post_save_status": POST_SAVE.post_save_status,
+        "cancel_all_post_save": POST_SAVE.cancel_all_post_save,
         "vol": SimpleNamespace(
             Required=lambda key: key, Optional=lambda key: key,
             In=lambda values: values, Any=lambda *values: values),
@@ -370,11 +379,11 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, _ = load_module()
         co = coordinator()
         payload = module["_payload"](co)
-        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance", "backend_version", "updates"})
+        self.assertEqual(set(payload), {"entry_id", "mode", "data", "options", "sources", "effective_loads", "loads_revision", "appearance", "backend_version", "updates", "post_save_activation"})
         self.assertEqual(payload["appearance"], {"theme": ""})
         self.assertEqual(set(payload["options"]), set(CONSTANTS["DEFAULT_OPTIONS"]) | {
             "effective_min_soc_percent", "min_soc_bound_valid", "min_soc_lower_bound",
-            "hardware_profile", "effective_hardware_limits", "tariff_calendar"})
+            "hardware_profile", "effective_hardware_limits", "tariff_calendar", "physical_tou"})
         self.assertEqual(payload["options"]["min_soc_percent"], 50)
         self.assertEqual(payload["sources"]["soc"], "sensor.test_soc")
         serialized = json.dumps(payload)
@@ -412,10 +421,42 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(connection.results[0][1]["effective_loads"], co.effective_loads)
                 self.assertEqual(connection.results[0][1]["loads_revision"], "new-revision")
 
-    def test_registers_both_guarded_handlers(self):
+    def test_registers_all_guarded_handlers(self):
         module, api = load_module()
         module["async_register"](Hass())
-        self.assertEqual(api.registered, [module["status"], module["command"]])
+        self.assertEqual(api.registered, [module["status"], module["command"], module["tariff_catalog"]])
+
+    async def test_tariff_catalog_admin_reads_only_embedded_five_operator_rules(self):
+        module, _ = load_module()
+        hass, connection = Hass(), Connection(SimpleNamespace(is_admin=True))
+        module["tariff_catalog"](hass, connection, {"id": 15, "type": "deye_ems/tariff_catalog"})
+        await hass.drain()
+        result = connection.results[0][1]
+        self.assertEqual(result["backend_version"], CONSTANTS["VERSION"])
+        self.assertEqual({row["operator_id"] for row in result["operators"]},
+            {"custom", "pge_dystrybucja", "tauron_dystrybucja", "enea_operator",
+             "energa_operator", "pge_energetyka_kolejowa"})
+        self.assertTrue(any(row["profile_id"] == "tauron_g13_2026" for row in result["profiles"]))
+        self.assertNotIn("stoen", json.dumps(result).lower())
+        self.assertEqual(hass.data, {})
+
+    async def test_tariff_catalog_nonadmin_cannot_schedule_work(self):
+        module, _ = load_module()
+        hass = Hass()
+        for user in (None, SimpleNamespace(is_admin=False)):
+            with self.assertRaises(Unauthorized):
+                module["tariff_catalog"](hass, Connection(user), {"id": 2, "type": "deye_ems/tariff_catalog"})
+        self.assertEqual(hass.scheduled, 0)
+
+    async def test_manual_stop_cancels_intent_even_during_empty_coordinator_reload(self):
+        module, _ = load_module()
+        hass, connection = Hass(), Connection(SimpleNamespace(is_admin=True))
+        manager = SimpleNamespace(cancel_all=Mock())
+        hass.data[POST_SAVE.DATA_POST_SAVE] = manager
+        module["command"](hass, connection, {"id": 3, "type": "deye_ems/command", "command": "mode", "mode": "shadow"})
+        await hass.drain()
+        manager.cancel_all.assert_called_once()
+        self.assertEqual(connection.errors[0][1], "not_loaded")
 
     async def test_appearance_changes_in_active_mode_without_energy_engine_calls(self):
         module, _ = load_module()
