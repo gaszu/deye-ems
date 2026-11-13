@@ -1,4 +1,17 @@
-# Wersja 1.0.21 — adres repozytorium
+# Wersja 2.0.0 — modele i praca jednofazowa
+
+588 testów Python i 139 testów panelu przeszło lokalnie. Scenariusze są syntetyczne; nie oznaczają fizycznej walidacji wszystkich modeli i firmware.
+
+- 16 modeli LV i ich oficjalne granice; konfiguracja własna pozostaje zgodna z 1.x. Przypadki nieznanego modelu, niewłaściwej liczby faz, niezgodnego napięcia i niższych limitów użytkownika.
+- Jednofazowy GRID/LOAD bez native L2/L3 i bez przełącznika bilansowania; falownik na L2 z pełnym pomiarem trójfazowego CT; jednofazowe CT, aliasy, braki i nieaktualne odczyty.
+- Ograniczenia prądu i mocy w regulatorze oraz planerze, PV/BMS/Deye, przeciążenia własnej i obcej fazy, zachowanie dotychczasowego toru trójfazowego.
+- Kreator modelu: podgląd, osobne potwierdzenie, obserwacja, anulowanie, nieaktualna odpowiedź i zmieniona konfiguracja; zachowanie szkicu przy odświeżaniu.
+- Migracja 1.x zachowuje zapisane dane, źródła, wyłączone odbiorniki, prywatny Solcast, rezerwę, topologię i tryb; ładowanie starej konfiguracji nie zapisuje nowych pól za użytkownika.
+- Kalendarz: sezon, weekendy/święta, czas lokalny i stały CET, przedziały przez północ i doby 23/25 h. Oficjalny profil operatora nie steruje sprzętem. Aktualizacja nie zastępuje starego harmonogramu nowym.
+
+Archiwum jest budowane przez build_release.py i porównywane z przetestowanymi źródłami. Sprawdzanie HACS i hassfest odbywa się w CI. Stan publikacji, wersja plików, załadowana wersja HA, przyjęcie polecenia, odczyt rejestru i fizyczna reakcja to osobne etapy.
+
+## Poprzednia walidacja 1.0.21 — adres repozytorium
 
 - **528 testów Python i 121 testów panelu PASS.**
 - Odnośniki instalacji, manifest, klient wydań i warunek publikacji wskazują `gaszu/deye-ems`. Testy klienta sprawdzają nowy kanoniczny URL bez przekierowania, a panel generuje odnośniki do wydań nowego repozytorium.

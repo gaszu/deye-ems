@@ -27,6 +27,9 @@ spec.loader.exec_module(SOC_POLICY)
 spec = importlib.util.spec_from_file_location("offline_solcast_import", ROOT/"solcast_import.py")
 IMPORTER = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(IMPORTER)
+spec = importlib.util.spec_from_file_location("offline_inverter_models", ROOT/"inverter_models.py")
+MODELS = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(MODELS)
 
 def load(filename, values):
     tree = ast.parse((ROOT/filename).read_text(encoding="utf-8"))
@@ -63,6 +66,8 @@ class Coordinator:
 class Installation(unittest.IsolatedAsyncioTestCase):
     def flow(self):
         return load("config_flow.py", {**C, "__name__":"offline_flow",
+            **{name: getattr(MODELS, name) for name in
+                ("HARDWARE_KEYS", "applied_limits", "hardware_profile", "model_choices", "model_selection")},
             "reserve_bound_from_state": SOC_POLICY.reserve_bound_from_state,
             "uuid4": uuid4, "validate_config": SOLCAST.validate_config,
             "import_existing_options": IMPORTER.import_existing_options,

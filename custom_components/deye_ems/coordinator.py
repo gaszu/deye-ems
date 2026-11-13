@@ -31,6 +31,8 @@ from .planner import plan_energy
 from .slot_meter import update_slot_measurements
 from .topology import ct_load_balance
 from .soc_policy import reserve_lower_bound
+from .inverter_models import hardware_profile, applied_limits
+from .tariff_calendar import describe_calendar
 
 _LOGGER = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -118,6 +120,34 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     def _update_seconds(self):
         return max(5, min(300, int(self._options.get("update_seconds", 10))))
 
+    def _hardware(self):
+        return hardware_profile(self._options)
+
+    def _catalog_battery_cap(self):
+        try:
+            value = self._hardware().get("max_charge_current_a")
+            return 1000 if value is None else value
+        except (ValueError, TypeError):
+            return 0
+
+    def _effective_hardware_limits(self):
+        try:
+            return {**self._options, **applied_limits(self._options)}
+        except (ValueError, TypeError):
+            # A corrupt or unsupported profile grants no charging headroom.
+            return {**self._options, "inverter_max_power_kw": 0,
+                    "inverter_phase_max_power_kw": 0, "discharge_max_kw": 0,
+                    "combined_output_limit_kw": 0}
+
+    def _native_power_keys(self):
+        if self._options.get("inverter_phases", 3) == 1:
+            return ("grid_power", "load_power")
+        return ("grid_power", "load_power", "grid_l1_power", "grid_l2_power",
+                "grid_l3_power", "load_l1_power", "load_l2_power", "load_l3_power")
+
+    def _native_grid_keys(self):
+        return tuple(key for key in self._native_power_keys() if key.startswith("grid"))
+
     @property
     def options(self):
         public = {key: self._options[key] for key in {*DEFAULT_OPTIONS, "sources", "extra_loads"}
@@ -128,6 +158,13 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         bound = self._soc_lower_bound()
         public.update(min_soc_lower_bound=bound, min_soc_bound_valid=bound is not None,
                       effective_min_soc_percent=self._effective_min_soc())
+        try:
+            public["hardware_profile"] = self._hardware()
+            public["effective_hardware_limits"] = applied_limits(self._options)
+        except (ValueError, TypeError):
+            public["hardware_profile"] = {"control_supported": False, "error": "invalid_inverter_profile"}
+            public["effective_hardware_limits"] = {}
+        public["tariff_calendar"] = describe_calendar(self._now())
         return self._redact(public)
 
     def _soc_lower_bound(self):
@@ -225,6 +262,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     async def async_set_option(self, key, value):
         if key not in DEFAULT_OPTIONS and key not in ("sources", "extra_loads"):
             raise ValueError("Unknown EMS setting")
+        if key in ("inverter_model", "inverter_phases", "connection_phases", "inverter_phase"):
+            raise ValueError("Model i fazy zmień przez kreator falownika w trybie obserwacji.")
         if key == "extra_loads":
             async with self._lock:
                 await self._commit_loads_locked(value)
@@ -581,7 +620,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return state.state == "on", None
 
     def _read_inputs(self, now):
-        voltage = self._measurement("voltage", now, unit="V", age=120, low=40, high=65)
+        try:
+            hardware = self._hardware()
+            hardware_valid = hardware.get("control_supported") is True
+        except (ValueError, TypeError):
+            hardware, hardware_valid = {}, False
+        voltage_low = hardware.get("battery_min_v", 40)
+        voltage_high = hardware.get("battery_max_v", 65)
+        voltage = self._measurement("voltage", now, unit="V", age=120, low=voltage_low, high=voltage_high)
         soc = self._measurement("soc", now, unit="%", low=0, high=100)
         soc_state = self._state("soc")
         soc_at = _stamp(getattr(soc_state, "last_reported", None) or
@@ -591,8 +637,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         powers = {key: self._measurement(key, now, unit="W", age=30,
                                         low=-60000 if key.startswith("grid") else -200,
                                         high=60000)
-                  for key in ("grid_power", "load_power", "grid_l1_power", "grid_l2_power",
-                              "grid_l3_power", "load_l1_power", "load_l2_power", "load_l3_power")}
+                  for key in self._native_power_keys()}
+        if self._options.get("inverter_phases", 3) == 1:
+            phase = self._options.get("inverter_phase", "L1")
+            for i in (1, 2, 3):
+                for kind in ("grid", "load"):
+                    # Aggregate readings are the physical single-phase port.
+                    # Zero on the other inverter phases is structural, not a
+                    # fabricated reading of the other utility CT phases.
+                    powers[f"{kind}_l{i}_power"] = powers[f"{kind}_power"] if phase == f"L{i}" else 0
         charge = self._measurement("bms_charge_current", now, unit="A", low=0, high=1000)
         # ESPHome can publish this latched flag only on change. Its available,
         # non-restored setting is anchored by the same BMS's live voltage.
@@ -622,7 +675,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "outside_load_w": 0, "outside_power_valid": True, "raw_load_power": raw_load,
                 "total_load_with_outside_w": raw_load,
                 "telemetry_valid": voltage is not None and current is not None and
-                bms_valid and limits["grid_charge_limit_valid"] and all(v is not None for v in powers.values())}
+                bms_valid and hardware_valid and limits["grid_charge_limit_valid"] and all(v is not None for v in powers.values())}
+        inputs["hardware_valid"] = hardware_valid
+        inputs["inverter_phases"] = self._options.get("inverter_phases", 3)
+        inputs["connection_phases"] = self._options.get("connection_phases", 3)
+        inputs["inverter_phase"] = self._options.get("inverter_phase", "L1")
         inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
         inputs["topology"] = self._options["topology"]
         mode_state = self._state("work_mode")
@@ -637,11 +694,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs["topology_error"] = None
         inputs["load_and_grid_output_w"] = None
         if self._options["topology"] == "load_with_external_ct":
-            keys = ("ct_grid_power", "ct_grid_l1_power", "ct_grid_l2_power", "ct_grid_l3_power")
+            keys = (("ct_grid_power",) if self._options.get("connection_phases", 3) == 1 else
+                    ("ct_grid_power", "ct_grid_l1_power", "ct_grid_l2_power", "ct_grid_l3_power"))
             ct = {key: self._measurement(key, now, unit="W", age=30, low=-60000, high=60000)
                   for key in keys}
+            if self._options.get("connection_phases", 3) == 1:
+                ct.update(ct_grid_l1_power=ct["ct_grid_power"], ct_grid_l2_power=0, ct_grid_l3_power=0)
             try:
-                meter_keys = (*keys, "grid_power", "grid_l1_power", "grid_l2_power", "grid_l3_power")
+                meter_keys = (*keys, *self._native_grid_keys())
                 ids = [self._sources.get(key) for key in meter_keys]
                 if any(not entity for entity in ids) or len(set(ids)) != len(ids):
                     raise ValueError("ct_and_grid_port_require_distinct_meters")
@@ -672,7 +732,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # A solar/local charging credit must compare the same physical instant.
         # Use the inverter GRID port, never utility CT (which includes bypass
         # loads). _measurement already validates availability, units and age.
-        charge_keys = ("battery_power", "grid_power", "grid_l1_power", "grid_l2_power", "grid_l3_power")
+        charge_keys = ("battery_power", *self._native_grid_keys())
         reports = [_stamp(getattr(self._state(key), "last_reported", None) or
                           getattr(self._state(key), "last_updated", None)) for key in charge_keys]
         charge_ids = [self._sources.get(key) for key in charge_keys]
@@ -686,9 +746,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # Diagnostics only: retain the validators and controller gates above.
         issues = []
         checks = {key: dict(unit="W", age=30, low=-60000 if key.startswith("grid") else -200, high=60000)
-                  for key in powers}
+                  for key in self._native_power_keys()}
         checks.update(battery_power=dict(unit="W", age=30, low=-60000, high=60000),
-                      voltage=dict(unit="V", age=120, low=40, high=65),
+                      voltage=dict(unit="V", age=120, low=voltage_low, high=voltage_high),
                       bms_charge_current=dict(unit="A", low=0, high=1000),
                       grid_current_number=dict(unit="A", low=0, high=1000),
                       max_charge_current_number=dict(unit="A", low=0, high=1000),
@@ -720,10 +780,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             issues.append(dict(source="ct_balance", reason="invalid"))
         if bound is None or self._effective_min_soc()+self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
             issues.append(dict(source="reserve", reason="invalid"))
+        if not hardware_valid:
+            issues.append(dict(source="inverter_model", reason="invalid_or_unsupported"))
         inputs["telemetry_issues"] = issues
         return inputs
 
     def _grid_charge_balanced(self, inputs, now):
+        if self._options.get("inverter_phases", 3) == 1:
+            return False
         flag, mode = self._state("asymmetric_phase_feeding"), self._state("work_mode")
         if (flag is None or flag.state not in ("on", "off") or flag.attributes.get("restored", False)
                 or mode is None or mode.state in _BAD or mode.attributes.get("restored", False)):
@@ -800,6 +864,12 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                    for slot, clock in enumerate(clocks, 1))
 
     def _preflight(self, *, retake=False):
+        try:
+            if self._hardware().get("control_supported") is not True:
+                raise ValueError("unsupported_inverter_model")
+            applied_limits(self._options)
+        except (ValueError, TypeError) as error:
+            raise ValueError("Sprawdź model falownika, liczbę faz i ograniczenia sprzętu w konfiguracji EMS.") from error
         if self._soc_lower_bound() is None:
             raise ValueError("Wymagany poprawny odczyt Battery low SOC; sprawdź przypisanie encji i jednostkę %.")
         if self._effective_min_soc() + self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
@@ -1242,6 +1312,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return winter, night, afternoon, deadline, slot
 
     def _grid_input(self, inputs, now, target, emergency, *, safety_only=False):
+        limits = self._effective_hardware_limits()
         winter, night, afternoon, deadline, active_slot = self._window(now)
         ledger = self._memory["ledger"].get(self._sources["grid_current_number"], {})
         if not isinstance(ledger, dict):
@@ -1266,6 +1337,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         initial_started = self._initial_window_started(now)
         policy = {**self._memory["current_policy"], "initial_started": initial_started}
         return {"now_ts": now.timestamp(), "winter": winter, "cheap_window": night or afternoon,
+                "inverter_phases": self._options.get("inverter_phases", 3),
+                "connection_phases": self._options.get("connection_phases", 3),
+                "inverter_phase_index": {"L1": 0, "L2": 1, "L3": 2}.get(self._options.get("inverter_phase", "L1"), -1),
                 "policy_deadline": deadline.isoformat(),
                 "current_policy": policy, "initial_window_started": initial_started,
                 "hardware_ok": self._hardware_modes_ok(),
@@ -1296,7 +1370,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "grid_port_load_phases_w": [inputs[f"raw_load_l{i}_power"] for i in (1, 2, 3)],
                 "battery_voltage_v": inputs["voltage"], "current_a": inputs["current_a"],
                 "battery_power_w": inputs.get("battery_power"),
-                "battery_total_cap_a": (min(inputs["bms_cap_a"], inputs["deye_max_charge_current_a"])
+                "battery_total_cap_a": (min(inputs["bms_cap_a"], inputs["deye_max_charge_current_a"], self._catalog_battery_cap())
                     if inputs["telemetry_valid"] and inputs.get("bms_valid") is True
                     and inputs.get("grid_charge_limit_valid") is True
                     and inputs.get("bms_cap_a") is not None and inputs.get("deye_max_charge_current_a") is not None else None),
@@ -1304,12 +1378,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "last_attempt_ts": ledger.get("at", 0), "last_attempt_a": ledger.get("a", 0),
                 "total_limit_w": self._options["grid_import_limit_kw"] * 1000,
                 "phase_limit_w": self._options["grid_phase_limit_kw"] * 1000,
-                "inverter_grid_import_limit_w": self._options["inverter_max_power_kw"] * 1000,
-                "inverter_grid_phase_limit_w": self._options["inverter_phase_max_power_kw"] * 1000,
-                "conversion_total_limit_w": min(self._options.get("inverter_max_power_kw", 12),
-                    self._options["combined_output_limit_kw"] if self._options["topology"] == "load_with_external_ct"
-                    else self._options.get("inverter_max_power_kw", 12)) * 1000,
-                "conversion_phase_limit_w": self._options.get("inverter_phase_max_power_kw", 5) * 1000,
+                # Retain the user's conservative GRID-port policy. Catalog
+                # passthrough is displayed separately and never raises it.
+                "inverter_grid_import_limit_w": limits["inverter_max_power_kw"] * 1000,
+                "inverter_grid_phase_limit_w": limits["inverter_phase_max_power_kw"] * 1000,
+                "conversion_total_limit_w": min(limits["inverter_max_power_kw"],
+                    limits["combined_output_limit_kw"] if self._options["topology"] == "load_with_external_ct"
+                    else limits["inverter_max_power_kw"]) * 1000,
+                "conversion_phase_limit_w": limits["inverter_phase_max_power_kw"] * 1000,
                 "headroom_w": 500, "phase_headroom_w": 250,
                 "charge_efficiency": .9, "charge_storage_efficiency": .95}
 
@@ -1707,17 +1783,18 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "capacity_kwh", "winter_weather_soc_percent",
                     "discharge_max_kw", "grid_max_soc_percent",
                     "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode")}
-        rated = self._options.get("inverter_max_power_kw", 12)
+        hardware_limits = self._effective_hardware_limits()
+        rated = hardware_limits["inverter_max_power_kw"]
         if self._options["topology"] == "load_with_external_ct":
-            rated = min(rated, self._options["combined_output_limit_kw"])
+            rated = min(rated, hardware_limits["combined_output_limit_kw"])
         # Hardware limits can change while slow history/PV reads are awaited.
         # They inform planning; the service path independently rechecks them.
         charging_inputs = self._read_inputs(self._now())
         # General Deye/BMS current limits cover PV and grid together. The
         # grid-only register and its 95% ceiling must not cap PV a second time.
-        total_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_max_charge_current_a"]]
+        total_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_max_charge_current_a"], self._catalog_battery_cap()]
         grid_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_grid_charge_limit_a"],
-                     charging_inputs["grid_charge_actuator_max_a"]]
+                     charging_inputs["grid_charge_actuator_max_a"], self._catalog_battery_cap()]
         valid = charging_inputs["telemetry_valid"] and charging_inputs["bms_valid"]
         config["battery_charge_max_a"] = (min(total_caps) if valid
                                            and all(value is not None for value in total_caps) else None)
@@ -1727,7 +1804,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # Match the live controller's AC/DC and stored-energy assumptions.
         config["eta_ac_dc"] = .9
         config["eta_charge"] = .95
-        config["discharge_max_kw"] = min(config["discharge_max_kw"], rated)
+        config["discharge_max_kw"] = min(hardware_limits["discharge_max_kw"], rated)
         config.update({"minimum_soc_percent": self._effective_min_soc(),
                   "minimum_soc_lower_bound": self._soc_lower_bound() if self._soc_lower_bound() is not None else 40,
                   "margin_soc_percent": self._options["reserve_margin_soc_percent"],
@@ -1887,6 +1964,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     self._plan_due = 0
             context = {"topology": self._options["topology"], "sources": self._sources,
                        "combined_output_limit_kw": self._options["combined_output_limit_kw"]}
+            hardware_context = {key: self._options[key] for key in
+                                ("inverter_model", "inverter_phases", "connection_phases", "inverter_phase")}
+            if hardware_context != {"inverter_model": "custom", "inverter_phases": 3,
+                                    "connection_phases": 3, "inverter_phase": "L1"}:
+                # Leave legacy context byte-for-byte compatible at migration.
+                # A later explicit hardware choice invalidates old forecasts
+                # and targets, without resetting Solcast request accounting.
+                context["hardware"] = hardware_context
             previous_context = self._memory["metering_context"]
             if context != previous_context:
                 if previous_context or self._options["topology"] == "load_with_external_ct":
@@ -1896,6 +1981,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     self._memory["safety_raise"] = {}
                     self._memory["load_profiles"] = {}
                     self._memory["current_policy"] = {}
+                    self._plan_due = 0
                 self._memory["metering_context"] = deepcopy(context)
             self._ensure_forecast_context()
             inputs = self._read_inputs(now)

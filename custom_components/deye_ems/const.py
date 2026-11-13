@@ -1,9 +1,14 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "1.0.21"
+VERSION = "2.0.0"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button"]
 
 DEFAULT_OPTIONS = {
+    # Existing entries keep their explicitly configured limits and mappings.
+    "inverter_model": "custom",
+    "inverter_phases": 3,
+    "connection_phases": 3,
+    "inverter_phase": "L1",
     "battery_source_profile": "deye",
     "topology": "load_only",
     "combined_output_limit_kw": 10.0,
