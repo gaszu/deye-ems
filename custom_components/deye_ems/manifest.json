@@ -1,7 +1,7 @@
 {
   "domain": "deye_ems",
   "name": "Deye EMS",
-  "after_dependencies": ["esphome"],
+  "after_dependencies": ["esphome", "zeroconf"],
   "codeowners": [
     "@gaszu"
   ],

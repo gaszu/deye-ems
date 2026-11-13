@@ -204,6 +204,7 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         manifest=json.loads((ROOT/"manifest.json").read_text(encoding="utf-8"))
         self.assertTrue(manifest["config_flow"])
         self.assertEqual(manifest["requirements"],[])
+        self.assertEqual(set(manifest["after_dependencies"]), {"esphome", "zeroconf"})
         for platform in C["PLATFORMS"]:
             self.assertTrue((ROOT/(platform+".py")).is_file())
         self.assertTrue((ROOT/"frontend/deye-ems-panel.js").is_file())

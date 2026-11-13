@@ -367,7 +367,13 @@ class ESPHomeProviderAdapter:
                     self._original_unsubs[entry_id] = (client, unsubscribe)
         self._health_snapshot = self._health_fingerprint()
         if wanted and (self._health_task is None or self._health_task.done()):
-            self._health_task = self._hass.async_create_task(self._async_monitor_original())
+            # This lifetime monitor must not enter HA's foreground task set:
+            # startup/async_block_till_done must never await its infinite loop.
+            create_background = getattr(self._hass, "async_create_background_task", None)
+            coroutine = self._async_monitor_original()
+            self._health_task = (create_background(coroutine, "Deye EMS ESPHome connection monitor")
+                if callable(create_background) else asyncio.create_task(
+                    coroutine, name="Deye EMS ESPHome connection monitor"))
 
     def _health_fingerprint(self) -> tuple[Any, ...]:
         return tuple((entry_id, id(entry), id(_original_client(entry)), _loaded(entry),

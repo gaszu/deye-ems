@@ -1,6 +1,6 @@
 # Wersja 2.0.3 — limit Deye, natywne raporty i automatyczne sprawdzanie wydań
 
-**682 testy Python i 173 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Wynik nie oznacza fizycznego testu wszystkich urządzeń i firmware.
+**683 testy Python i 173 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Wynik nie oznacza fizycznego testu wszystkich urządzeń i firmware.
 
 - Odczyt ESPHome tylko do raportowania: przypisania z rejestru HA, zgodność urządzenia/klucza/jednostki/wartości, dwa raporty, wcześniejszy czas odbioru, reset dowodów po rozłączeniu i zmianie źródeł oraz zamknięcie klienta EMS po utracie oryginalnego połączenia HA. Nie zmieniano firmware.
 - Pierwotne stany HA, dostępność, zakresy, jednostki, oryginalne potwierdzenia nastaw i istniejące progi bezpieczeństwa pozostają wymagane. Native fallback limitu Deye dotyczy wyłącznie braku dedykowanego CCL; błąd istniejącego CCL i jego zero nie są omijane.

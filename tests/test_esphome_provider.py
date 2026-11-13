@@ -337,6 +337,41 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(original.callbacks, [other_callback])
         self.assertTrue(original.is_connected)
 
+    async def test_lifetime_health_monitor_uses_background_tracking_and_cleans_up(self):
+        await self.adapter.async_close()
+        foreground, background = [], []
+
+        def create_foreground(coroutine, name=None):
+            task = asyncio.create_task(coroutine, name=name)
+            foreground.append(task)
+            return task
+
+        def create_background(coroutine, name):
+            task = asyncio.create_task(coroutine, name=name)
+            background.append(task)
+            return task
+
+        self.hass.async_create_task = create_foreground
+        self.hass.async_create_background_task = create_background
+        self.collector = Collector()
+        self.adapter = ESPHomeProviderAdapter(self.hass, self.collector,
+            registry=Obj(async_get=self.entities.get), provider_factory=Provider,
+            binding_factory=Binding, clock=lambda: self.now)
+        await self.adapter.async_configure(self.sources, self.checks)
+        self.assertEqual(foreground, [])
+        self.assertEqual(len(background), 1)
+        self.assertIs(self.adapter._health_task, background[0])
+        self.assertFalse(background[0].done())
+        await self.adapter.async_configure(self.sources, self.checks)
+        self.assertEqual(len(background), 1)
+        await self.adapter.async_close()
+        self.assertTrue(background[0].done())
+        self.assertTrue(background[0].cancelled())
+        self.assertEqual(self.bus.callbacks, [])
+        self.assertEqual(self.entry.runtime_data.client.callbacks, [])
+        self.assertTrue(self.entry.runtime_data.client.is_connected)
+        self.assertTrue(self.collector.closed)
+
     async def test_event_requires_new_valid_ha_report_or_post_event_native_proof(self):
         self.bus.fire_registry(action="update", entity_id="sensor.battery_voltage", changes={})
         await self.drain()
@@ -373,7 +408,9 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.adapter.effective_report("sensor.battery_voltage", None, None, CHECK))
 
     async def test_actual_collector_contract_and_provider_disable_without_device_calls(self):
-        from esphome_live import Binding as NativeBinding, BindingRequest, LiveReportCache, ProviderConfig
+        from test_esphome_live import live
+        NativeBinding, BindingRequest = live.Binding, live.BindingRequest
+        LiveReportCache, ProviderConfig = live.LiveReportCache, live.ProviderConfig
 
         class Client:
             def __init__(inner):
