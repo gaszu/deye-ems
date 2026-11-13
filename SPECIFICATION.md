@@ -2,6 +2,14 @@
 
 Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zachowanie; rozszerzenia i strojenie będą opisywane w następnych wersjach.
 
+## Źródła nowej instalacji — rozszerzenie 1.0.20
+
+- Pierwsza konfiguracja domyślnie używa profilu baterii Deye. YamBMS jest opcjonalny; profil ręczny zachowuje własne przypisania. Dodatkowe odbiorniki, w tym pompa ciepła, nie mają domyślnych liczników.
+- Prefiks i profil tworzą wyłącznie podgląd. Zapis mapowań jest osobną czynnością w obserwacji. Ręczne lub wyłączone źródła tego samego profilu są zachowywane; jawny wybór innego profilu proponuje zmianę grupy źródeł baterii. Puste opcjonalne selektory są pomijane przez formularz i zapisywane jako wyłączone źródła.
+- Profil Deye używa SoC, rzeczywistego napięcia baterii, bieżącego limitu ładowania BMS oraz alarmu i błędu baterii. Bieżący limit CAN (rejestr 212) nie jest maksymalnym limitem CAN (218) ani nastawą prądu ładowania falownika. Zero ogranicza ładowanie do zera. Alarm lub błąd ogranicza je do zera; brak poprawnych źródeł unieważnia telemetrię. Napięcie pozostaje świeżym punktem odniesienia dla zatrzaskiwanych wartości BMS. Definicje: [Sunsynk](https://kellerza.github.io/sunsynk/reference/definitions), [Solarman Deye](https://github.com/davidrapan/ha-solarman/blob/main/custom_components/solarman/inverter_definitions/deye_p3.yaml).
+- Starsze zapisane źródła baterii bez wyboru profilu pozostają ręczne. Jawnie skonfigurowana numeryczna blokada zachowuje dotychczasowe znaczenie i pierwszeństwo; aktualizacja nie zastępuje jej sygnałem alarmowym Deye.
+- Kreator informuje przed wypełnieniem pól oraz po utworzeniu wpisu, że panel Deye EMS znajduje się w lewym menu administratora HA. Paczka zawiera pełne tłumaczenia polskie i angielski plik zastępczy wymagany przez HA.
+
 ## Stan doładowania i oczekiwanie — rozszerzenie 1.0.18
 
 - Panel rozróżnia odczyt Grid Charge, zapisany limit prądu i fizyczną moc baterii. Nastawa ani włączony Grid Charge nie stanowią pomiaru energii pobranej z sieci.

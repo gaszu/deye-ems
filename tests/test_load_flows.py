@@ -4,16 +4,17 @@ from types import SimpleNamespace
 import unittest
 
 import test_installable as boundary
-from test_runtime import Harness
+from test_runtime import Harness, PC_SOURCES
 
 
-PUMP = boundary.C["DEFAULT_SOURCES"]["pc_energy_total"]
+PUMP = PC_SOURCES["pc_energy_total"]
 
 
 def flow(*, data=None, options=None, runtime=None):
     result = boundary.Installation().flow()["DeyeEMSOptionsFlow"]()
     result.config_entry = SimpleNamespace(
-        data=deepcopy(data or {}), options=deepcopy(options or {}), runtime_data=runtime)
+        data=deepcopy({"sources": dict(PC_SOURCES), **(data or {})}),
+        options=deepcopy(options or {}), runtime_data=runtime)
     return result
 
 

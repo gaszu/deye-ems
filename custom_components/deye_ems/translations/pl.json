@@ -3,8 +3,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Deye EMS — własny silnik",
-        "description": "**Po dodaniu integracji panel Deye EMS znajdziesz na pasku bocznym Home Assistanta.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
+        "title": "Panel w lewym menu Home Assistant",
+        "description": "**Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
         "data": {
           "min_soc_percent": "Minimalny bezpieczny SoC",
           "capacity_kwh": "Pojemność magazynu",
@@ -13,7 +13,8 @@
           "inverter_phase_max_power_kw": "Dopuszczalna moc falownika na fazę",
           "grid_import_limit_kw": "Moc przyłącza — maksymalny pobór z sieci",
           "grid_phase_limit_kw": "Limit importu przyłącza — na fazę",
-          "entity_prefix": "Prefiks encji Deye"
+          "entity_prefix": "Prefiks encji Deye",
+          "battery_source_profile": "Źródło danych baterii — Deye / opcjonalny YamBMS / własne"
         }
       }
     },
@@ -25,6 +26,9 @@
     },
     "abort": {
       "already_configured": "Integracja Deye EMS jest już skonfigurowana."
+    },
+    "create_entry": {
+      "default": "Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant. Otwórz Deye EMS lub przejdź do /deye-ems. Panel jest dostępny dla administratorów. Integracja rozpoczyna pracę w obserwacji."
     }
   },
   "options": {
@@ -40,9 +44,10 @@
       },
       "entity_prefix": {
         "title": "Prefiks encji Deye",
-        "description": "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Prefiks nie zmienia encji BMS, Solcast ani pompy.",
+        "description": "Wpisz część nazwy bez domeny, np. deye_inverter_ lub deye_dom_. Przykład: deye_dom_ tworzy sensor.deye_dom_load_power i number.deye_dom_maximum_battery_grid_charge_current. Następny ekran pokaże przypisania oraz znalezione i brakujące encje. Zapis następuje dopiero po zatwierdzeniu tego ekranu. Profil Deye korzysta z odczytów baterii falownika. YamBMS jest opcją; profil własny zachowuje ręczne przypisania. Prefiks nie zmienia Solcast ani dodatkowych odbiorników.",
         "data": {
-          "entity_prefix": "Prefiks encji Deye"
+          "entity_prefix": "Prefiks encji Deye",
+          "battery_source_profile": "Źródło danych baterii — Deye / opcjonalny YamBMS / własne"
         }
       },
       "parameters": {
@@ -67,17 +72,19 @@
       },
       "sources": {
         "title": "Pomiary i sterowanie",
-        "description": "Wskaż istniejące encje Deye, YamBMS i prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
+        "description": "Wskaż istniejące encje Deye albo opcjonalnego YamBMS oraz prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
         "data": {
           "battery_low_soc": "Battery low SOC — próg falownika (odczyt, rezerwa EMS co najmniej +5 p.p.)",
           "ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
           "ct_grid_l1_power": "Wymiana z siecią na CT — L1",
           "ct_grid_l2_power": "Wymiana z siecią na CT — L2",
           "ct_grid_l3_power": "Wymiana z siecią na CT — L3",
-          "soc": "soc",
-          "voltage": "voltage",
-          "bms_charge_current": "bms charge current",
-          "bms_blocking_charge": "bms blocking charge",
+          "soc": "Poziom naładowania baterii (%)",
+          "voltage": "Napięcie baterii (V)",
+          "bms_charge_current": "Bieżący dopuszczalny prąd ładowania BMS (A)",
+          "bms_blocking_charge": "Blokada ładowania YamBMS / własna (0 = zgoda; opcjonalna w profilu Deye)",
+          "battery_alarm": "Deye — alarm baterii (OFF = brak alarmu)",
+          "battery_fault": "Deye — błąd baterii (OFF = brak błędu)",
           "battery_power": "battery power",
           "grid_power": "Port GRID falownika (+ do falownika, − z falownika)",
           "load_power": "Wyjście LOAD/UPS — bez odbiorów między GRID a CT",
@@ -162,6 +169,9 @@
         "description": "Pokaż lub ukryj Deye EMS w menu bocznym administratorów. Panel zawsze otworzysz pod adresem /deye-ems swojej instancji. Zapis nie przeładowuje sterownika ani nie zmienia sterowania. Jeżeli wpis został ukryty w osobistym profilu HA, przywróć go również w edycji menu bocznego.",
         "data": {
           "sidebar_visible": "Pokaż Deye EMS w panelu bocznym"
+        },
+        "data_description": {
+          "sidebar_visible": "Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant. Widoczny dla administratorów; bezpośredni adres: /deye-ems."
         }
       },
       "init": {
@@ -171,7 +181,10 @@
           "sources": "Encje pomiarowe i sterujące",
           "solcast": "Solcast — połączenie i ustawienia",
           "add_load": "Dodaj dodatkowe zużycie",
-          "remove_load": "Usuń dodatkowe zużycie"
+          "remove_load": "Usuń dodatkowe zużycie",
+          "sidebar": "Panel boczny",
+          "entity_prefix": "Prefiks encji Deye",
+          "topology": "Topologia i moc falownika"
         }
       },
       "solcast": {
@@ -179,10 +192,7 @@
         "menu_options": {
           "solcast_manual": "Połącz / zmień ustawienia",
           "solcast_import": "Importuj dostępne ustawienia z HA",
-          "solcast_disable": "Wyłącz pobieranie przez EMS",
-          "sidebar": "Panel boczny",
-          "entity_prefix": "Prefiks encji Deye",
-          "topology": "Topologia i moc falownika"
+          "solcast_disable": "Wyłącz pobieranie przez EMS"
         }
       }
     },

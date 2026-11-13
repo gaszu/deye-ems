@@ -1,0 +1,220 @@
+{
+  "title": "Deye EMS",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Panel in the Home Assistant left menu",
+        "description": "**After installation, find the Deye EMS panel in the Home Assistant left menu.**\n\nThe panel is available to administrators. If it is missing, refresh the page and check Sidebar in the integration options and your Home Assistant sidebar settings. Direct panel path: `/deye-ems`.\n\nA local EMS without EMHASS, helpers or automations. Minimum safe SoC is a fixed reserve; weather targets are separate. The integration starts in observation. You can configure entities and other parameters later.",
+        "data": {
+          "min_soc_percent": "Minimum safe SoC",
+          "capacity_kwh": "Battery capacity",
+          "pv_peak_kwp": "Installed PV capacity",
+          "inverter_max_power_kw": "Total inverter power",
+          "inverter_phase_max_power_kw": "Inverter power per phase",
+          "grid_import_limit_kw": "Maximum grid import",
+          "grid_phase_limit_kw": "Grid import limit per phase",
+          "entity_prefix": "Deye entity prefix",
+          "battery_source_profile": "Battery data source — Deye / optional YamBMS / manual"
+        }
+      }
+    },
+    "error": {
+      "invalid_soc_limits": "The SoC reserve plus its margin exceeds the maximum target.",
+      "invalid_entity_prefix": "Enter a prefix without a domain using a-z, digits and underscores, for example deye_home_.",
+      "reserve_below_low_soc": "The EMS reserve must be at least Battery low SOC plus 5 percentage points. Do not lower it without a valid reading.",
+      "battery_low_soc_unavailable": "No valid Battery low SOC reading. Check the mapped entity, its state and percent unit."
+    },
+    "abort": {
+      "already_configured": "Deye EMS is already configured."
+    },
+    "create_entry": {
+      "default": "After installation, find the Deye EMS panel in the Home Assistant left menu. Open Deye EMS or go to /deye-ems. The panel is available to administrators. The integration starts in observation."
+    }
+  },
+  "options": {
+    "step": {
+      "topology": {
+        "title": "Topology and inverter power",
+        "description": "Choose where grid exchange is measured. For hot water consumers between GRID and CT, choose Zero Export To CT and map CT and GRID separately, including totals and phases. Positive power means import into the home or inverter. LOAD must measure only the LOAD/UPS output. Rated power covers the entire inverter, home and hot water. The combined limit is a model limit; it does not write device power settings. Inconsistent measurements block control. Changes require observation; resume control explicitly.",
+        "data": {
+          "topology": "Installation topology",
+          "inverter_max_power_kw": "Total inverter power",
+          "combined_output_limit_kw": "Combined model limit for LOAD and consumers before GRID"
+        }
+      },
+      "entity_prefix": {
+        "title": "Deye entity prefix",
+        "description": "Enter the entity name prefix without a domain, for example deye_inverter_ or deye_home_. The next screen previews mapped, found and missing entities. Nothing is saved until you confirm that screen. Deye uses battery readings from the inverter. YamBMS is optional; manual mode keeps custom mappings. The prefix does not affect Solcast or additional consumers.",
+        "data": {
+          "entity_prefix": "Deye entity prefix",
+          "battery_source_profile": "Battery data source — Deye / optional YamBMS / manual"
+        }
+      },
+      "parameters": {
+        "title": "Engine parameters",
+        "description": "The SoC reserve applies to every slot. The maximum target must be at least the reserve plus its margin.",
+        "data": {
+          "combined_output_limit_kw": "Combined model limit for LOAD and consumers before GRID",
+          "min_soc_percent": "Minimum safe SoC",
+          "capacity_kwh": "Battery capacity",
+          "pv_peak_kwp": "Installed PV capacity",
+          "pv_forecast_reference_kwp": "Forecast reference PV capacity",
+          "grid_import_limit_kw": "Maximum grid import",
+          "grid_phase_limit_kw": "Grid import limit per phase",
+          "inverter_max_power_kw": "Total inverter power",
+          "inverter_phase_max_power_kw": "Inverter power per phase",
+          "reserve_margin_soc_percent": "Additional forecast reserve",
+          "winter_weather_soc_percent": "Winter target with poor PV forecast",
+          "discharge_max_kw": "Model battery discharge limit",
+          "grid_max_soc_percent": "Maximum grid charging target",
+          "pv_forecast_mode": "PV forecast interpretation"
+        }
+      },
+      "sources": {
+        "title": "Measurements and control",
+        "description": "Select existing Deye or optional YamBMS entities and PV forecast entities. LOAD must cover the total modeled home consumption; verify its scope for the LOAD/CT topology. Do not add consumer channels to the total again. No EMS helpers or automations are required. Change mappings in observation mode.\n\n{prefix_preview}",
+        "data": {
+          "battery_low_soc": "Inverter Battery low SOC (EMS reserve at least 5 percentage points higher)",
+          "ct_grid_power": "CT grid exchange total (+ import, - export)",
+          "ct_grid_l1_power": "ct grid l1 power",
+          "ct_grid_l2_power": "ct grid l2 power",
+          "ct_grid_l3_power": "ct grid l3 power",
+          "soc": "Battery state of charge (%)",
+          "voltage": "Battery voltage (V)",
+          "bms_charge_current": "Current BMS charge allowance (A)",
+          "bms_blocking_charge": "YamBMS / custom charge blocking (0 = permitted; optional in Deye profile)",
+          "battery_alarm": "Deye battery alarm (OFF = clear)",
+          "battery_fault": "Deye battery fault (OFF = clear)",
+          "battery_power": "battery power",
+          "grid_power": "Inverter GRID port (+ into inverter, - out of inverter)",
+          "load_power": "LOAD/UPS output excluding consumers between GRID and CT",
+          "grid_current_number": "grid current number",
+          "max_charge_current_number": "max charge current number",
+          "pv_today": "pv today",
+          "pv_tomorrow": "pv tomorrow",
+          "pv_day3": "pv day3",
+          "pc_energy_total": "pc energy total",
+          "pc_energy_today": "pc energy today",
+          "pc_energy_yesterday": "pc energy yesterday",
+          "solar_sell": "solar sell",
+          "tou_enabled": "tou enabled",
+          "energy_priority": "energy priority",
+          "work_mode": "work mode",
+          "asymmetric_phase_feeding": "Deye grid phase balancing status switch",
+          "grid_l1_power": "grid l1 power",
+          "load_l1_power": "load l1 power",
+          "grid_l2_power": "grid l2 power",
+          "load_l2_power": "load l2 power",
+          "grid_l3_power": "grid l3 power",
+          "load_l3_power": "load l3 power",
+          "tou_soc_1": "tou soc 1",
+          "tou_gc_1": "tou gc 1",
+          "tou_time_1": "tou time 1",
+          "tou_soc_2": "tou soc 2",
+          "tou_gc_2": "tou gc 2",
+          "tou_time_2": "tou time 2",
+          "tou_soc_3": "tou soc 3",
+          "tou_gc_3": "tou gc 3",
+          "tou_time_3": "tou time 3",
+          "tou_soc_4": "tou soc 4",
+          "tou_gc_4": "tou gc 4",
+          "tou_time_4": "tou time 4",
+          "tou_soc_5": "tou soc 5",
+          "tou_gc_5": "tou gc 5",
+          "tou_time_5": "tou time 5",
+          "tou_soc_6": "tou soc 6",
+          "tou_gc_6": "tou gc 6",
+          "tou_time_6": "tou time 6"
+        }
+      },
+      "add_load": {
+        "title": "Additional consumption",
+        "description": "Add a heat pump, hot water, air conditioning or other consumer to the SoC forecast model. Main LOAD already includes home consumption; channels are not added to it again. Energy meters must report Wh or kWh; power measurement is optional. Enable, disable and edit channels in the Deye EMS panel.",
+        "data": {
+          "name": "Consumer name",
+          "energy_entity": "Energy meter entity",
+          "power_entity": "Instantaneous power entity (optional)"
+        }
+      },
+      "remove_load": {
+        "title": "Remove additional consumption",
+        "description": "Removing a channel does not delete its source entity or history.",
+        "data": {
+          "load_id": "Consumer to remove"
+        }
+      },
+      "solcast_manual": {
+        "title": "Solcast inside EMS",
+        "description": "The built-in client does not need a separate Solcast integration. Find your key and site IDs in the Solcast toolkit. Configure AC/DC power, orientation and tilt in the Solcast portal. A typical Hobbyist limit is 10 requests per UTC day; every fetch for every site consumes a request. Do not use another client on the same account at the same time. If usage is unknown, leave 10; the client waits for the next UTC day. Entered usage never reduces recorded usage. {import_note}",
+        "data": {
+          "api_key": "Solcast API key (leave blank to keep saved key)",
+          "resource_ids": "Solcast site IDs (comma separated; blank for discovery)",
+          "poll_interval_minutes": "Polling interval (minutes)",
+          "max_requests_per_day": "Daily account request limit (UTC)",
+          "initial_requests_used": "Requests already used today (UTC)",
+          "dampening_factor": "Fixed forecast correction multiplier",
+          "hourly_factors": "24 hourly multipliers 00-23 (space separated; blank for 1)",
+          "accept_manual_calibration": "I understand the imported corrections and that previous self-learning will not continue"
+        }
+      },
+      "solcast_import": {
+        "title": "Import available Solcast settings",
+        "description": "The key, account limit and exclusions are copied locally in Home Assistant. Current correction factors are read from the selected integration correction sensor. Only their current state is imported, without full history or continued self-learning. Home Assistant sensor forecasts are already corrected and are not corrected again. Import does not disable the other integration or reset account usage.",
+        "data": {
+          "source_entry": "Existing Solcast integration"
+        }
+      },
+      "sidebar": {
+        "title": "Sidebar",
+        "description": "Show or hide Deye EMS in the administrator sidebar. You can always open /deye-ems on your instance. Saving does not reload the controller or change its operating mode. If your personal Home Assistant sidebar settings hide the panel, restore it there too.",
+        "data": {
+          "sidebar_visible": "Show Deye EMS in the sidebar"
+        },
+        "data_description": {
+          "sidebar_visible": "After installation, find Deye EMS in the Home Assistant left menu. Available to administrators; direct path: /deye-ems."
+        }
+      },
+      "init": {
+        "title": "Deye EMS",
+        "menu_options": {
+          "parameters": "Parameters and safe SoC",
+          "sources": "Measurement and control entities",
+          "solcast": "Solcast connection and settings",
+          "add_load": "Add consumption",
+          "remove_load": "Remove consumption",
+          "sidebar": "Sidebar",
+          "entity_prefix": "Deye entity prefix",
+          "topology": "Topology and inverter power"
+        }
+      },
+      "solcast": {
+        "title": "Solcast inside EMS",
+        "menu_options": {
+          "solcast_manual": "Connect or change settings",
+          "solcast_import": "Import available settings from Home Assistant",
+          "solcast_disable": "Disable EMS forecast polling"
+        }
+      }
+    },
+    "error": {
+      "invalid_soc_limits": "The SoC reserve plus its margin exceeds the maximum target.",
+      "duplicate_load": "This energy meter has already been added.",
+      "pv_reference_required": "Enter the forecast reference capacity before enabling scaling.",
+      "invalid_solcast": "Check the key, site IDs, limits and multipliers. Provide exactly 24 hourly multipliers, each between 0 and 2.",
+      "import_calibration_required": "Review the imported corrections and confirm that previous self-learning will not continue.",
+      "sidebar_save_failed": "Could not save or refresh the panel. Try again.",
+      "invalid_entity_prefix": "Enter a prefix without a domain using a-z, digits and underscores, for example deye_home_.",
+      "reserve_below_low_soc": "The EMS reserve must be at least Battery low SOC plus 5 percentage points. Do not lower it without a valid reading.",
+      "battery_low_soc_unavailable": "No valid Battery low SOC reading. Check the mapped entity, its state and percent unit."
+    },
+    "abort": {
+      "no_extra_loads": "No additional consumption channels to remove.",
+      "stop_before_mapping": "Stop control and select observation before changing mappings or consumers.",
+      "no_solcast_to_import": "No configured solcast_solar integration. Choose manual connection.",
+      "solcast_import_incomplete": "Could not read complete valid Solcast corrections. Use manual configuration; missing factors are not replaced with zero or one.",
+      "sidebar_saved": "Panel visibility saved. Open /deye-ems or refresh the sidebar. The operating mode is unchanged.",
+      "panel_not_ready": "The integration has not finished loading. Check its status and Home Assistant logs.",
+      "invalid_topology": "Choose a valid installation topology."
+    }
+  }
+}

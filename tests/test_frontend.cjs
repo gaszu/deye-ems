@@ -24,10 +24,10 @@ class FakeNode {
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=name?this.nodes.find(n=>n.dataset.solcastField===name):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
-  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
+  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const source=/\[data-source-field="([^"]+)"\]/.exec(selector)?.[1];if(source)return this.nodes.find(n=>n.dataset.sourceField===source);const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
   querySelectorAll(selector) {const data=/^\[data-([a-z-]+)\]$/.exec(selector)?.[1];if(data){const key=data.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());return this.nodes.filter(n=>n.dataset[key]!==undefined);}return this.nodes.filter(n=>selector==="input[data-key]"&&n.attrs.tag==="input"&&n.dataset.key!==undefined);}
 }
 
@@ -40,13 +40,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-19");
+  const Panel = registry.get("deye-ems-panel-1-0-20");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"1.0.19",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"1.0.20",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -62,8 +62,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-19"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.19/);
+  assert.notEqual(registry.get("deye-ems-panel-1-0-20"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.20/);
 });
 
 function apiUsage(panel,changes={}){
@@ -81,8 +81,8 @@ test("software version and manual update check are visible without opening advan
   const {panel,calls,reloads}=fixture();
   const html=panel.shadowRoot.innerHTML.split("<details>")[0];
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>1\.0\.19<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>1\.0\.19<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>1\.0\.20<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>1\.0\.20<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -91,18 +91,18 @@ test("software version and manual update check are visible without opening advan
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"1.0.19",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"1.0.20",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
   html=updateInfo(panel,{status:"available",latest_version:"1.0.100",checked_at});
   assert.match(html,/Dostępna aktualizacja: 1\.0\.100/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"1.0.20",checked_at},
+  for(const changes of [{status:"current",latest_version:"1.0.21",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"1.0.19"},
-    {status:"current",latest_version:"1.0.19",checked_at:"0"},
-    {status:"current",latest_version:"1.0.19",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"1.0.19",checked_at,stale:true}]){
+    {status:"current",latest_version:"1.0.20"},
+    {status:"current",latest_version:"1.0.20",checked_at:"0"},
+    {status:"current",latest_version:"1.0.20",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"1.0.20",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -110,12 +110,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="1.0.20";panel.render();
+  panel.payload.backend_version="1.0.21";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v1.0.19","1.0.19-beta","01.0.19"]){
+  for(const value of [undefined,null,17,"unknown","v1.0.20","1.0.20-beta","01.0.20"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -125,22 +125,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"1.0.20",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"1.0.21",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 1\.0\.20/);
+  assert.match(html,/Ostatnio znane wydanie: 1\.0\.21/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"1.0.20",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"1.0.21",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/ha-deye-ems\/releases\/tag\/v1\.0\.20"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/ha-deye-ems\/releases\/tag\/v1\.0\.21"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['1.0.20\" onclick=\"unexpected()','<img src=x>','1.0.20/../../x',"v1.0.20",true,18,"1.0.20-beta","999999999.0.1"]){
+  for(const latest_version of ['1.0.21\" onclick=\"unexpected()','<img src=x>','1.0.21/../../x',"v1.0.21",true,18,"1.0.21-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -159,9 +159,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"1.0.20",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"1.0.21",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"1.0.20");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"1.0.21");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -171,9 +171,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"1.0.20",updates:{status:"not_checked"}};
-  finish({backend_version:"1.0.19",updates:{status:"current",latest_version:"1.0.19",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"1.0.20");
+  panel.payload={...panel.payload,backend_version:"1.0.21",updates:{status:"not_checked"}};
+  finish({backend_version:"1.0.20",updates:{status:"current",latest_version:"1.0.20",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"1.0.21");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -208,20 +208,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"1.0.20",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"1.0.21",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"1.0.20");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"1.0.20",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"1.0.21");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"1.0.21",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="1.0.20";
+  panel.payload.backend_version="1.0.21";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -1105,6 +1105,148 @@ test("phase model requires a fresh explicit runtime confirmation",()=>{
 });
 
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+const prefixForm=(errors={},profile="deye")=>({type:"form",flow_id:"source-flow",step_id:"entity_prefix",errors,
+  data_schema:[{name:"entity_prefix",required:true,default:"existing_site_",selector:{text:{}}},
+    {name:"battery_source_profile",required:true,default:profile,selector:{select:{options:[
+      {value:"deye",label:"Deye — dane baterii z falownika"},{value:"yambms",label:"YamBMS — opcjonalne osobne źródło"},{value:"manual",label:"Ręczne przypisanie źródeł baterii"}]}}}]});
+const sourceForm=()=>({type:"form",flow_id:"source-flow",step_id:"sources",errors:{},
+  description_placeholders:{prefix_preview:"Prefiks: new_site_. Sprawdź propozycje. Istnienie encji nie potwierdza zgodności pomiarów."},
+  data_schema:[{name:"soc",description:{suggested_value:"sensor.server_generated_soc"},selector:{entity:{domain:"sensor"}}},
+    {name:"load_power",description:{suggested_value:"sensor.custom_load"},selector:{entity:{domain:"sensor"}}},
+    {name:"ct_grid_power",description:{suggested_value:""},selector:{entity:{domain:"sensor"}}},
+    {name:"pc_energy_total",description:{suggested_value:""},selector:{entity:{domain:"sensor"}}}]});
+function nativeSources(panel,{preview,finish,profile="deye"}={}){
+  const apiCalls=[],effects={writes:0};
+  panel._hass.callApi=async(method,route,data)=>{
+    apiCalls.push({method,route,data});
+    if(method==="DELETE")return {};
+    if(route==="config/config_entries/options/flow")return {type:"menu",flow_id:"source-flow",step_id:"init",menu_options:["solcast","entity_prefix","sources"]};
+    if(data.next_step_id==="entity_prefix")return prefixForm({},profile);
+    if(Object.hasOwn(data,"entity_prefix"))return preview?preview(data):sourceForm();
+    // Native HA EntitySelector rejects an empty string; empty optional fields
+    // must be absent from the complete form submission.
+    assert.ok(Object.values(data).every(value=>value!==""));
+    effects.writes++;return finish?finish(data):{type:"create_entry",data:{private_server_result:"must-not-be-kept"}};
+  };
+  return {apiCalls,effects};
+}
+function sourceInput(panel,name,value){
+  const input=panel.shadowRoot.querySelector('[data-source-field="'+name+'"]');
+  assert.ok(input,name);input.value=value;input.events.input();return input;
+}
+
+test("source configuration is visible and opens the native current-prefix field without changes",async()=>{
+  const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeSources(panel);
+  assert.match(panel.shadowRoot.innerHTML.split("<details>")[0],/Źródła danych/);
+  await panel.shadowRoot.getElementById("sources-open").events.click();
+  assert.equal(sourceInput(panel,"entity_prefix","existing_site_").value,"existing_site_");
+  assert.match(panel.sourcesHtml(),/Prefiks encji Deye/);
+  assert.match(panel.sourcesHtml(),/Pokaż przypisania dla prefiksu/);
+  assert.equal(JSON.stringify(panel.payload),before);assert.equal(effects.writes,0);assert.equal(calls.length,0);
+  assert.deepEqual(JSON.parse(JSON.stringify(apiCalls)),[
+    {method:"POST",route:"config/config_entries/options/flow",data:{handler:"test-entry"}},
+    {method:"POST",route:"config/config_entries/options/flow/source-flow",data:{next_step_id:"entity_prefix"}}]);
+});
+
+test("native battery profile defaults to Deye and YamBMS or manual selection only requests a preview",async()=>{
+  for(const profile of ["deye","yambms","manual"]){
+    const {panel,calls}=fixture(),{apiCalls,effects}=nativeSources(panel),before=JSON.stringify(panel.payload);
+    await panel.openSources();const select=panel.shadowRoot.querySelector('[data-source-field="battery_source_profile"]');
+    assert.equal(select.attrs.tag,"select");assert.equal(select.value,"deye");assert.equal(panel.sourceDraft.battery_source_profile,"deye");
+    assert.match(panel.sourcesHtml(),/YamBMS jest opcjonalny/);assert.match(panel.sourcesHtml(),/Deye — dane baterii z falownika/);
+    sourceInput(panel,"battery_source_profile",profile);await panel.submitSources();
+    assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{entity_prefix:"existing_site_",battery_source_profile:profile});
+    assert.equal(effects.writes,0);assert.equal(calls.length,0);assert.equal(JSON.stringify(panel.payload),before);
+    assert.equal(panel.sourceDraft.load_power,"sensor.custom_load");assert.equal(panel.sourceDraft.ct_grid_power,"");
+    await panel.cancelSources();assert.equal(effects.writes,0);assert.equal(JSON.stringify(panel.payload),before);
+  }
+});
+
+test("an existing native manual battery profile is preserved and profile drafts survive focused polling",async()=>{
+  const {panel}=fixture(),{apiCalls}=nativeSources(panel,{profile:"manual"});
+  await panel.openSources();assert.equal(panel.sourceDraft.battery_source_profile,"manual");
+  const select=sourceInput(panel,"battery_source_profile","yambms");panel.shadowRoot.activeElement=select;
+  const html=panel.shadowRoot.innerHTML;await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);assert.equal(panel.sourceDraft.battery_source_profile,"yambms");
+  panel.shadowRoot.activeElement=null;panel.render();assert.equal(panel.shadowRoot.querySelector('[data-source-field="battery_source_profile"]').value,"yambms");
+  const count=apiCalls.length;sourceInput(panel,"battery_source_profile","unexpected");await panel.submitSources();
+  assert.equal(apiCalls.length,count);assert.match(panel.sourcesHtml(),/Wybierz źródło danych baterii z listy/);
+});
+
+test("new prefix is only a native preview until explicit source save and preserves custom and disabled suggestions",async()=>{
+  const {panel,calls}=fixture(),{apiCalls,effects}=nativeSources(panel),before=JSON.stringify(panel.payload);
+  await panel.openSources();sourceInput(panel,"entity_prefix","new_site_");await panel.submitSources();
+  assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{entity_prefix:"new_site_",battery_source_profile:"deye"});assert.equal(effects.writes,0);
+  assert.equal(JSON.stringify(panel.payload),before);assert.equal(calls.length,0);
+  assert.equal(panel.sourceDraft.soc,"sensor.server_generated_soc");assert.equal(panel.sourceDraft.load_power,"sensor.custom_load");
+  assert.equal(panel.sourceDraft.ct_grid_power,"");assert.equal(panel.sourceDraft.pc_energy_total,"");
+  assert.match(panel.sourcesHtml(),/Prefiks: new_site_/);assert.match(panel.sourcesHtml(),/Zapisz prefiks i przypisania/);
+  assert.match(panel.sourcesHtml(),/Puste pole wyłącza dane źródło/);
+  sourceInput(panel,"soc","sensor.reviewed_soc");await panel.shadowRoot.getElementById("sources-form").events.submit({preventDefault(){}});
+  assert.equal(effects.writes,1);assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{soc:"sensor.reviewed_soc",load_power:"sensor.custom_load"});
+  assert.equal(panel.sourceFlow.type,"create_entry");assert.match(panel.sourcesHtml(),/EMS pozostaje w obserwacji/);
+  assert.equal(panel.payload.mode,"shadow");assert.doesNotMatch(JSON.stringify(panel.sourceFlow)+panel.sourcesHtml(),/must-not-be-kept|private_server_result/);
+  assert.equal(calls.some(call=>call.command==="mode"),false);
+});
+
+test("cancelling prefix or source preview only deletes the native draft and retains all settings",async()=>{
+  for(const preview of [false,true]){
+    const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeSources(panel);
+    await panel.openSources();sourceInput(panel,"entity_prefix","unsaved_");if(preview)await panel.submitSources();
+    await panel.shadowRoot.getElementById("sources-cancel").events.click();
+    assert.equal(effects.writes,0);assert.equal(calls.length,0);assert.equal(JSON.stringify(panel.payload),before);
+    assert.deepEqual(apiCalls.at(-1),{method:"DELETE",route:"config/config_entries/options/flow/source-flow",data:undefined});
+    assert.equal(panel.sourceOpen,false);assert.equal(panel.sourceFlow,null);assert.deepEqual(JSON.parse(JSON.stringify(panel.sourceDraft)),{});
+  }
+});
+
+test("clearing every optional source sends an empty native form only after explicit save in observation",async()=>{
+  const {panel,calls}=fixture(),{apiCalls,effects}=nativeSources(panel);
+  await panel.openSources();await panel.submitSources();assert.equal(effects.writes,0);
+  for(const field of panel.sourceFlow.fields)sourceInput(panel,field.name,"");
+  panel.render();assert.match(panel.sourcesHtml(),/Puste pole wyłącza dane źródło/);assert.match(panel.sourcesHtml(),/Zapisz prefiks i przypisania/);
+  assert.equal(effects.writes,0);assert.equal(panel.payload.mode,"shadow");
+  await panel.shadowRoot.getElementById("sources-form").events.submit({preventDefault(){}});
+  assert.equal(effects.writes,1);assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{});
+  assert.equal(calls.some(call=>call.command==="mode"),false);
+});
+
+test("prefix errors retain the entered draft and polling preserves source input and focus",async()=>{
+  const {panel}=fixture();nativeSources(panel,{preview:()=>prefixForm({base:"invalid_entity_prefix",unsafe:"private-provider-error"})});
+  await panel.openSources();const input=sourceInput(panel,"entity_prefix","invalid.prefix");panel.shadowRoot.activeElement=input;
+  const html=panel.shadowRoot.innerHTML;await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);
+  panel.shadowRoot.activeElement=null;await panel.submitSources();
+  assert.equal(panel.sourceDraft.entity_prefix,"invalid.prefix");assert.match(panel.sourcesHtml(),/Wpisz prefiks bez domeny/);
+  assert.doesNotMatch(panel.sourcesHtml(),/private-provider-error/);
+});
+
+test("source changes require explicit observation and active mode blocks form submission",async()=>{
+  const {panel,calls}=fixture(),{apiCalls,effects}=nativeSources(panel);panel.payload.mode="active";panel.render();
+  await panel.openSources();assert.equal(apiCalls.length,0);assert.match(panel.sourcesHtml(),/Przejdź do obserwacji/);
+  panel._hass.callWS=async message=>{calls.push(message);return {...panel.payload,mode:message.mode||panel.payload.mode};};
+  await panel.shadowRoot.getElementById("sources-observe").events.click();
+  assert.equal(panel.payload.mode,"shadow");assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
+  assert.equal(panel.sourceFlow.step_id,"entity_prefix");const count=apiCalls.length;
+  panel.payload.mode="active";panel.render();await panel.submitSources();
+  assert.equal(apiCalls.length,count);assert.equal(effects.writes,0);assert.match(panel.sourcesHtml(),/Zmiana źródeł wymaga obserwacji/);
+});
+
+test("a dispatched source save cannot be cancelled while a late cancelled opening cannot reopen the editor",async()=>{
+  const {panel}=fixture();let finish;
+  nativeSources(panel,{finish:()=>new Promise(resolve=>{finish=resolve;})});
+  await panel.openSources();await panel.submitSources();const saving=panel.submitSources();
+  assert.equal(panel.sourceCommitting,true);assert.equal(panel.shadowRoot.getElementById("sources-cancel").disabled,true);
+  await panel.cancelSources();assert.equal(panel.sourceOpen,true);
+  finish({type:"create_entry"});await saving;assert.equal(panel.sourceFlow.type,"create_entry");
+  await panel.cancelSources();
+  const apiCalls=[];let opened;
+  panel._hass.callApi=(method,route,data)=>{apiCalls.push({method,route,data});return method==="POST"?new Promise(resolve=>{opened=resolve;}):Promise.resolve({});};
+  const opening=panel.openSources();await flush();await panel.cancelSources();
+  opened({type:"menu",flow_id:"late-source-flow",step_id:"init",menu_options:["entity_prefix"]});await opening;await flush();
+  assert.equal(panel.sourceOpen,false);assert.equal(panel.sourceFlow,null);
+  assert.equal(apiCalls.filter(call=>call.method==="POST").length,1);
+  assert.equal(apiCalls.at(-1).method,"DELETE");assert.match(apiCalls.at(-1).route,/late-source-flow$/);
+});
+
 const nativeMenu=(id="native-flow",step="solcast")=>({type:"menu",flow_id:id,step_id:step,
   menu_options:step==="init"?["parameters","solcast","sources"]:["solcast_manual","solcast_import","solcast_disable"]});
 function manualForm(id="native-flow",imported=false,errors={}){
