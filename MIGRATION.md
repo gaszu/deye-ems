@@ -1,5 +1,11 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.0.0
+
+Instalacja plików nie zmienia przypisań, odbiorników, Solcast, pojemności, SoC, limitów, topologii ani zapisanego trybu pracy. Stare wpisy pozostają profilem własnym trójfazowym. Nowy model/fazy wybierasz osobno w obserwacji; podgląd wymaga potwierdzenia i nie uruchamia automatycznie sterowania. Jednofazowe nowe instalacje nie wymagają pomiarów native L2/L3; sprawdź jednak encje swojego firmware i pomiar CT, jeśli jest używany.
+
+Przed aktualizacją zachowaj prywatną kopię ustawień bez danych dostępu i poprzedni ZIP. Po restarcie zweryfikuj wersję silnika i panelu, źródła, limity, plan i tryb. Powrót: obserwacja, pliki poprzedniego wydania, restart i weryfikacja. Jeżeli po aktualizacji zmieniono model lub liczbę faz, nie uruchamiaj 1.x z konfiguracją jednofazową — przywróć zgodną kopię 1.x albo pozostań w obserwacji. Poprzedni kod nie obsługuje nowych profili.
+
 Instalacja Deye EMS nie wyłącza innych regulatorów. Poniższa procedura jest ogólną instrukcją dla operatora instalacji.
 
 ## Aktualizacja adresu repozytorium w 1.0.21

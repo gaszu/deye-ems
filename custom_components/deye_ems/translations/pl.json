@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Panel w lewym menu Home Assistant",
-        "description": "**Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.",
+        "description": "**Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.\n\nWybierz dokładny model z tabliczki. Model z katalogu wyznacza liczbę faz oraz górne ograniczenia mocy; pole liczby faz falownika dotyczy modelu własnego. Przyłącze domu może być trójfazowe także przy falowniku jednofazowym. Następny ekran pokaże wynik bez zapisu. Modele LV 40–60 V; HV i 24 V nie są jeszcze obsługiwane. Zapis wymaga obserwacji.",
         "data": {
           "min_soc_percent": "Minimalny bezpieczny SoC",
           "capacity_kwh": "Pojemność magazynu",
@@ -14,7 +14,18 @@
           "grid_import_limit_kw": "Moc przyłącza — maksymalny pobór z sieci",
           "grid_phase_limit_kw": "Limit importu przyłącza — na fazę",
           "entity_prefix": "Prefiks encji Deye",
-          "battery_source_profile": "Źródło danych baterii — Deye / opcjonalny YamBMS / własne"
+          "battery_source_profile": "Źródło danych baterii — Deye / opcjonalny YamBMS / własne",
+          "inverter_model": "Model falownika Deye",
+          "inverter_phases": "Liczba faz falownika — dla własnego modelu",
+          "connection_phases": "Liczba faz przyłącza domu",
+          "inverter_phase": "Faza podłączenia falownika jednofazowego"
+        }
+      },
+      "user_inverter_confirm": {
+        "title": "Potwierdź model falownika",
+        "description": "{model_preview}",
+        "data": {
+          "confirm_model": "Potwierdzam wybrany model, fazy i limity"
         }
       }
     },
@@ -22,7 +33,14 @@
       "invalid_soc_limits": "Rezerwa SoC plus bufor przekracza maksymalny cel.",
       "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_.",
       "reserve_below_low_soc": "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy.",
-      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
+      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %.",
+      "invalid_inverter_model": "Wybierz model z listy albo konfigurację własną.",
+      "invalid_inverter_phases": "Falownik i przyłącze mogą mieć jedną albo trzy fazy.",
+      "invalid_connection_phases": "Falownik trójfazowy wymaga przyłącza trójfazowego.",
+      "invalid_inverter_phase": "Wybierz L1, L2 lub L3; dla przyłącza jednofazowego wybierz L1.",
+      "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem.",
+      "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami.",
+      "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie."
     },
     "abort": {
       "already_configured": "Integracja Deye EMS jest już skonfigurowana."
@@ -184,7 +202,8 @@
           "remove_load": "Usuń dodatkowe zużycie",
           "sidebar": "Panel boczny",
           "entity_prefix": "Prefiks encji Deye",
-          "topology": "Topologia i moc falownika"
+          "topology": "Topologia i moc falownika",
+          "inverter": "Model i fazy falownika"
         }
       },
       "solcast": {
@@ -193,6 +212,23 @@
           "solcast_manual": "Połącz / zmień ustawienia",
           "solcast_import": "Importuj dostępne ustawienia z HA",
           "solcast_disable": "Wyłącz pobieranie przez EMS"
+        }
+      },
+      "inverter": {
+        "title": "Model i fazy falownika",
+        "description": "Wybierz dokładny model z tabliczki. Model z katalogu wyznacza liczbę faz oraz górne ograniczenia mocy; pole liczby faz falownika dotyczy modelu własnego. Przyłącze domu może być trójfazowe także przy falowniku jednofazowym. Następny ekran pokaże wynik bez zapisu. Modele LV 40–60 V; HV i 24 V nie są jeszcze obsługiwane. Zapis wymaga obserwacji.",
+        "data": {
+          "inverter_model": "Model falownika Deye",
+          "inverter_phases": "Liczba faz falownika — dla własnego modelu",
+          "connection_phases": "Liczba faz przyłącza domu",
+          "inverter_phase": "Faza podłączenia falownika jednofazowego"
+        }
+      },
+      "inverter_confirm": {
+        "title": "Potwierdź model falownika",
+        "description": "{model_preview}",
+        "data": {
+          "confirm_model": "Potwierdzam wybrany model, fazy i limity"
         }
       }
     },
@@ -205,7 +241,14 @@
       "sidebar_save_failed": "Nie udało się zapisać lub odświeżyć panelu. Spróbuj ponownie.",
       "invalid_entity_prefix": "Wpisz prefiks bez domeny, używając liter a–z, cyfr i podkreśleń, np. deye_dom_.",
       "reserve_below_low_soc": "Rezerwa EMS musi wynosić co najmniej Battery low SOC + 5 p.p. Bez poprawnego odczytu nie obniżaj rezerwy.",
-      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %."
+      "battery_low_soc_unavailable": "Brak poprawnego odczytu Battery low SOC. Sprawdź przypisanie encji, stan i jednostkę %.",
+      "invalid_inverter_model": "Wybierz model z listy albo konfigurację własną.",
+      "invalid_inverter_phases": "Falownik i przyłącze mogą mieć jedną albo trzy fazy.",
+      "invalid_connection_phases": "Falownik trójfazowy wymaga przyłącza trójfazowego.",
+      "invalid_inverter_phase": "Wybierz L1, L2 lub L3; dla przyłącza jednofazowego wybierz L1.",
+      "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem.",
+      "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami.",
+      "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
@@ -214,7 +257,8 @@
       "solcast_import_incomplete": "Brak kompletnego, poprawnego odczytu korekt Solcast. Użyj ręcznej konfiguracji; brakujących współczynników nie zastępujemy zerem ani jedynką.",
       "sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.",
       "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA.",
-      "invalid_topology": "Wybierz poprawną topologię instalacji."
+      "invalid_topology": "Wybierz poprawną topologię instalacji.",
+      "inverter_settings_changed": "Ustawienia falownika zmieniły się od przygotowania podglądu. Otwórz kreator ponownie."
     }
   }
 }

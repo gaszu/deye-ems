@@ -189,6 +189,43 @@ for section in ("config", "options"):
     doc_en[section]["error"] = {key: errors_en[key] for key in doc[section]["error"]}
     doc_en[section]["abort"] = {key: aborts_en[key] for key in doc[section]["abort"]}
 doc_en["config"]["create_entry"] = {"default": "After installation, find the Deye EMS panel in the Home Assistant left menu. Open Deye EMS or go to /deye-ems. The panel is available to administrators. The integration starts in observation."}
+# Hardware choices and confirmation are kept in the generator so a release
+# cannot silently overwrite the installer text with pre-2.x translations.
+for language, translation in (("pl", doc), ("en", doc_en)):
+    pl = language == "pl"
+    fields = {
+        "inverter_model": "Model falownika Deye" if pl else "Deye inverter model",
+        "inverter_phases": "Liczba faz falownika — dla własnego modelu" if pl else "Inverter phases — for custom model",
+        "connection_phases": "Liczba faz przyłącza domu" if pl else "Home grid connection phases",
+        "inverter_phase": "Faza podłączenia falownika jednofazowego" if pl else "Single-phase inverter connection phase",
+    }
+    title = "Model i fazy falownika" if pl else "Inverter model and phases"
+    note = ("Wybierz dokładny model z tabliczki. Model z katalogu wyznacza liczbę faz oraz górne ograniczenia mocy; pole liczby faz falownika dotyczy modelu własnego. Przyłącze domu może być trójfazowe także przy falowniku jednofazowym. Następny ekran pokaże wynik bez zapisu. Modele LV 40–60 V; HV i 24 V nie są jeszcze obsługiwane. Zapis wymaga obserwacji."
+        if pl else "Choose the exact nameplate model. A catalog model determines inverter phases and power ceilings; the inverter phase-count field applies to custom models. A home can have a three-phase connection with a single-phase inverter. The next screen previews changes without saving. LV 40–60 V models only; HV and 24 V models are not supported yet. Saving requires observation.")
+    confirm = {"title": "Potwierdź model falownika" if pl else "Confirm inverter model",
+        "description": "{model_preview}",
+        "data": {"confirm_model": "Potwierdzam wybrany model, fazy i limity" if pl else "Confirm selected model, phases and limits"}}
+    translation["config"]["step"]["user"]["data"].update(fields)
+    translation["config"]["step"]["user"]["description"] += "\n\n" + note
+    translation["config"]["step"]["user_inverter_confirm"] = json.loads(json.dumps(confirm))
+    translation["options"]["step"]["inverter"] = {"title": title, "description": note, "data": fields}
+    translation["options"]["step"]["inverter_confirm"] = json.loads(json.dumps(confirm))
+    translation["options"]["step"]["init"]["menu_options"]["inverter"] = title
+    errors = {
+        "invalid_inverter_model": "Wybierz model z listy albo konfigurację własną." if pl else "Choose a listed model or custom settings.",
+        "invalid_inverter_phases": "Falownik i przyłącze mogą mieć jedną albo trzy fazy." if pl else "Inverter and home connection must have one or three phases.",
+        "invalid_connection_phases": "Falownik trójfazowy wymaga przyłącza trójfazowego." if pl else "A three-phase inverter requires a three-phase connection.",
+        "invalid_inverter_phase": "Wybierz L1, L2 lub L3; dla przyłącza jednofazowego wybierz L1." if pl else "Choose L1, L2 or L3; a single-phase home connection uses L1.",
+        "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem." if pl else "The phase count does not match the selected model.",
+        "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami." if pl else "Power limits must be valid positive numbers.",
+        "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie." if pl else "Review the summary and check the confirmation.",
+    }
+    for section in ("config", "options"):
+        translation[section]["error"].update(errors)
+    translation["options"]["abort"]["inverter_settings_changed"] = (
+        "Ustawienia falownika zmieniły się od przygotowania podglądu. Otwórz kreator ponownie."
+        if pl else "Inverter settings changed after the preview was prepared. Open the wizard again.")
+
 COMPONENT.joinpath("translations").mkdir(exist_ok=True)
 for path, content in ((COMPONENT/"strings.json", doc_en), (COMPONENT/"translations/en.json", doc_en),
         (COMPONENT/"translations/pl.json", doc)):
@@ -212,7 +249,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
     for path in sorted(COMPONENT.rglob("*")):
         if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
             z.write(path, path.relative_to(ROOT).as_posix())
-    for name in ("README.md","INSTALL.md","MIGRATION.md","VALIDATION.md","SPECIFICATION.md","LICENSE"):
+    for name in ("README.md","INSTALL.md","MIGRATION.md","VALIDATION.md","SPECIFICATION.md","TARIFFS.md","LICENSE"):
         if (ROOT/name).is_file():
             z.write(ROOT/name,name)
 with zipfile.ZipFile(archive) as z:

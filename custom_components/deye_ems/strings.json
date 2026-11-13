@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Panel in the Home Assistant left menu",
-        "description": "**After installation, find the Deye EMS panel in the Home Assistant left menu.**\n\nThe panel is available to administrators. If it is missing, refresh the page and check Sidebar in the integration options and your Home Assistant sidebar settings. Direct panel path: `/deye-ems`.\n\nA local EMS without EMHASS, helpers or automations. Minimum safe SoC is a fixed reserve; weather targets are separate. The integration starts in observation. You can configure entities and other parameters later.",
+        "description": "**After installation, find the Deye EMS panel in the Home Assistant left menu.**\n\nThe panel is available to administrators. If it is missing, refresh the page and check Sidebar in the integration options and your Home Assistant sidebar settings. Direct panel path: `/deye-ems`.\n\nA local EMS without EMHASS, helpers or automations. Minimum safe SoC is a fixed reserve; weather targets are separate. The integration starts in observation. You can configure entities and other parameters later.\n\nChoose the exact nameplate model. A catalog model determines inverter phases and power ceilings; the inverter phase-count field applies to custom models. A home can have a three-phase connection with a single-phase inverter. The next screen previews changes without saving. LV 40–60 V models only; HV and 24 V models are not supported yet. Saving requires observation.",
         "data": {
           "min_soc_percent": "Minimum safe SoC",
           "capacity_kwh": "Battery capacity",
@@ -14,7 +14,18 @@
           "grid_import_limit_kw": "Maximum grid import",
           "grid_phase_limit_kw": "Grid import limit per phase",
           "entity_prefix": "Deye entity prefix",
-          "battery_source_profile": "Battery data source — Deye / optional YamBMS / manual"
+          "battery_source_profile": "Battery data source — Deye / optional YamBMS / manual",
+          "inverter_model": "Deye inverter model",
+          "inverter_phases": "Inverter phases — for custom model",
+          "connection_phases": "Home grid connection phases",
+          "inverter_phase": "Single-phase inverter connection phase"
+        }
+      },
+      "user_inverter_confirm": {
+        "title": "Confirm inverter model",
+        "description": "{model_preview}",
+        "data": {
+          "confirm_model": "Confirm selected model, phases and limits"
         }
       }
     },
@@ -22,7 +33,14 @@
       "invalid_soc_limits": "The SoC reserve plus its margin exceeds the maximum target.",
       "invalid_entity_prefix": "Enter a prefix without a domain using a-z, digits and underscores, for example deye_home_.",
       "reserve_below_low_soc": "The EMS reserve must be at least Battery low SOC plus 5 percentage points. Do not lower it without a valid reading.",
-      "battery_low_soc_unavailable": "No valid Battery low SOC reading. Check the mapped entity, its state and percent unit."
+      "battery_low_soc_unavailable": "No valid Battery low SOC reading. Check the mapped entity, its state and percent unit.",
+      "invalid_inverter_model": "Choose a listed model or custom settings.",
+      "invalid_inverter_phases": "Inverter and home connection must have one or three phases.",
+      "invalid_connection_phases": "A three-phase inverter requires a three-phase connection.",
+      "invalid_inverter_phase": "Choose L1, L2 or L3; a single-phase home connection uses L1.",
+      "inverter_model_phase_mismatch": "The phase count does not match the selected model.",
+      "invalid_inverter_limits": "Power limits must be valid positive numbers.",
+      "confirm_inverter_model": "Review the summary and check the confirmation."
     },
     "abort": {
       "already_configured": "Deye EMS is already configured."
@@ -184,7 +202,8 @@
           "remove_load": "Remove consumption",
           "sidebar": "Sidebar",
           "entity_prefix": "Deye entity prefix",
-          "topology": "Topology and inverter power"
+          "topology": "Topology and inverter power",
+          "inverter": "Inverter model and phases"
         }
       },
       "solcast": {
@@ -193,6 +212,23 @@
           "solcast_manual": "Connect or change settings",
           "solcast_import": "Import available settings from Home Assistant",
           "solcast_disable": "Disable EMS forecast polling"
+        }
+      },
+      "inverter": {
+        "title": "Inverter model and phases",
+        "description": "Choose the exact nameplate model. A catalog model determines inverter phases and power ceilings; the inverter phase-count field applies to custom models. A home can have a three-phase connection with a single-phase inverter. The next screen previews changes without saving. LV 40–60 V models only; HV and 24 V models are not supported yet. Saving requires observation.",
+        "data": {
+          "inverter_model": "Deye inverter model",
+          "inverter_phases": "Inverter phases — for custom model",
+          "connection_phases": "Home grid connection phases",
+          "inverter_phase": "Single-phase inverter connection phase"
+        }
+      },
+      "inverter_confirm": {
+        "title": "Confirm inverter model",
+        "description": "{model_preview}",
+        "data": {
+          "confirm_model": "Confirm selected model, phases and limits"
         }
       }
     },
@@ -205,7 +241,14 @@
       "sidebar_save_failed": "Could not save or refresh the panel. Try again.",
       "invalid_entity_prefix": "Enter a prefix without a domain using a-z, digits and underscores, for example deye_home_.",
       "reserve_below_low_soc": "The EMS reserve must be at least Battery low SOC plus 5 percentage points. Do not lower it without a valid reading.",
-      "battery_low_soc_unavailable": "No valid Battery low SOC reading. Check the mapped entity, its state and percent unit."
+      "battery_low_soc_unavailable": "No valid Battery low SOC reading. Check the mapped entity, its state and percent unit.",
+      "invalid_inverter_model": "Choose a listed model or custom settings.",
+      "invalid_inverter_phases": "Inverter and home connection must have one or three phases.",
+      "invalid_connection_phases": "A three-phase inverter requires a three-phase connection.",
+      "invalid_inverter_phase": "Choose L1, L2 or L3; a single-phase home connection uses L1.",
+      "inverter_model_phase_mismatch": "The phase count does not match the selected model.",
+      "invalid_inverter_limits": "Power limits must be valid positive numbers.",
+      "confirm_inverter_model": "Review the summary and check the confirmation."
     },
     "abort": {
       "no_extra_loads": "No additional consumption channels to remove.",
@@ -214,7 +257,8 @@
       "solcast_import_incomplete": "Could not read complete valid Solcast corrections. Use manual configuration; missing factors are not replaced with zero or one.",
       "sidebar_saved": "Panel visibility saved. Open /deye-ems or refresh the sidebar. The operating mode is unchanged.",
       "panel_not_ready": "The integration has not finished loading. Check its status and Home Assistant logs.",
-      "invalid_topology": "Choose a valid installation topology."
+      "invalid_topology": "Choose a valid installation topology.",
+      "inverter_settings_changed": "Inverter settings changed after the preview was prepared. Open the wizard again."
     }
   }
 }

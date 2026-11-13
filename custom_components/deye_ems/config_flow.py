@@ -17,6 +17,46 @@ from .solcast_import import import_existing_options
 from .appearance import DATA_APPEARANCE
 from . import async_update_panel
 from .soc_policy import reserve_bound_from_state
+from .inverter_models import (HARDWARE_KEYS, applied_limits, hardware_profile,
+                              model_choices, model_selection)
+
+
+def _hardware_fields(values):
+    fields = {vol.Required("inverter_model", default=values.get("inverter_model", "custom")):
+        selector.SelectSelector(selector.SelectSelectorConfig(options=model_choices()))}
+    for key in ("inverter_phases", "connection_phases"):
+        fields[vol.Required(key, default=str(values.get(key, 3)))] = selector.SelectSelector(
+            selector.SelectSelectorConfig(options=[{"value": "1", "label": "1 — jednofazowy"},
+                                                    {"value": "3", "label": "3 — trójfazowy"}]))
+    fields[vol.Required("inverter_phase", default=values.get("inverter_phase", "L1"))] = selector.SelectSelector(
+        selector.SelectSelectorConfig(options=["L1", "L2", "L3"]))
+    return fields
+
+
+def _hardware_draft(values):
+    selected = model_selection(values)
+    candidate = {**values, **selected}
+    return {**candidate, **applied_limits(candidate)}
+
+
+def _hardware_revision(values):
+    return {key: values.get(key) for key in (*HARDWARE_KEYS,
+        "inverter_max_power_kw", "inverter_phase_max_power_kw", "combined_output_limit_kw", "discharge_max_kw")}
+
+
+def _hardware_preview(values):
+    profile = hardware_profile(values)
+    rating = (f"{profile['rated_power_kw']:g} kW" if profile["rated_power_kw"] is not None
+              else "parametry ręczne")
+    return (f"{profile['label']} • {profile['phases']} faz. • bateria {profile['battery_type']} "
+            f"{profile['battery_min_v']:g}–{profile['battery_max_v']:g} V\n\n"
+            f"Moc producenta: {rating}. Przyłącze: {profile['connection_phases']} faz. "
+            f"Faza falownika jednofazowego: {profile['inverter_phase']}.\n\n"
+            f"Limity po zapisie: falownik {values.get('inverter_max_power_kw', 12):g} kW; "
+            f"na fazę {values.get('inverter_phase_max_power_kw', 5):g} kW. "
+            "Niższe limity instalacji, rezerwa SoC i przypisania encji są zachowane. "
+            "Bieżące ograniczenia Deye oraz BMS nadal obowiązują. "
+            "Wybór modelu nie potwierdza zgodności mapowań i firmware; sprawdź je w obserwacji.")
 
 
 def _flow_reserve_bound(flow, sources):
@@ -119,6 +159,7 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             errors = _errors(user_input)
             try:
+                draft = _hardware_draft({**DEFAULT_OPTIONS, **user_input})
                 prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix", "deye_inverter_"))
                 profile = user_input.get("battery_source_profile", "deye")
                 mapping.update(_battery_profile_sources(profile, prefix))
@@ -126,23 +167,45 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if user_input.get("min_soc_percent", 40) < (bound if bound is not None else 40):
                     errors["min_soc_percent"] = "reserve_below_low_soc"
             except ValueError as error:
-                errors["battery_source_profile" if str(error) == "invalid_battery_source_profile"
+                errors["base" if str(error).startswith(("invalid_inverter", "invalid_connection", "inverter_model")) else
+                       "battery_source_profile" if str(error) == "invalid_battery_source_profile"
                        else "entity_prefix"] = str(error)
             if not errors:
+                if draft["inverter_phases"] == 1:
+                    for phase in (1, 2, 3):
+                        for kind in ("grid", "load"):
+                            mapping[f"{kind}_l{phase}_power"] = ""
+                    mapping["asymmetric_phase_feeding"] = ""
+                self._initial_draft = {**draft, "entity_prefix": prefix,
+                    "battery_source_profile": profile, "sources": {**DEFAULT_SOURCES, **mapping}}
+                if draft["inverter_model"] != "custom" or draft["inverter_phases"] == 1:
+                    return await self.async_step_user_inverter_confirm()
                 await self.async_set_unique_id("deye_ems_local")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title="Deye EMS", data={
-                    **DEFAULT_OPTIONS, **user_input, "entity_prefix": prefix,
-                    "battery_source_profile": profile,
-                    "sources": {**DEFAULT_SOURCES, **mapping}})
+                    **self._initial_draft})
         return self.async_show_form(step_id="user", errors=errors, data_schema=_schema(
             {**(user_input or DEFAULT_OPTIONS), "min_soc_lower_bound": bound}, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
                 "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]).extend({
                     vol.Optional("entity_prefix", default=(user_input or {}).get("entity_prefix", "deye_inverter_")):
                         selector.TextSelector(),
                     vol.Required("battery_source_profile", default=(user_input or {}).get(
-                        "battery_source_profile", "deye")): _battery_profile_selector()}),
+                        "battery_source_profile", "deye")): _battery_profile_selector()}).extend(
+                    _hardware_fields(user_input or DEFAULT_OPTIONS)),
             description_placeholders={"mode": "shadow"})
+
+    async def async_step_user_inverter_confirm(self, user_input=None):
+        draft = getattr(self, "_initial_draft", None)
+        if draft is None:
+            return await self.async_step_user()
+        if user_input is not None and user_input.get("confirm_model") is True:
+            await self.async_set_unique_id("deye_ems_local")
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(title="Deye EMS", data=dict(draft))
+        return self.async_show_form(step_id="user_inverter_confirm", data_schema=vol.Schema({
+            vol.Required("confirm_model", default=False): selector.BooleanSelector()}),
+            errors={"base": "confirm_inverter_model"} if user_input is not None else {},
+            description_placeholders={"model_preview": _hardware_preview(draft)})
 
     @staticmethod
     @callback
@@ -163,7 +226,42 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         return battery_source_profile(self.config_entry.data, self.config_entry.options)
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["sidebar", "topology", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
+        return self.async_show_menu(step_id="init", menu_options=["sidebar", "inverter", "topology", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
+
+    async def async_step_inverter(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        values = {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
+        errors = {}
+        if user_input is not None:
+            try:
+                self._hardware_draft = _hardware_draft({**values, **user_input})
+                self._hardware_revision = _hardware_revision(values)
+                return await self.async_step_inverter_confirm()
+            except ValueError as error:
+                errors["base"] = str(error)
+        return self.async_show_form(step_id="inverter", errors=errors,
+            data_schema=vol.Schema(_hardware_fields({**values, **(user_input or {})})))
+
+    async def async_step_inverter_confirm(self, user_input=None):
+        if self._mapping_locked():
+            return self.async_abort(reason="stop_before_mapping")
+        draft = getattr(self, "_hardware_draft", None)
+        if draft is None:
+            return await self.async_step_inverter()
+        if user_input is not None and user_input.get("confirm_model") is True:
+            # Only structural model fields and bounded power ceilings are saved.
+            # No source, SoC, topology or forecast setting follows the model.
+            selected = {key: draft[key] for key in HARDWARE_KEYS}
+            values = {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
+            if _hardware_revision(values) != self._hardware_revision:
+                return self.async_abort(reason="inverter_settings_changed")
+            return self.async_create_entry(title="", data={**dict(self.config_entry.options),
+                **selected, **applied_limits(draft)})
+        return self.async_show_form(step_id="inverter_confirm", data_schema=vol.Schema({
+            vol.Required("confirm_model", default=False): selector.BooleanSelector()}),
+            errors={"base": "confirm_inverter_model"} if user_input is not None else {},
+            description_placeholders={"model_preview": _hardware_preview(draft)})
 
     async def async_step_topology(self, user_input=None):
         if self._mapping_locked():

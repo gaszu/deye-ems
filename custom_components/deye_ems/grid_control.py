@@ -40,9 +40,31 @@ def _vector(value):
             and all(_number(v) for v in value))
 
 
+def _phase_configuration(g):
+    """Validate the physical layout; omitted values retain the 1.x contract.
+
+    Three-element vectors are retained at the boundary, including for a
+    single-phase inverter. The caller puts its native port/LOAD measurements
+    at the actual utility phase index and zeroes the other two positions.
+    Utility CT vectors may still contain all three phases.
+    """
+    inverter = g.get("inverter_phases", 3)
+    connection = g.get("connection_phases", 3)
+    index = g.get("inverter_phase_index", 0)
+    if (type(inverter) is not int or inverter not in (1, 3)
+            or type(connection) is not int or connection not in (1, 3)
+            or type(index) is not int or index not in (0, 1, 2)
+            or inverter > connection or connection == 1 and index != 0):
+        return None
+    return inverter, connection, index
+
+
 def calculate_grid_charge_cap(g: dict) -> dict:
     """Return an instantaneous upper bound; never grant a time-based override."""
-    balanced = g.get("grid_charge_balanced") is True
+    layout = _phase_configuration(g)
+    single = layout is not None and layout[0] == 1
+    balanced = not single and g.get("grid_charge_balanced") is True
+    phase_model = "single_phase" if single else "balanced" if balanced else "conservative"
     result = dict(cap_a=0, planning_cap_a=0, bms_cap_a=0, converter_cap_a=0,
                   deye_cap_a=0, actuator_cap_a=0, inverter_port_planning_cap_a=0,
                   inverter_port_excess_w=None, connection_grid_excess_w=None,
@@ -50,7 +72,7 @@ def calculate_grid_charge_cap(g: dict) -> dict:
                   hard_current_cap_a=0, feedback_cap_a=0,
                   battery_charge_excess_a=None, pv_surplus_credit_w=None,
                   grid_excess_w=None, grid_within_limits=False,
-                  phase_model="balanced" if balanced else "conservative",
+                  phase_model=phase_model,
                   telemetry_ok=False, reason="telemetry_invalid", power_per_a_w=0.0)
     values = [g.get(k) for k in ("load_w", "grid_w", "battery_voltage_v", "current_a")]
     loads, grids = g.get("load_phases_w"), g.get("grid_phases_w")
@@ -58,10 +80,20 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     ports, port_loads = g.get("grid_port_phases_w"), g.get("grid_port_load_phases_w")
     battery = g.get("battery_power_w")
     battery_total = g.get("battery_total_cap_a")
-    if not (g.get("telemetry_valid") is True and all(_number(v) for v in values)
+    if not (layout is not None and g.get("telemetry_valid") is True and all(_number(v) for v in values)
             and all(_number(v) for v in (port, port_load, battery, battery_total))
             and _vector(loads) and _vector(grids) and _vector(ports) and _vector(port_loads)):
         return result
+    if single:
+        _, connection, index = layout
+        # Non-connected native phases cannot silently become charging
+        # headroom. Missing/unknown data must be rejected, never zero-filled
+        # here. Only the coordinator can construct structural zeroes.
+        native_vectors = (ports, port_loads)
+        utility_vectors = (grids, loads) if connection == 1 else ()
+        if any(vector[i] != 0 for vector in (*native_vectors, *utility_vectors)
+               for i in range(3) if i != index):
+            return result
     load, grid, voltage, current = values
     if not (-200 <= load <= 60000 and -60000 <= grid <= 60000
             and all(-200 <= v <= 30000 for v in loads)
@@ -98,17 +130,22 @@ def calculate_grid_charge_cap(g: dict) -> dict:
         return result
     per_amp = voltage / eta
     whole_load = max(load, sum(max(v, 0) for v in loads), 0) + outside
+    phase_load = max(loads[layout[2]], 0) if single else max(max(loads), 0)
     phase_budget = (3 * (phase - phase_margin) - whole_load if balanced else
-                    phase - phase_margin - max(max(loads), 0) - outside)
+                    phase - phase_margin - phase_load - outside)
     load_budget = min(total - margin - whole_load, phase_budget)
     grid_excess = max(grid - (total - margin), sum(grids) - (total - margin),
                  (3 if balanced else 1) * (max(grids) - (phase - phase_margin)), 0)
+    other_phase_excess = (max((grids[i] - (phase - phase_margin)
+                              for i in range(3) if i != layout[2]), default=0)
+                          if single and layout[1] == 3 else 0)
     # The inverter GRID port is a separate bottleneck from the utility CT.
     # Only native LOAD traverses that port when utility power supplies LOAD;
     # passive loads between CT and GRID are already in the utility budget.
     native_load = max(port_load, sum(max(v, 0) for v in port_loads), 0)
+    native_phase_load = max(port_loads[layout[2]], 0) if single else max(max(port_loads), 0)
     port_phase_budget = (3 * (port_phase - phase_margin) - native_load if balanced else
-                         port_phase - phase_margin - max(max(port_loads), 0))
+                         port_phase - phase_margin - native_phase_load)
     port_budget = min(port_total - margin - native_load, port_phase_budget)
     port_excess = max(port - (port_total - margin), sum(ports) - (port_total - margin),
                       (3 if balanced else 1) * (max(ports) - (port_phase - phase_margin)), 0)
@@ -121,6 +158,11 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     hard_cap = min(deye_cap, actuator_cap, bms_cap, converter_cap,
                    math.floor(total_battery_cap))
     feedback_cap = math.floor(max(current - excess / per_amp, 0)) if excess > 0 else hard_cap
+    if other_phase_excess > 0:
+        # A single-phase charger cannot remedy overload on another phase.
+        # Stop optional charging conservatively rather than attributing that
+        # phase's W to a fictitious partial charger-current correction.
+        feedback_cap = 0
     charging_w = max(-battery, 0)
     # Positive GRID can feed LOAD directly and free PV for the battery. Credit
     # only charging that remains after subtracting every possible imported W,
@@ -137,6 +179,7 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     cap = max(0, min(hard_cap, load_cap, port_cap, feedback_cap))
     reason = ("bms_blocked" if bms < 1 else
               "battery_charge_headroom" if battery_excess_a > 0 else
+              "connection_other_phase_headroom" if other_phase_excess > 0 else
               "inverter_grid_headroom" if port_excess > grid_excess else
               "grid_headroom" if grid_excess > 0 else
               "deye_charge_cap" if deye_cap <= min(actuator_cap, bms_cap, converter_cap, load_cap, port_cap) else
@@ -156,7 +199,7 @@ def calculate_grid_charge_cap(g: dict) -> dict:
                 connection_grid_excess_w=round(grid_excess, 6),
                 inverter_port_excess_w=round(port_excess, 6),
                 inverter_port_within_limits=port_excess == 0,
-                phase_model="balanced" if balanced else "conservative",
+                phase_model=phase_model,
                 telemetry_ok=True, reason=reason, power_per_a_w=round(per_amp, 6))
 
 
@@ -172,15 +215,17 @@ def calculate_grid_charge_increase_cap(g: dict) -> dict:
     if not cap["telemetry_ok"]:
         return dict(increase_cap_a=0, grid_step_headroom_a=0,
                     telemetry_ok=False, reason="telemetry_invalid")
+    layout = _phase_configuration(g)
+    single = layout[0] == 1
     total_available = (g.get("total_limit_w", 12000) - g.get("headroom_w", 500)
                        - max(g["grid_w"], sum(g["grid_phases_w"])))
     phase_available = (g.get("phase_limit_w", 5000) - g.get("phase_headroom_w", 250)
-                       - max(g["grid_phases_w"]))
+                       - (g["grid_phases_w"][layout[2]] if single else max(g["grid_phases_w"])))
     port_available = (g["inverter_grid_import_limit_w"] - g.get("headroom_w", 500)
                       - max(g["grid_port_w"], sum(g["grid_port_phases_w"])))
     port_phase_available = (g["inverter_grid_phase_limit_w"] - g.get("phase_headroom_w", 250)
-                            - max(g["grid_port_phases_w"]))
-    multiplier = 3 if g.get("grid_charge_balanced") is True else 1
+                            - (g["grid_port_phases_w"][layout[2]] if single else max(g["grid_port_phases_w"])))
+    multiplier = 3 if not single and g.get("grid_charge_balanced") is True else 1
     available = max(0, min(total_available, phase_available * multiplier,
                            port_available, port_phase_available * multiplier))
     per_amp = g["battery_voltage_v"] / g.get("charge_efficiency", .9)

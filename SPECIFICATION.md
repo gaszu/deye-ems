@@ -1,4 +1,15 @@
-# Specyfikacja Deye EMS 1.0.0
+# Specyfikacja Deye EMS 2.0.0
+
+## Rozszerzenia linii 2.x
+
+- Dokładny model EU lub profil własny określa jedną/trzy fazy i granice sprzętowe. W katalogu 2.0.0 znajdują się 16 modeli LV SG04LP1-EU, SG05LP1-EU-SM2-P i SG04LP3-EU. HV nie jest jeszcze obsługiwane. Katalog nie zastępuje mapowań ani potwierdzenia zgodności firmware.
+- Limity producenta ograniczają moc oraz całkowity prąd ładowania, wspólny dla PV i sieci. Nie nadpisują niższych nastaw użytkownika, BMS ani Deye. Automatyczne minus 5% dotyczy aktualnego maksymalnego prądu Deye; port GRID i przyłącze są kontrolowane oddzielnie. Przepustowość AC producenta jest informacją, nie podwyższeniem obecnego limitu portu.
+- Dla jednej fazy falownika wystarczają jego sumaryczne pomiary GRID i LOAD; są przypisane do rzeczywistej fazy połączenia. Pozostałe fazy falownika nie istnieją. Trójfazowy pomiar przyłącza CT nadal wymaga trzech rzeczywistych faz CT. Brak pomiaru lub przeciążenie fazy przyłącza blokuje zwiększanie ładowania.
+- Model i fazy są zapisywane atomowo przez kreator, wyłącznie w obserwacji, po osobnym potwierdzeniu podglądu. Przypisania źródeł, rezerwa i topologia nie są zmieniane przez wybór modelu. Nowa instalacja pozostaje w obserwacji.
+- Migracja 1.x zachowuje zapisane ustawienia i stan. Brak nowych pól oznacza profil własny, falownik/przyłącze trójfazowe i L1 jako etykietę fazy; trzyfazowe obliczenia pozostają zachowane.
+- Moduł kalendarza rozdziela sezon taryfy od podstawy zegara licznika i obsługuje przedziały przez północ oraz doby 23/25 h. Sterowanie 2.0.0 zachowuje dawny codzienny harmonogram G13. Oficjalny profil operatora jest podglądem bez uprawnienia do sterowania; katalog operatorów/taryf jest kolejnym etapem. Szczegóły w [TARIFFS.md](TARIFFS.md).
+
+## Zachowana podstawa wersji 1.x
 
 Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zachowanie; rozszerzenia i strojenie będą opisywane w następnych wersjach.
 

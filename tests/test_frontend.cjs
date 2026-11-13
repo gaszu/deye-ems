@@ -16,7 +16,7 @@ class FakeStyle {
 }
 
 class FakeNode {
-  constructor(attrs) {this.attrs=attrs;this.dataset={};this.events={};this.value=decode(attrs.value??"");this.open=attrs.tag==="details"&&attrs.open===true;this.checked=attrs.checked===true;this.disabled=attrs.disabled===true;this.required=attrs.required===true;for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
+  constructor(attrs) {this.attrs=attrs;this.type=attrs.type;this.dataset={};this.events={};this.value=decode(attrs.value??"");this.open=attrs.tag==="details"&&attrs.open===true;this.checked=attrs.checked===true;this.disabled=attrs.disabled===true;this.required=attrs.required===true;for(const [key,value] of Object.entries(attrs))if(key.startsWith("data-"))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
   addEventListener(type,callback) {this.events[type]=callback;}
   reportValidity() {const n=Number(this.value);return this.value!==""&&Number.isFinite(n)&&n>=Number(this.attrs.min)&&n<=Number(this.attrs.max);}
   matches(selector) {return selector.split(",").some(s=>{const match=/^(input|select)\[data-([a-z-]+)\]$/.exec(s);return match&&this.attrs.tag===match[1]&&this.dataset[match[2].replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]!==undefined;});}
@@ -24,10 +24,10 @@ class FakeNode {
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const hardwareName=/data-hardware-field="([^"]+)"/.exec(match[1])?.[1];const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=hardwareName?this.nodes.find(n=>n.dataset.hardwareField===hardwareName):name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
-  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const source=/\[data-source-field="([^"]+)"\]/.exec(selector)?.[1];if(source)return this.nodes.find(n=>n.dataset.sourceField===source);const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
+  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const hardware=/\[data-hardware-field="([^"]+)"\]/.exec(selector)?.[1];if(hardware)return this.nodes.find(n=>n.dataset.hardwareField===hardware);const source=/\[data-source-field="([^"]+)"\]/.exec(selector)?.[1];if(source)return this.nodes.find(n=>n.dataset.sourceField===source);const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
   querySelectorAll(selector) {const data=/^\[data-([a-z-]+)\]$/.exec(selector)?.[1];if(data){const key=data.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());return this.nodes.filter(n=>n.dataset[key]!==undefined);}return this.nodes.filter(n=>selector==="input[data-key]"&&n.attrs.tag==="input"&&n.dataset.key!==undefined);}
 }
 
@@ -40,13 +40,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-1-0-21");
+  const Panel = registry.get("deye-ems-panel-2-0-0");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"1.0.21",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.0.0",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -62,8 +62,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-1-0-21"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 1\.0\.21/);
+  assert.notEqual(registry.get("deye-ems-panel-2-0-0"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.0\.0/);
 });
 
 function apiUsage(panel,changes={}){
@@ -81,8 +81,8 @@ test("software version and manual update check are visible without opening advan
   const {panel,calls,reloads}=fixture();
   const html=panel.shadowRoot.innerHTML.split("<details>")[0];
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>1\.0\.21<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>1\.0\.21<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.0\.0<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.0\.0<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -91,18 +91,18 @@ test("software version and manual update check are visible without opening advan
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"1.0.21",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.0.0",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
-  html=updateInfo(panel,{status:"available",latest_version:"1.0.100",checked_at});
-  assert.match(html,/Dostępna aktualizacja: 1\.0\.100/);
+  html=updateInfo(panel,{status:"available",latest_version:"2.0.100",checked_at});
+  assert.match(html,/Dostępna aktualizacja: 2\.0\.100/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"1.0.22",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.0.1",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"1.0.21"},
-    {status:"current",latest_version:"1.0.21",checked_at:"0"},
-    {status:"current",latest_version:"1.0.21",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"1.0.21",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.0.0"},
+    {status:"current",latest_version:"2.0.0",checked_at:"0"},
+    {status:"current",latest_version:"2.0.0",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.0.0",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -110,12 +110,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="1.0.22";panel.render();
+  panel.payload.backend_version="2.0.1";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v1.0.21","1.0.21-beta","01.0.21"]){
+  for(const value of [undefined,null,17,"unknown","v2.0.0","2.0.0-beta","02.0.0"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -125,22 +125,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"1.0.22",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.0.1",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 1\.0\.22/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.0\.1/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"1.0.22",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v1\.0\.22"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.0\.1"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['1.0.22\" onclick=\"unexpected()','<img src=x>','1.0.22/../../x',"v1.0.22",true,18,"1.0.22-beta","999999999.0.1"]){
+  for(const latest_version of ['2.0.1\" onclick=\"unexpected()','<img src=x>','2.0.1/../../x',"v2.0.1",true,18,"2.0.1-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -159,9 +159,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"1.0.22",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"1.0.22");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.0.1");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -171,9 +171,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"1.0.22",updates:{status:"not_checked"}};
-  finish({backend_version:"1.0.21",updates:{status:"current",latest_version:"1.0.21",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"1.0.22");
+  panel.payload={...panel.payload,backend_version:"2.0.1",updates:{status:"not_checked"}};
+  finish({backend_version:"2.0.0",updates:{status:"current",latest_version:"2.0.0",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.0.1");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -208,20 +208,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"1.0.22",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.0.1",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"1.0.22");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"1.0.22",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.0.1");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.0.1",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="1.0.22";
+  panel.payload.backend_version="2.0.1";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -1102,6 +1102,203 @@ test("mode changes are displayed during editing and cancellation stays available
 test("phase model requires a fresh explicit runtime confirmation",()=>{
   const {panel}=fixture();panel.payload.data.inputs.grid_charge_balanced=true;panel.render();assert.match(panel.shadowRoot.innerHTML,/Bilansowanie poboru GRID potwierdzone/);
   panel.payload.data.updated_at=new Date(NOW-30001).toISOString();panel.render();assert.doesNotMatch(panel.shadowRoot.innerHTML,/Bilansowanie poboru GRID potwierdzone/);assert.match(panel.shadowRoot.innerHTML,/bilansowanie GRID niepotwierdzone/);
+});
+
+function hardwareData(panel,phases=1){
+  panel.payload.options.hardware_profile={model_id:"SUN-6K-SG04LP1-EU",label:"SUN-6K-SG04LP1-EU",phases,
+    connection_phases:3,inverter_phase:"L2",battery_type:"LV",battery_min_v:40,battery_max_v:60,
+    rated_power_kw:6,phase_max_power_kw:6,grid_passthrough_a:45,max_charge_current_a:135,
+    control_supported:true,source_url:"https://www.deyeinverter.com/product/verified-model.html"};
+  panel.payload.options.effective_hardware_limits={inverter_max_power_kw:5,inverter_phase_max_power_kw:4.5};
+  panel.render();
+}
+const hardwareForm=(errors={})=>({type:"form",flow_id:"hardware-flow",step_id:"inverter",errors,
+  data_schema:[
+    {name:"inverter_model",required:true,default:"custom",selector:{select:{options:[{value:"custom",label:"Własny / dotychczasowe parametry"},{value:"SUN-6K-SG04LP1-EU",label:"Deye 6 kW — 1 faza"}]}}},
+    {name:"inverter_phases",required:true,default:"3",selector:{select:{options:["1","3"]}}},
+    {name:"connection_phases",required:true,default:"3",selector:{select:{options:["1","3"]}}},
+    {name:"inverter_phase",required:true,default:"L1",selector:{select:{options:["L1","L2","L3"]}}}]});
+const hardwareConfirmation=()=>({type:"form",flow_id:"hardware-flow",step_id:"inverter_confirm",errors:{},
+  description_placeholders:{model_preview:"Model SUN-6K-SG04LP1-EU. Jedna faza; dotychczasowa rezerwa SoC i niższe limity zachowane."},
+  data_schema:[{name:"confirm_model",required:true,default:false,selector:{boolean:{}}}]});
+function nativeHardware(panel,{preview,finish}={}){
+  const apiCalls=[],effects={writes:0};
+  panel._hass.callApi=async(method,route,data)=>{
+    apiCalls.push({method,route,data});
+    if(method==="DELETE")return {};
+    if(route==="config/config_entries/options/flow")return {type:"menu",flow_id:"hardware-flow",step_id:"init",menu_options:["inverter","parameters","sources"]};
+    if(data.next_step_id==="inverter")return hardwareForm();
+    if(Object.hasOwn(data,"inverter_model"))return preview?preview(data):hardwareConfirmation();
+    assert.equal(data.confirm_model,true);effects.writes++;
+    return finish?finish(data):{type:"create_entry",data:{private_server_result:"do-not-retain"}};
+  };
+  return {apiCalls,effects};
+}
+function hardwareInput(panel,name,value){
+  const input=panel.shadowRoot.querySelector('[data-hardware-field="'+name+'"]');assert.ok(input,name);
+  if(input.type==="checkbox")input.checked=value;else input.value=value;
+  input.events.input();return input;
+}
+
+test("hardware summary is always visible with separate catalog effective and connection limits",()=>{
+  const {panel,calls}=fixture();hardwareData(panel);
+  const html=panel.shadowRoot.innerHTML.split("<details>")[0];
+  assert.match(html,/Falownik i ograniczenia/);assert.match(html,/SUN-6K-SG04LP1-EU/);
+  assert.match(html,/Jednofazowy · podłączenie L2 · przyłącze trójfazowe/);
+  assert.match(html,/Moc katalogowa: 6 kW/);assert.match(html,/Skuteczny limit falownika: 5 kW/);
+  assert.match(html,/na fazę: 4,5 kW/);assert.match(html,/Limit przyłącza: 12 kW/);
+  assert.match(html,/Informacja sprzętowa; nie podwyższa zapisanego limitu/);
+  assert.match(html,/Dokumentacja producenta/);assert.equal(calls.length,0);
+});
+
+test("single-phase hardware never describes three-phase balancing even when an old flag is set",()=>{
+  const {panel}=fixture();hardwareData(panel);panel.payload.data.inputs.grid_charge_balanced=true;panel.render();
+  assert.match(panel.shadowRoot.innerHTML,/Falownik jednofazowy — faza L2/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Bilansowanie poboru GRID potwierdzone/);
+  hardwareData(panel,3);assert.match(panel.shadowRoot.innerHTML,/Trójfazowy/);
+  assert.match(panel.shadowRoot.innerHTML,/Bilansowanie poboru GRID potwierdzone/);
+});
+
+test("single-phase LOAD readout displays only the actual connected port phase",()=>{
+  const {panel}=fixture();hardwareData(panel);Object.assign(panel.payload.data.inputs,{grid_l1_power:0,grid_l2_power:1200,grid_l3_power:0});
+  panel.render();const html=panel.gridPhaseReadoutHtml();
+  assert.equal(html,"GRID L2 (port jednofazowy): 1,2 kW");assert.doesNotMatch(html,/L1|L3/);
+  const regulation=panel.shadowRoot.innerHTML.split("<h2>Regulacja ładowania</h2>")[1].split("</section>")[0];
+  assert.match(regulation,/GRID L2 \(port jednofazowy\): 1,2 kW/);assert.doesNotMatch(regulation,/L1 \/ L2 \/ L3/);
+});
+
+test("single-phase inverter still displays all real utility CT phases on a three-phase connection",()=>{
+  const {panel}=fixture();hardwareData(panel);panel.payload.options.topology="load_with_external_ct";
+  Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",grid_l1_power:1100,grid_l2_power:1200,grid_l3_power:1300});
+  assert.equal(panel.gridPhaseReadoutHtml(),"CT L1 / L2 / L3: 1,1 / 1,2 / 1,3 kW");
+});
+
+test("one-phase CT connection has one readout while stale or unknown phase readings remain missing",()=>{
+  const {panel}=fixture();hardwareData(panel);Object.assign(panel.payload.options.hardware_profile,{connection_phases:1,inverter_phase:"L1"});
+  panel.payload.options.topology="load_with_external_ct";Object.assign(panel.payload.data.inputs,{topology:"load_with_external_ct",grid_l1_power:1250,grid_l2_power:0,grid_l3_power:0});
+  assert.equal(panel.gridPhaseReadoutHtml(),"CT L1 (przyłącze jednofazowe): 1,3 kW");
+  panel.payload.data.updated_at=new Date(NOW-30001).toISOString();assert.equal(panel.gridPhaseReadoutHtml(),"CT L1 (przyłącze jednofazowe): — kW");
+  panel.payload.options.hardware_profile.inverter_phase="unknown";assert.equal(panel.gridPhaseReadoutHtml(),"Faza podłączenia niepotwierdzona: — kW");
+});
+
+test("hardware names and URLs are escaped and unsupported control is explicit",()=>{
+  const {panel}=fixture();hardwareData(panel);const h=panel.payload.options.hardware_profile;
+  h.label='<img src=x onerror="unexpected()">';h.inverter_phase='<script>x</script>';h.control_supported=false;
+  for(const source_url of ["javascript:unexpected()","https://untrusted.example/model","https://deye.com/\" onload=x","https://deye.com/\nattack"]){
+    h.source_url=source_url;const html=panel.hardwareHtml();assert.doesNotMatch(html,/<img|<script|href=/);
+    assert.match(html,/nie ma potwierdzonej obsługi sterowania/);assert.match(html,/&lt;img/);
+  }
+});
+
+test("hardware opens native model selection without changing options source or mode",async()=>{
+  const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeHardware(panel);
+  await panel.shadowRoot.getElementById("hardware-open").events.click();
+  assert.equal(panel.hardwareFlow.step_id,"inverter");assert.equal(panel.hardwareDraft.inverter_model,"custom");
+  assert.match(panel.hardwareEditorHtml(),/Pokaż parametry modelu/);
+  assert.equal(JSON.stringify(panel.payload),before);assert.equal(effects.writes,0);assert.equal(calls.length,0);
+  assert.deepEqual(JSON.parse(JSON.stringify(apiCalls)),[
+    {method:"POST",route:"config/config_entries/options/flow",data:{handler:"test-entry"}},
+    {method:"POST",route:"config/config_entries/options/flow/hardware-flow",data:{next_step_id:"inverter"}}]);
+});
+
+test("hardware selection previews single-phase model and only explicit consent saves",async()=>{
+  const {panel,calls}=fixture(),{apiCalls,effects}=nativeHardware(panel),before=JSON.stringify(panel.payload);
+  await panel.openHardware();hardwareInput(panel,"inverter_model","SUN-6K-SG04LP1-EU");hardwareInput(panel,"inverter_phase","L2");
+  await panel.submitHardware();assert.equal(effects.writes,0);assert.equal(panel.hardwareFlow.step_id,"inverter_confirm");
+  assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{inverter_model:"SUN-6K-SG04LP1-EU",inverter_phases:"3",connection_phases:"3",inverter_phase:"L2"});
+  assert.equal(panel.hardwareDraft.confirm_model,false);assert.match(panel.hardwareEditorHtml(),/dotychczasowa rezerwa SoC i niższe limity zachowane/);
+  const count=apiCalls.length;await panel.submitHardware();assert.equal(apiCalls.length,count);assert.match(panel.hardwareEditorHtml(),/zaznacz potwierdzenie/);
+  hardwareInput(panel,"confirm_model",true);await panel.shadowRoot.getElementById("hardware-form").events.submit({preventDefault(){}});
+  assert.equal(effects.writes,1);assert.equal(panel.hardwareFlow.type,"create_entry");assert.equal(panel.payload.mode,"shadow");
+  assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{confirm_model:true});
+  assert.equal(JSON.stringify(panel.payload),before);assert.ok(calls.every(message=>message.type==="deye_ems/status"));
+  assert.doesNotMatch(JSON.stringify(panel.hardwareFlow)+panel.hardwareEditorHtml(),/do-not-retain|private_server_result/);
+});
+
+test("cancelling hardware selection or preview deletes only the draft",async()=>{
+  for(const preview of [false,true]){
+    const {panel}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeHardware(panel);
+    await panel.openHardware();hardwareInput(panel,"inverter_model","SUN-6K-SG04LP1-EU");if(preview)await panel.submitHardware();
+    await panel.shadowRoot.getElementById("hardware-cancel").events.click();
+    assert.equal(effects.writes,0);assert.equal(panel.hardwareOpen,false);assert.equal(panel.hardwareFlow,null);
+    assert.deepEqual(JSON.parse(JSON.stringify(panel.hardwareDraft)),{});assert.equal(JSON.stringify(panel.payload),before);
+    assert.equal(apiCalls.at(-1).method,"DELETE");assert.match(apiCalls.at(-1).route,/hardware-flow$/);
+  }
+});
+
+test("hardware form drafts and focus survive status polling",async()=>{
+  const {panel}=fixture();nativeHardware(panel);await panel.openHardware();
+  const input=hardwareInput(panel,"inverter_phase","L2");panel.shadowRoot.activeElement=input;
+  const html=panel.shadowRoot.innerHTML;await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);
+  assert.equal(panel.hardwareDraft.inverter_phase,"L2");panel.shadowRoot.activeElement=null;panel.render();
+  assert.equal(panel.shadowRoot.querySelector('[data-hardware-field="inverter_phase"]').value,"L2");
+});
+
+test("hardware validation errors preserve selection and never echo raw errors",async()=>{
+  const {panel}=fixture();nativeHardware(panel,{preview:()=>hardwareForm({base:"private-provider-error"})});
+  await panel.openHardware();hardwareInput(panel,"inverter_phase","L2");await panel.submitHardware();
+  assert.equal(panel.hardwareDraft.inverter_phase,"L2");assert.match(panel.hardwareEditorHtml(),/Sprawdź wybór modelu/);
+  assert.doesNotMatch(panel.hardwareEditorHtml(),/private-provider-error/);
+});
+
+test("hardware requires explicit observation and cannot save after an external mode change",async()=>{
+  const {panel,calls}=fixture(),{apiCalls,effects}=nativeHardware(panel);panel.payload.mode="active";panel.render();
+  await panel.openHardware();assert.equal(apiCalls.length,0);assert.match(panel.hardwareEditorHtml(),/Przejdź do obserwacji/);
+  panel._hass.callWS=async message=>{calls.push(message);return {...panel.payload,mode:"shadow"};};
+  await panel.shadowRoot.getElementById("hardware-observe").events.click();assert.equal(panel.hardwareFlow.step_id,"inverter");
+  panel.payload.mode="active";const count=apiCalls.length;await panel.submitHardware();assert.equal(apiCalls.length,count);assert.equal(effects.writes,0);
+});
+
+test("hardware confirmation is never prechecked from a server default and unknown schemas cannot be submitted",async()=>{
+  const {panel}=fixture();nativeHardware(panel,{preview:()=>{const result=hardwareConfirmation();result.data_schema[0].default=true;return result;}});
+  await panel.openHardware();await panel.submitHardware();assert.equal(panel.hardwareDraft.confirm_model,false);
+  await panel.cancelHardware();nativeHardware(panel,{preview:()=>({...hardwareConfirmation(),data_schema:[{name:"api_key",default:"do-not-copy",selector:{text:{}}}]})});
+  await panel.openHardware();await panel.submitHardware();assert.match(panel.hardwareEditorHtml(),/Nie udało się/);
+  assert.doesNotMatch(panel.hardwareEditorHtml()+JSON.stringify(panel.hardwareFlow),/do-not-copy|api_key/);
+});
+
+test("hardware committing save cannot be cancelled while a cancelled late opening cannot return",async()=>{
+  const {panel}=fixture();let finish;nativeHardware(panel,{finish:()=>new Promise(resolve=>{finish=resolve;})});
+  await panel.openHardware();await panel.submitHardware();hardwareInput(panel,"confirm_model",true);
+  const saving=panel.submitHardware();assert.equal(panel.hardwareCommitting,true);assert.equal(panel.shadowRoot.getElementById("hardware-cancel").disabled,true);
+  await panel.cancelHardware();assert.equal(panel.hardwareOpen,true);finish({type:"create_entry"});await saving;
+  assert.equal(panel.hardwareFlow.type,"create_entry");await panel.cancelHardware();
+  let opened;const apiCalls=[];panel._hass.callApi=async(method,route)=>{apiCalls.push({method,route});return method==="POST"?new Promise(resolve=>{opened=resolve;}):{};};
+  const opening=panel.openHardware();await flush();await panel.cancelHardware();
+  opened({type:"menu",flow_id:"late-hardware-flow",step_id:"init",menu_options:["inverter"]});await opening;await flush();
+  assert.equal(panel.hardwareOpen,false);assert.equal(panel.hardwareFlow,null);assert.equal(apiCalls.at(-1).method,"DELETE");assert.match(apiCalls.at(-1).route,/late-hardware-flow$/);
+});
+
+test("hardware editor participates in unsaved-change protection and disconnect cleanup",async()=>{
+  const {panel,reloads}=fixture(),{apiCalls}=nativeHardware(panel);await panel.openHardware();
+  assert.equal(panel.hasUnsavedChanges(),true);assert.equal(panel.reloadInterface(),false);assert.equal(reloads(),0);
+  panel.disconnectedCallback();await flush();assert.equal(panel.hardwareOpen,false);assert.equal(panel.hardwareFlow,null);
+  assert.ok(apiCalls.some(call=>call.method==="DELETE"&&call.route.endsWith("hardware-flow")));
+});
+
+function calendarData(panel,changes={}){
+  panel.payload.options.tariff_calendar={profile_id:"legacy_g13",label:"Dotychczasowy harmonogram EMS G13",version:"legacy-1",clock_basis:"local",runtime_allowed:true,preview_only:false,
+    current_zone:"off_peak",next_change:"2026-11-11T04:00:00+01:00",
+    today:[{start:"2026-11-10T07:00:00+01:00",end:"2026-11-10T13:00:00+01:00",zone:"morning_peak",grid_charge_allowed:false,reason:"winter",legacy_slot:3}],
+    tomorrow:[{start:"2026-11-11T00:00:00+01:00",end:"2026-11-11T04:00:00+01:00",zone:"off_peak",grid_charge_allowed:true,reason:"winter",legacy_slot:1}],...changes};
+  panel.render();return panel.tariffCalendarHtml();
+}
+test("retained calendar shows today tomorrow zone and clock basis without offering unsupported operators",()=>{
+  const {panel,calls}=fixture();const html=calendarData(panel);
+  assert.match(html,/Dotychczasowy harmonogram EMS G13/);assert.match(html,/Dziś/);assert.match(html,/Jutro/);
+  assert.match(html,/Szczyt przedpołudniowy/);assert.match(html,/Zablokowane/);assert.match(html,/Dozwolone według zasad sezonu/);
+  assert.match(html,/Czas lokalny Europe\/Warsaw/);assert.match(html,/Sezon zimowy · slot 3/);
+  assert.match(html,/bez automatycznych wyjątków operatora/);assert.match(html,/Wybór operatora.*kolejnym etapie/);
+  assert.match(panel.shadowRoot.innerHTML.split("<details>")[0],/Harmonogram taryfy/);assert.equal(calls.length,0);
+});
+test("preview calendar and fixed meter clock are distinct from a runtime schedule",()=>{
+  const {panel}=fixture();const html=calendarData(panel,{profile_id:"tauron_g13_2026",label:"TAURON G13 — podgląd",preview_only:true,runtime_allowed:false,clock_basis:"fixed_cet"});
+  assert.match(html,/Stały czas zimowy/);assert.match(html,/Podgląd kalendarza/);assert.doesNotMatch(html,/Zachowany profil G13 z wersji 1.x/);
+});
+test("calendar rejects malformed intervals and escapes labels without reading raw source URLs",()=>{
+  const {panel}=fixture();const html=calendarData(panel,{label:'<img src=x>',version:'<script>x</script>',source_url:'javascript:unexpected()',
+    today:[{start:"unknown",end:"unknown",zone:"off_peak",grid_charge_allowed:true},{start:"2026-11-10T13:00:00+01:00",end:"2026-11-10T07:00:00+01:00",zone:"off_peak",grid_charge_allowed:true}]});
+  assert.match(html,/&lt;img/);assert.match(html,/Brak poprawnych przedziałów/);assert.doesNotMatch(html,/<img|<script|javascript:/);
 });
 
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
