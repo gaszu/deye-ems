@@ -4,10 +4,16 @@ from copy import deepcopy
 import json
 import importlib.util
 from pathlib import Path
+import shutil
+from string import Formatter
+import subprocess
+import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1] / "custom_components/deye_ems"
 C = {}
@@ -192,6 +198,52 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         for platform in C["PLATFORMS"]:
             self.assertTrue((ROOT/(platform+".py")).is_file())
         self.assertTrue((ROOT/"frontend/deye-ems-panel.js").is_file())
+
+    async def test_release_translations_show_sidebar_notice_in_actual_initial_flow(self):
+        """Verify the generated install artifact, including HA's English fallback."""
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout = Path(temporary)
+            shutil.copytree(ROOT, checkout/"custom_components/deye_ems",
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            shutil.copy2(ROOT.parents[1]/"build_release.py", checkout/"build_release.py")
+            output = subprocess.check_output([sys.executable, str(checkout/"build_release.py")],
+                cwd=checkout, text=True, encoding="utf-8")
+            with zipfile.ZipFile(json.loads(output)["archive"]) as archive:
+                translations = {language: json.loads(archive.read(
+                    f"custom_components/deye_ems/translations/{language}.json"))
+                    for language in ("en", "pl")}
+                self.assertEqual(translations["en"], json.loads(archive.read(
+                    "custom_components/deye_ems/strings.json")))
+
+        def leaves(value, prefix=""):
+            return {key: text for name, child in value.items()
+                for key, text in (leaves(child, prefix+name+".").items()
+                    if isinstance(child, dict) else [(prefix+name, child)])}
+
+        english, polish = (leaves(translations[language]) for language in ("en", "pl"))
+        self.assertEqual(english.keys(), polish.keys(), "English fallback must cover every translated key")
+        for key in english:
+            placeholders = lambda text: {field for _, field, _, _ in Formatter().parse(text) if field}
+            self.assertEqual(placeholders(english[key]), placeholders(polish[key]), key)
+            self.assertNotIn("[%key:", english[key], "Custom integrations cannot compile references")
+
+        flow = self.flow()["DeyeEMSConfigFlow"]()
+        forms = [await flow.async_step_user(), await flow.async_step_user({"min_soc_percent": 1})]
+        self.assertTrue(forms[1]["errors"], "Exercise the form after rejected input too")
+        notices = {"pl": "Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant",
+            "en": "After installation, find the Deye EMS panel in the Home Assistant left menu"}
+        for form in forms:
+            self.assertEqual(form["type"], "form")
+            fields = {marker.key for marker in form["data_schema"]}
+            for language, translation in translations.items():
+                step = translation["config"]["step"][form["step_id"]]
+                description = step["description"].format_map(form["description_placeholders"])
+                self.assertIn(notices[language], description.split("\n\n", 1)[0])
+                self.assertTrue(step["title"])
+                self.assertTrue(fields <= step["data"].keys(), "Actual form fields need translated labels")
+                success = translation["config"]["create_entry"]["default"]
+                self.assertIn(notices[language], success)
+                self.assertIn("/deye-ems", success)
 
     async def test_phase_balancing_source_selector_accepts_switch_entities(self):
         flow = self.flow()["DeyeEMSOptionsFlow"]()

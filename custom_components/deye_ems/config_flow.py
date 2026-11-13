@@ -9,7 +9,9 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers import entity_registry as er
 
-from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OPTION_RANGES
+from .const import (BATTERY_SOURCE_KEYS, BATTERY_SOURCE_PROFILES, DEFAULT_OPTIONS,
+                    DEFAULT_SOURCES, DOMAIN, OPTION_RANGES, YAMBMS_SOURCES,
+                    battery_source_profile)
 from .solcast import validate_config
 from .solcast_import import import_existing_options
 from .appearance import DATA_APPEARANCE
@@ -24,7 +26,7 @@ def _flow_reserve_bound(flow, sources):
 
 
 def _deye_prefix_sources(prefix):
-    """Build explicit Deye mappings only; never rewrite BMS, PV or pump IDs."""
+    """Build explicit Deye mappings only; never rewrite YamBMS, PV or pump IDs."""
     if not isinstance(prefix, str):
         raise ValueError("invalid_entity_prefix")
     prefix = prefix.strip().lower().rstrip("_")
@@ -40,6 +42,24 @@ def _deye_prefix_sources(prefix):
         if name.startswith("deye_inverter_"):
             mapping[key] = f"{domain}.{prefix}{name[len('deye_inverter_'):]}"
     return prefix, mapping
+
+
+def _battery_profile_sources(profile, prefix):
+    if profile not in BATTERY_SOURCE_PROFILES:
+        raise ValueError("invalid_battery_source_profile")
+    if profile == "yambms":
+        return dict(YAMBMS_SOURCES)
+    if profile == "manual":
+        return dict.fromkeys(BATTERY_SOURCE_KEYS, "")
+    _, mapping = _deye_prefix_sources(prefix)
+    return {key: mapping.get(key, "") for key in BATTERY_SOURCE_KEYS}
+
+
+def _battery_profile_selector():
+    return selector.SelectSelector(selector.SelectSelectorConfig(options=[
+        {"value": "deye", "label": "Deye — dane baterii z falownika"},
+        {"value": "yambms", "label": "YamBMS — opcjonalne osobne źródło"},
+        {"value": "manual", "label": "Ręczne przypisanie źródeł baterii"}]))
 
 
 def _schema(values, keys):
@@ -100,22 +120,28 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors = _errors(user_input)
             try:
                 prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix", "deye_inverter_"))
+                profile = user_input.get("battery_source_profile", "deye")
+                mapping.update(_battery_profile_sources(profile, prefix))
                 bound = _flow_reserve_bound(self, {**DEFAULT_SOURCES, **mapping})
                 if user_input.get("min_soc_percent", 40) < (bound if bound is not None else 40):
                     errors["min_soc_percent"] = "reserve_below_low_soc"
-            except ValueError:
-                errors["entity_prefix"] = "invalid_entity_prefix"
+            except ValueError as error:
+                errors["battery_source_profile" if str(error) == "invalid_battery_source_profile"
+                       else "entity_prefix"] = str(error)
             if not errors:
                 await self.async_set_unique_id("deye_ems_local")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title="Deye EMS", data={
                     **DEFAULT_OPTIONS, **user_input, "entity_prefix": prefix,
+                    "battery_source_profile": profile,
                     "sources": {**DEFAULT_SOURCES, **mapping}})
         return self.async_show_form(step_id="user", errors=errors, data_schema=_schema(
             {**(user_input or DEFAULT_OPTIONS), "min_soc_lower_bound": bound}, ["min_soc_percent", "capacity_kwh", "pv_peak_kwp",
                 "inverter_max_power_kw", "inverter_phase_max_power_kw", "grid_import_limit_kw", "grid_phase_limit_kw"]).extend({
                     vol.Optional("entity_prefix", default=(user_input or {}).get("entity_prefix", "deye_inverter_")):
-                        selector.TextSelector()}),
+                        selector.TextSelector(),
+                    vol.Required("battery_source_profile", default=(user_input or {}).get(
+                        "battery_source_profile", "deye")): _battery_profile_selector()}),
             description_placeholders={"mode": "shadow"})
 
     @staticmethod
@@ -128,6 +154,13 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
     def _mapping_locked(self):
         runtime = getattr(self.config_entry, "runtime_data", None)
         return runtime is not None and runtime.mode == "active"
+
+    def _entity_prefix(self):
+        return self.config_entry.options.get("entity_prefix",
+            self.config_entry.data.get("entity_prefix", "deye_inverter_"))
+
+    def _battery_profile(self):
+        return battery_source_profile(self.config_entry.data, self.config_entry.options)
 
     async def async_step_init(self, user_input=None):
         return self.async_show_menu(step_id="init", menu_options=["sidebar", "topology", "parameters", "solcast", "entity_prefix", "sources", "add_load", "remove_load"])
@@ -154,15 +187,36 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix"))
+                profile = user_input.get("battery_source_profile", self._battery_profile())
+                battery = _battery_profile_sources(profile, prefix)
+                try:
+                    _, previous = _deye_prefix_sources(self._entity_prefix())
+                except ValueError:
+                    _, previous = _deye_prefix_sources("deye_inverter_")
+                saved = {**self.config_entry.data.get("sources", {}),
+                         **self.config_entry.options.get("sources", {})}
+                # Keep manual mappings and intentionally disabled sources.
+                # Only default/previous-prefix suggestions follow a new prefix.
+                mapping = {key: entity for key, entity in mapping.items()
+                    if key not in saved or saved[key] in (DEFAULT_SOURCES[key], previous[key])}
+                for key in BATTERY_SOURCE_KEYS:
+                    mapping.pop(key, None)
+                if profile != "manual":
+                    previous_battery = _battery_profile_sources(self._battery_profile(), self._entity_prefix())
+                    mapping.update({key: entity for key, entity in battery.items()
+                        if profile != self._battery_profile() or key not in saved
+                        or saved[key] == previous_battery[key]})
                 self._source_prefix_draft = prefix
+                self._battery_profile_draft = profile
                 self._source_mapping_draft = mapping
                 return await self.async_step_sources()
-            except ValueError:
-                errors["base"] = "invalid_entity_prefix"
-        value = (user_input or {}).get("entity_prefix",
-            self.config_entry.options.get("entity_prefix", "deye_inverter_"))
+            except ValueError as error:
+                errors["base"] = str(error)
+        value = (user_input or {}).get("entity_prefix", self._entity_prefix())
         return self.async_show_form(step_id="entity_prefix", errors=errors,
-            data_schema=vol.Schema({vol.Required("entity_prefix", default=value): selector.TextSelector()}))
+            data_schema=vol.Schema({vol.Required("entity_prefix", default=value): selector.TextSelector(),
+                vol.Required("battery_source_profile", default=(user_input or {}).get(
+                    "battery_source_profile", self._battery_profile())): _battery_profile_selector()}))
 
     async def async_step_sidebar(self, user_input=None):
         manager = self.hass.data.get(DATA_APPEARANCE)
@@ -277,7 +331,7 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
         if effective is not None:
             return [{**dict(channel), "included_in_load": True} for channel in effective]
         values = {**self.config_entry.data, **self.config_entry.options}
-        sources = {**DEFAULT_SOURCES, **self.config_entry.data.get("sources", {}),
+        sources = {**self.config_entry.data.get("sources", {}),
                    **self.config_entry.options.get("sources", {})}
         loads, seen = [], set()
         for raw in values.get("extra_loads", []):
@@ -365,22 +419,33 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
                   **self.config_entry.options.get("sources", {}),
                   **getattr(self, "_source_mapping_draft", {})}
         if user_input is not None:
-            # Empty selections intentionally disable a source; no credential is needed.
-            values.update(user_input)
+            # EntitySelector omits an empty optional field instead of accepting
+            # an empty entity ID. A source form submits the whole mapping.
+            values = {key: user_input.get(key, "") for key in values}
             options = {**dict(self.config_entry.options), "sources": values}
             if hasattr(self, "_source_prefix_draft"):
                 options["entity_prefix"] = self._source_prefix_draft
+                options["battery_source_profile"] = self._battery_profile_draft
             return self.async_create_entry(title="", data=options)
         fields = {}
         for key, entity in values.items():
-            domain = "number" if key in ("grid_current_number", "max_charge_current_number", "battery_low_soc") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
-            fields[vol.Optional(key, description={"suggested_value": entity})] = selector.EntitySelector(
+            domain = "binary_sensor" if key in ("battery_alarm", "battery_fault") else "number" if key in ("grid_current_number", "max_charge_current_number", "battery_low_soc") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
+            marker = (vol.Optional(key, description={"suggested_value": entity})
+                      if entity else vol.Optional(key))
+            fields[marker] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=domain))
         draft = getattr(self, "_source_mapping_draft", {})
-        missing = [entity for entity in draft.values() if self.hass.states.get(entity) is None]
-        preview = (f"Prefiks: {self._source_prefix_draft}. Znaleziono {len(draft)-len(missing)}/{len(draft)} encji. "
+        proposed = [entity for entity in draft.values() if entity]
+        missing = [entity for entity in proposed if self.hass.states.get(entity) is None]
+        profile = getattr(self, "_battery_profile_draft", self._battery_profile())
+        profile_label = {"deye": "Deye", "yambms": "YamBMS", "manual": "ręczny"}[profile]
+        profile_note = ("Wybrany profil proponuje nowe przypisania baterii. "
+                        if profile != self._battery_profile() and profile != "manual"
+                        else "Ręczne i wyłączone przypisania zachowano. ")
+        preview = (f"Prefiks: {self._source_prefix_draft}. Znaleziono {len(proposed)-len(missing)}/{len(proposed)} encji. "
                    + ("Brak: " + ", ".join(missing) if missing else "Wszystkie proponowane encje istnieją.")
-                   + " Sprawdź i popraw przypisania przed zapisaniem. Istnienie encji nie potwierdza zgodności trybu ani pomiarów."
-                   if draft else "Ręczny wybór encji. Prefiks Deye ustawisz w osobnej pozycji menu konfiguracji.")
+                   + f" Profil baterii: {profile_label}. " + profile_note
+                   + "Sprawdź i popraw przypisania przed zapisaniem. Istnienie encji nie potwierdza zgodności trybu ani pomiarów."
+                   if hasattr(self, "_source_prefix_draft") else "Ręczny wybór encji. Prefiks Deye ustawisz w osobnej pozycji menu konfiguracji.")
         return self.async_show_form(step_id="sources", data_schema=vol.Schema(fields),
                                     description_placeholders={"prefix_preview": preview})

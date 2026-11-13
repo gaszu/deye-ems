@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-1-0-19";
-const PANEL_VERSION = "1.0.19";
+const PANEL_TAG = "deye-ems-panel-1-0-20";
+const PANEL_VERSION = "1.0.20";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -74,12 +74,25 @@ const solcastMessages = {
   stop_before_mapping:"Przełącz EMS w tryb obserwacji przed zmianą Solcast.",
   already_in_progress:"Kreator jest już otwarty. Zamknij poprzednią konfigurację i spróbuj ponownie."
 };
+const sourceLabels = {
+  soc:"SoC baterii",voltage:"Napięcie baterii",battery_power:"Moc baterii",bms_charge_current:"Dopuszczalny prąd ładowania baterii",bms_blocking_charge:"Blokada ładowania baterii",
+  grid_power:"Moc portu GRID",load_power:"Moc LOAD",grid_current_number:"Nastawa prądu ładowania z sieci",max_charge_current_number:"Maksymalny prąd ładowania Deye",battery_low_soc:"Battery low SOC",
+  ct_grid_power:"Wymiana z siecią na CT",pv_today:"Prognoza PV na dziś",pv_tomorrow:"Prognoza PV na jutro",pv_day3:"Prognoza PV na pojutrze",
+  pc_energy_total:"Opcjonalny odbiornik — licznik energii",pc_energy_today:"Opcjonalny odbiornik — energia dziś",pc_energy_yesterday:"Opcjonalny odbiornik — energia wczoraj",
+  solar_sell:"Sprzedaż energii PV",tou_enabled:"Harmonogram TOU",energy_priority:"Priorytet energii",work_mode:"Tryb pracy falownika",asymmetric_phase_feeding:"Bilansowanie faz GRID"
+};
+const sourceMessages = {
+  invalid_entity_prefix:"Wpisz prefiks bez domeny, np. deye_dom_. Użyj liter a–z, cyfr i podkreśleń.",
+  invalid_battery_source_profile:"Wybierz źródło danych baterii z listy.",
+  stop_before_mapping:"Przełącz EMS w tryb obserwacji przed zmianą prefiksu lub przypisań.",
+  already_in_progress:"Kreator jest już otwarty. Zamknij poprzednią konfigurację i spróbuj ponownie."
+};
 
 class DeyeEMSPanel extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;}
+  constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;this.sourceOpen=false;this.sourceBusy=false;this.sourceCommitting=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";this.sourceSequence=0;}
   set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
-  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);}
+  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);}
   async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=this.mergeUpdateStatus(payload);this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}this.render();}
   async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=this.mergeUpdateStatus(await this._hass.callWS({type:"deye_ems/command",...args}));if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
@@ -138,7 +151,7 @@ class DeyeEMSPanel extends HTMLElement {
     const at=updateTimestamp(this.payload?.updates?.retry_at),remaining=at===null?0:at-Date.now();
     return remaining>0&&remaining<=86400000?Math.ceil(remaining/1000):0;
   }
-  hasUnsavedChanges(){return Boolean(this.solcastOpen||this.loadDraft||this.loadDelete||this.appearanceDraft!==null||Object.keys(this.drafts).length);}
+  hasUnsavedChanges(){return Boolean(this.sourceOpen||this.solcastOpen||this.loadDraft||this.loadDelete||this.appearanceDraft!==null||Object.keys(this.drafts).length);}
   async checkUpdates(){
     const version=releaseVersion(this.payload?.backend_version);
     if(!this._hass||this.busy||this.updatesBusy||!version||this.updatesRetrySeconds()>0)return false;
@@ -430,6 +443,7 @@ class DeyeEMSPanel extends HTMLElement {
   }
   async openSolcast(){
     if(this.busy)return;
+    if(this.sourceOpen)await this.cancelSources(false);
     const cleanup=this.cancelSolcast(false),openingSequence=this.solcastSequence;
     await cleanup;
     if(openingSequence!==this.solcastSequence)return;
@@ -534,6 +548,122 @@ class DeyeEMSPanel extends HTMLElement {
     }));
     root.getElementById("solcast-form")?.addEventListener("submit",event=>{event.preventDefault();this.submitSolcast();});
   }
+  async cancelSources(render=true,force=false){
+    if(this.sourceCommitting&&!force)return;
+    this.sourceSequence=(this.sourceSequence||0)+1;
+    const id=this.sourceFlow?.flow_id;
+    this.sourceOpen=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";
+    if(this.sourceBusy)this.busy=false;
+    this.sourceBusy=false;this.sourceCommitting=false;
+    if(render)this.render();
+    await this.cleanupSolcastFlow(id);
+  }
+  applySourcesResult(result,sequence){
+    if(sequence!==this.sourceSequence||!this.sourceOpen){void this.cleanupSolcastFlow(result?.flow_id);return false;}
+    if(!result||!["menu","form","abort","create_entry"].includes(result.type))throw Error("unsupported_flow");
+    const previous=this.sourceFlow;
+    const flow={type:result.type,flow_id:typeof result.flow_id==="string"?result.flow_id:previous?.flow_id,step_id:result.step_id,fields:[],errors:[],note:""};
+    if(result.type==="menu"&&(result.step_id!=="init"||!result.menu_options?.includes("entity_prefix")))throw Error("unsupported_menu");
+    if(result.type==="form"){
+      if(!["entity_prefix","sources"].includes(result.step_id)||!Array.isArray(result.data_schema)||!result.data_schema.length)throw Error("unsupported_form");
+      flow.fields=result.data_schema.map(field=>{
+        const prefix=result.step_id==="entity_prefix",selector=field?.selector||{},type=Object.keys(selector)[0];
+        if(!field||Object.keys(selector).length!==1||
+          (prefix?!(field.name==="entity_prefix"&&type==="text"||field.name==="battery_source_profile"&&type==="select"):type!=="entity"||!/^[a-z][a-z0-9_]*$/.test(field.name)))throw Error("unsupported_field");
+        const domain=selector.entity?.domain,domains=Array.isArray(domain)?domain:typeof domain==="string"?[domain]:[];
+        const value=Object.hasOwn(field,"default")?field.default:field.description?.suggested_value;
+        const options=type==="select"&&Array.isArray(selector.select.options)?selector.select.options.map(option=>typeof option==="string"?{value:option,label:option}:{value:option?.value,label:String(option?.label??option?.value)}):[];
+        if(type==="select"&&(!options.length||options.some(option=>typeof option.value!=="string")))throw Error("unsupported_options");
+        return {name:field.name,type,options,required:field.required===true,domains:domains.filter(item=>/^[a-z_]+$/.test(item)),value:typeof value==="string"?value:""};
+      });
+      const retain=previous?.type==="form"&&previous.step_id===flow.step_id;
+      this.sourceDraft=Object.fromEntries(flow.fields.map(field=>[field.name,retain&&Object.hasOwn(this.sourceDraft,field.name)?this.sourceDraft[field.name]:field.value]));
+      flow.errors=Object.values(result.errors||{}).map(code=>Object.hasOwn(sourceMessages,code)?sourceMessages[code]:"Sprawdź przypisania i spróbuj ponownie.");
+      if(typeof result.description_placeholders?.prefix_preview==="string")flow.note=result.description_placeholders.prefix_preview;
+    }
+    if(result.type==="abort")this.sourceError=Object.hasOwn(sourceMessages,result.reason)?sourceMessages[result.reason]:"Kreator został zakończony. Otwórz go ponownie, aby spróbować jeszcze raz.";
+    if(result.type==="create_entry"){
+      flow.flow_id=null;this.sourceDraft={};this.sourceNotice="Zapisano prefiks i przypisania. EMS pozostaje w obserwacji. Poczekaj na świeże pomiary i sprawdź plan przed osobnym włączeniem sterowania.";
+    }
+    this.sourceFlow=flow;return true;
+  }
+  async runSources(operation,committing=false){
+    if(this.busy||this.payload?.mode==="active")return false;
+    const sequence=++this.sourceSequence;
+    this.sourceBusy=true;this.sourceCommitting=committing;this.busy=true;this.sourceError="";this.render();
+    try{await operation(sequence);return sequence===this.sourceSequence;}
+    catch{if(sequence===this.sourceSequence&&this.sourceOpen)this.sourceError="Nie udało się otworzyć lub zapisać konfiguracji źródeł. Sprawdź połączenie z HA i spróbuj ponownie.";return false;}
+    finally{if(sequence===this.sourceSequence){this.sourceBusy=false;this.sourceCommitting=false;this.busy=false;this.render();if(this.sourceFlow?.type==="create_entry")void this.refresh();}}
+  }
+  async openSources(){
+    if(this.busy)return;
+    if(this.solcastOpen)await this.cancelSolcast(false);
+    const cleanup=this.cancelSources(false),sequence=this.sourceSequence;
+    await cleanup;if(sequence!==this.sourceSequence)return;
+    this.sourceOpen=true;
+    if(this.payload?.mode==="active"){this.render();return;}
+    if(typeof this.payload?.entry_id!=="string"||!this.payload.entry_id){this.sourceError="Poczekaj na odczyt integracji i ponów otwarcie kreatora.";this.render();return;}
+    return this.runSources(async request=>{
+      const first=await this._hass.callApi("POST","config/config_entries/options/flow",{handler:this.payload.entry_id});
+      if(!this.applySourcesResult(first,request))return;
+      if(first.type!=="menu")return;
+      const result=await this._hass.callApi("POST","config/config_entries/options/flow/"+encodeURIComponent(this.sourceFlow.flow_id),{next_step_id:"entity_prefix"});
+      this.applySourcesResult(result,request);
+    });
+  }
+  async submitSources(){
+    if(this.sourceFlow?.type!=="form"||!this.sourceFlow.flow_id||this.busy||this.payload?.mode==="active")return;
+    const id=this.sourceFlow.flow_id,data={};
+    for(const field of this.sourceFlow.fields){
+      const value=String(this.sourceDraft[field.name]??"").trim();
+      if(field.type==="select"&&!field.options.some(option=>option.value===value)){this.sourceError="Wybierz źródło danych baterii z listy.";this.render();return;}
+      if(value||field.required)data[field.name]=value;
+    }
+    // Prefix submission only previews HA's proposed mappings. Only the sources
+    // form confirmation saves them. HA requires empty optional entity selectors
+    // to be omitted; the native sources step clears those omitted selections.
+    return this.runSources(async sequence=>{
+      const result=await this._hass.callApi("POST","config/config_entries/options/flow/"+encodeURIComponent(id),data);
+      this.applySourcesResult(result,sequence);
+    },this.sourceFlow.step_id==="sources");
+  }
+  sourceFieldLabel(name){
+    if(name==="entity_prefix")return "Prefiks encji Deye";
+    if(name==="battery_source_profile")return "Źródło danych baterii";
+    if(Object.hasOwn(sourceLabels,name))return sourceLabels[name];
+    const phase=/^(grid|load|ct_grid)_l([123])_power$/.exec(name),tou=/^tou_(soc|gc|time)_([1-6])$/.exec(name);
+    if(phase)return ({grid:"GRID",load:"LOAD",ct_grid:"CT"})[phase[1]]+" — moc L"+phase[2];
+    if(tou)return "TOU "+tou[2]+" — "+({soc:"cel SoC",gc:"ładowanie z sieci",time:"godzina"})[tou[1]];
+    return name.replaceAll("_"," ");
+  }
+  sourcesHtml(){
+    const active=this.payload?.mode==="active",disabled=this.busy||active,flow=this.sourceFlow;
+    let body='<button id="sources-open" class="secondary" '+(this.busy?'disabled':'')+'>Ustaw prefiks i encje Deye</button>';
+    if(this.sourceOpen){
+      body=active?'<p class="notice">Zmiana źródeł wymaga obserwacji. <button id="sources-observe" class="secondary" '+(this.busy?'disabled':'')+'>Przejdź do obserwacji</button></p>':'';
+      if(flow?.type==="form"){
+        const lists=new Map(),fields=flow.fields.map(field=>{
+          if(field.type==="select")return '<label>'+esc(this.sourceFieldLabel(field.name))+'<select data-source-field="'+esc(field.name)+'" '+(field.required?'required':'')+'>'+field.options.map(option=>'<option value="'+esc(option.value)+'" '+(option.value===this.sourceDraft[field.name]?'selected':'')+'>'+esc(option.label)+'</option>').join("")+'</select></label>';
+          const prefix=field.name==="entity_prefix",list="source-"+(field.domains.join("-")||"all");
+          if(!prefix&&!lists.has(list))lists.set(list,'<datalist id="'+list+'">'+Object.entries(this._hass?.states||{}).filter(([id])=>!field.domains.length||field.domains.includes(id.split(".")[0])).map(([id,state])=>'<option value="'+esc(id)+'">'+esc(state.attributes?.friendly_name||id)+'</option>').join("")+'</datalist>');
+          return '<label>'+esc(this.sourceFieldLabel(field.name))+'<input type="text" data-source-field="'+esc(field.name)+'" '+(field.required?'required':'')+' value="'+esc(this.sourceDraft[field.name])+'" '+(prefix?'placeholder="np. deye_dom_" autocomplete="off"':'list="'+list+'" placeholder="Brak przypisania (opcjonalnie)"')+'></label>';
+        }).join("");
+        body+='<form id="sources-form"><fieldset '+(disabled?'disabled':'')+'><div class="fields">'+fields+'</div>'+[...lists.values()].join("")+'</fieldset>'+flow.errors.map(error=>'<p role="alert" class="notice error">'+esc(error)+'</p>').join("")+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<p class="legend">'+(flow.step_id==="entity_prefix"?'Dane baterii mogą pochodzić z Deye. YamBMS jest opcjonalny. Wpisz prefiks bez sensor., np. deye_dom_. Następny krok pokaże propozycje; zapis wymaga osobnego potwierdzenia.':'Sprawdź propozycje i własne przypisania. Puste pole wyłącza dane źródło. Prognozy PV, dodatkowy BMS i opcjonalne odbiorniki mają osobne encje.')+'</p><button type="submit" '+(disabled?'disabled':'')+'>'+(flow.step_id==="entity_prefix"?'Pokaż przypisania dla prefiksu':'Zapisz prefiks i przypisania')+'</button></form>';
+      }
+      if(flow?.type==="abort")body+='<button id="sources-reopen" class="secondary" '+(disabled?'disabled':'')+'>Otwórz kreator ponownie</button>';
+      body=(this.sourceError?'<p role="alert" class="notice error">'+esc(this.sourceError)+'</p>':'')+(this.sourceNotice?'<p role="status" class="notice">'+esc(this.sourceNotice)+'</p>':'')+(this.sourceBusy?'<p role="status">'+(this.sourceCommitting?'Zapisywanie przypisań w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="sources-cancel" type="button" class="secondary" '+(this.sourceCommitting?'disabled':'')+'>'+(flow?.type==="create_entry"?'Zamknij kreator':'Anuluj kreator')+'</button></div>';
+    }
+    return '<section><h2>Źródła danych</h2><p class="legend">Wybierz prefiks swojej integracji Deye i sprawdź przypisania pomiarów oraz sterowania.</p>'+body+'</section>';
+  }
+  bindSources(){
+    const root=this.shadowRoot;
+    root.getElementById("sources-open")?.addEventListener("click",()=>this.openSources());
+    root.getElementById("sources-reopen")?.addEventListener("click",()=>this.openSources());
+    root.getElementById("sources-cancel")?.addEventListener("click",()=>this.cancelSources());
+    root.getElementById("sources-observe")?.addEventListener("click",async()=>{if(await this.command({command:"mode",mode:"shadow"}))await this.openSources();});
+    root.querySelectorAll("[data-source-field]").forEach(input=>input.addEventListener("input",()=>{this.sourceDraft[input.dataset.sourceField]=input.value;}));
+    root.getElementById("sources-form")?.addEventListener("submit",event=>{event.preventDefault();return this.submitSources();});
+  }
   editLoad(channel=null,revision=this.payload?.loads_revision){
     if(this.busy||this.payload?.mode==="active"||!Array.isArray(this.payload?.effective_loads))return;
     this.loadDraft={original_energy_entity:channel?.energy_entity||"",name:channel?.name||"",energy_entity:channel?.energy_entity||"",power_entity:channel?.power_entity||"",enabled:channel?.enabled!==false,revision};
@@ -588,11 +718,13 @@ class DeyeEMSPanel extends HTMLElement {
     // also survive rendering after blur, failed commands and later refreshes.
     this.applyPanelTheme();
     const solcastStage=[this.solcastOpen,this.solcastFlow?.type,this.solcastFlow?.step_id,this.solcastConfirmDisable].join(":");
+    const sourceStage=[this.sourceOpen,this.sourceFlow?.type,this.sourceFlow?.step_id,this.sourceError,this.sourceNotice,this.sourceFlow?.errors?.join("|")].join(":");
     const appearanceStage=[this.savedPanelTheme(),this.appearanceMissing,this.panelThemeNames().join("|"),this.appearanceError,this.appearanceDraft].join(":");
-    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage;
-    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-solcast-field],select[data-solcast-field],select[data-appearance-theme],select[data-topology]"))return;
+    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSourceStage!==sourceStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage;
+    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-source-field],select[data-source-field],input[data-solcast-field],select[data-solcast-field],select[data-appearance-theme],select[data-topology]"))return;
     this.renderedMode=this.payload?.mode;this.renderedError=this.error;this.renderedLoadsReady=Array.isArray(this.payload?.effective_loads);
     this.renderedSolcastStage=solcastStage;this.renderedSolcastError=this.solcastError;this.renderedSolcastNotice=this.solcastNotice;
+    this.renderedSourceStage=sourceStage;
     this.renderedAppearanceStage=appearanceStage;
     const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{};
@@ -636,6 +768,7 @@ class DeyeEMSPanel extends HTMLElement {
       ((plan.unreachable||c.unreachable)?'<div class="notice warning">Dostępna energia lub moc może nie wystarczyć do osiągnięcia celu. Limit poboru ma pierwszeństwo.</div>':'')+
       '<div class="actions"><button id="mode" '+(this.busy?'disabled':'')+'>'+(active?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div>'+
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
+      this.sourcesHtml()+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+
       '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.')+card("Limit BMS",num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A","Dopuszczalny prąd baterii.")+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu BMS, falownika i przyłącza.")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. Prognoza SoC wyznacza moc ładowania z aktualnych limitów Deye i BMS oraz napięcia baterii; ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+this.pvPriorityHtml()+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
       '<section><h2>Fotowoltaika i Solcast</h2><div class="fields">'+basicField("pv_peak_kwp","Zapisz moc PV")+'</div><p>'+esc(solcastStatus)+'</p>'+
@@ -659,6 +792,7 @@ class DeyeEMSPanel extends HTMLElement {
     if(details)details.open=detailsOpen;
     this.bindLoads();
     this.bindSolcast();
+    this.bindSources();
     this.bindAppearance();
     this.bindUpdates();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));

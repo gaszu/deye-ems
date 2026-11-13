@@ -2,6 +2,10 @@
 
 Instalacja Deye EMS nie wyłącza innych regulatorów. Poniższa procedura jest ogólną instrukcją dla operatora instalacji.
 
+## Powrót z 1.0.20 do 1.0.19
+
+Zachowaj prywatną kopię ustawień i runtime oraz paczkę 1.0.19. Przejdź do obserwacji, potwierdź zatrzymanie doładowania sieciowego i zainstaluj wcześniejsze wydanie. Sprawdź konfigurację i uruchom HA ponownie. Przed jawnym wznowieniem sterowania sprawdź zapisane źródła, dodatkowych odbiorników, pomiary i plan. Starsze wydanie ma dawne domyślne przypisania pompy dla nowych lub niepełnych konfiguracji, dlatego nie używaj go do czystej instalacji.
+
 ## Powrót z 1.0.19 do 1.0.18
 
 Zachowaj prywatną kopię ustawień i runtime oraz paczkę 1.0.18. Przejdź do obserwacji i potwierdź wyłączenie doładowania sieciowego. Zainstaluj 1.0.18, sprawdź konfigurację i uruchom HA ponownie. Po sprawdzeniu ustawień, aktualnych pomiarów i planu jawnie przywróć wcześniejszy tryb. Powrót usuwa lokalne ikony, a silnik, regulator i format zapisanych ustawień pozostają zgodne.

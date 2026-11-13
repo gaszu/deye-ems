@@ -1,3 +1,10 @@
+# Wersja 1.0.20 — czysta instalacja i profile baterii
+
+- **528 testów Python i 121 testów panelu PASS.** Regresje obejmują pustą listę dodatkowych odbiorników, brak automatycznego dziedziczenia pompy, zapisane kanały ON/OFF oraz pojedyncze liczenie LOAD.
+- Sprawdzono domyślne natywne źródła Deye, opcjonalny YamBMS i własne mapowania, migrację starszych przypisań, podgląd prefiksu oraz osobny zapis. Puste selektory są pomijane zgodnie z walidacją HA i świadomie wyłączają źródło przy końcowym zapisie.
+- Bieżący limit BMS, limit zero, alarm, błąd oraz brak/nieprawidłowość odczytów Deye testowano offline. Zachowano pierwszeństwo wcześniejszej numerycznej blokady. Nie wymuszano awarii ani reakcji urządzeń na produkcji.
+- Test izolowanego budowania ZIP sprawdza widoczny komunikat o lewym menu na pierwszym ekranie, błędnym formularzu i po utworzeniu wpisu oraz kompletność tłumaczeń polskich i angielskich.
+
 # Wersja 1.0.19 — przygotowanie katalogowe
 
 - Wymagane kontrole katalogowe HACS i hassfest są uruchamiane bez pomijania sprawdzeń. Workflow wydania czeka na ich sukces przed utworzeniem nowego GitHub Release.

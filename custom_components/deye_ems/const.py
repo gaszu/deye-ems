@@ -1,9 +1,10 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "1.0.19"
+VERSION = "1.0.20"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button"]
 
 DEFAULT_OPTIONS = {
+    "battery_source_profile": "deye",
     "topology": "load_only",
     "combined_output_limit_kw": 10.0,
     "capacity_kwh": 66.0,
@@ -59,10 +60,12 @@ DEFAULT_SOURCES = {
     "ct_grid_l1_power": "sensor.deye_inverter_external_ct_l1_power",
     "ct_grid_l2_power": "sensor.deye_inverter_external_ct_l2_power",
     "ct_grid_l3_power": "sensor.deye_inverter_external_ct_l3_power",
-    "soc": "sensor.yambms_1_battery_soc",
-    "voltage": "sensor.yambms_1_total_voltage",
-    "bms_charge_current": "sensor.yambms_1_max_charge_current",
-    "bms_blocking_charge": "sensor.yambms_1_bms_blocking_charge",
+    "soc": "sensor.deye_inverter_battery_bms_soc",
+    "voltage": "sensor.deye_inverter_battery_voltage",
+    "bms_charge_current": "sensor.deye_inverter_battery_bms_charging_current",
+    "bms_blocking_charge": "",
+    "battery_alarm": "binary_sensor.deye_inverter_battery_alarm",
+    "battery_fault": "binary_sensor.deye_inverter_battery_fault",
     "battery_power": "sensor.deye_inverter_battery_power",
     "grid_power": "sensor.deye_inverter_grid_power",
     "load_power": "sensor.deye_inverter_load_power",
@@ -71,9 +74,10 @@ DEFAULT_SOURCES = {
     "pv_today": "sensor.solcast_pv_forecast_prognoza_na_dzisiaj",
     "pv_tomorrow": "sensor.solcast_pv_forecast_prognoza_na_jutro",
     "pv_day3": "sensor.solcast_pv_forecast_prognoza_na_dzien_3",
-    "pc_energy_total": "sensor.pc_faza2_energy_total",
-    "pc_energy_today": "sensor.pc_faza2_energy_today",
-    "pc_energy_yesterday": "sensor.pc_faza2_energy_yesterday",
+    # Optional receivers belong to the installation, never to package defaults.
+    "pc_energy_total": "",
+    "pc_energy_today": "",
+    "pc_energy_yesterday": "",
     "solar_sell": "switch.deye_inverter_solar_sell",
     "tou_enabled": "switch.deye_inverter_time_of_use",
     "energy_priority": "select.deye_inverter_energy_management_priority",
@@ -87,6 +91,27 @@ for _slot in range(1, 7):
     DEFAULT_SOURCES[f"tou_soc_{_slot}"] = f"number.deye_inverter_time_of_use_{_slot}_soc"
     DEFAULT_SOURCES[f"tou_gc_{_slot}"] = f"switch.deye_inverter_time_of_use_{_slot}_grid_charge"
     DEFAULT_SOURCES[f"tou_time_{_slot}"] = f"time.deye_inverter_time_of_use_{_slot}_start"
+
+BATTERY_SOURCE_KEYS = ("soc", "voltage", "bms_charge_current", "bms_blocking_charge",
+                       "battery_alarm", "battery_fault")
+BATTERY_SOURCE_PROFILES = ("deye", "yambms", "manual")
+YAMBMS_SOURCES = {
+    "soc": "sensor.yambms_1_battery_soc",
+    "voltage": "sensor.yambms_1_total_voltage",
+    "bms_charge_current": "sensor.yambms_1_max_charge_current",
+    "bms_blocking_charge": "sensor.yambms_1_bms_blocking_charge",
+    "battery_alarm": "", "battery_fault": "",
+}
+
+
+def battery_source_profile(data, options):
+    """Old explicit battery mappings retain their original permission contract."""
+    profile = options.get("battery_source_profile", data.get("battery_source_profile"))
+    if profile in BATTERY_SOURCE_PROFILES:
+        return profile
+    saved = {**data.get("sources", {}), **options.get("sources", {})}
+    return "manual" if any(saved.get(key) for key in BATTERY_SOURCE_KEYS) else "deye"
+
 
 OWNER_ENTITIES = (
     "automation.ems_sterowanie_popoludniowe_magazynu_66kwh_g13_zima",

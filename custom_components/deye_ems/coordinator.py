@@ -21,7 +21,8 @@ from zoneinfo import ZoneInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OWNER_ENTITIES, OPTION_RANGES
+from .const import (DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, OWNER_ENTITIES,
+                    OPTION_RANGES, battery_source_profile)
 from .grid_control import (calculate_grid_charge_cap, calculate_grid_charge_increase_cap,
                            calculate_grid_charge as calculate_grid_charge_demand)
 from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready, initial_dispatch_ready,
@@ -69,6 +70,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self.entry = entry
         initial = dict(getattr(entry, "data", {}))
         self._options = {**DEFAULT_OPTIONS, **initial, **dict(entry.options)}
+        self._options["battery_source_profile"] = battery_source_profile(initial, dict(entry.options))
         self._sources = {**DEFAULT_SOURCES, **initial.get("sources", {}),
                          **dict(entry.options).get("sources", {})}
         self._options["sources"] = dict(self._sources)
@@ -564,6 +566,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return "invalid"
         return None
 
+    def _battery_flag(self, key, now):
+        """Read a latched native fault flag, anchored by fresh battery voltage."""
+        state = self._state(key)
+        if state is None:
+            return None, "missing"
+        if state.attributes.get("restored", False):
+            return None, "restored"
+        report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        if report is None or state.state not in ("on", "off"):
+            return None, "invalid"
+        if report > now.timestamp():
+            return None, "future"
+        return state.state == "on", None
+
     def _read_inputs(self, now):
         voltage = self._measurement("voltage", now, unit="V", age=120, low=40, high=65)
         soc = self._measurement("soc", now, unit="%", low=0, high=100)
@@ -581,8 +597,19 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # ESPHome can publish this latched flag only on change. Its available,
         # non-restored setting is anchored by the same BMS's live voltage.
         block = self._measurement("bms_blocking_charge", now, low=0, high=1000)
-        bms_valid = voltage is not None and None not in (charge, block)
-        cap = charge if bms_valid and block == 0 else 0
+        # Explicit legacy numeric blocking always retains its original meaning.
+        # Native Deye CCL is register 212, distinct from maximum CCL register218.
+        native_battery = (self._options["battery_source_profile"] == "deye"
+                          and not self._sources.get("bms_blocking_charge"))
+        native_flags = {key: self._battery_flag(key, now)
+                        for key in ("battery_alarm", "battery_fault")} if native_battery else {}
+        if native_battery:
+            bms_valid = voltage is not None and charge is not None and all(
+                issue is None for _, issue in native_flags.values())
+            cap = charge if bms_valid and not any(flag for flag, _ in native_flags.values()) else 0
+        else:
+            bms_valid = voltage is not None and None not in (charge, block)
+            cap = charge if bms_valid and block == 0 else 0
         current = self._measurement("grid_current_number", now, unit="A", low=0, high=1000)
         battery = self._measurement("battery_power", now, unit="W", age=30, low=-60000, high=60000)
         raw_load = powers["load_power"]
@@ -663,15 +690,19 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         checks.update(battery_power=dict(unit="W", age=30, low=-60000, high=60000),
                       voltage=dict(unit="V", age=120, low=40, high=65),
                       bms_charge_current=dict(unit="A", low=0, high=1000),
-                      bms_blocking_charge=dict(low=0, high=1000),
                       grid_current_number=dict(unit="A", low=0, high=1000),
                       max_charge_current_number=dict(unit="A", low=0, high=1000),
                       battery_low_soc=dict(unit="%", low=0, high=85),
                       soc=dict(unit="%", age=None if voltage is not None else 1200, low=0, high=100))
+        if not native_battery:
+            checks["bms_blocking_charge"] = dict(low=0, high=1000)
         if self._options["topology"] == "load_with_external_ct":
             checks.update({key: dict(unit="W", age=30, low=-60000, high=60000) for key in keys})
         for key, validation in checks.items():
             issue = self._measurement_issue(key, now, **validation)
+            if issue:
+                issues.append(dict(source=key, reason=issue))
+        for key, (_, issue) in native_flags.items():
             if issue:
                 issues.append(dict(source=key, reason=issue))
         if self._sources.get("max_charge_current_number") == self._sources.get("grid_current_number"):
@@ -789,7 +820,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if inputs.get("topology_error"):
             raise ValueError("Topologia CT: wymagane są osobne świeże pomiary CT i portu GRID (suma i fazy), zgodne kierunki i bilans faz")
         if not inputs["telemetry_valid"] or not inputs["soc_valid"]:
-            raise ValueError("Activation requires fresh, valid power and battery measurements")
+            labels = {"soc": "SoC baterii", "voltage": "Napięcie baterii",
+                      "bms_charge_current": "Limit prądu ładowania BMS",
+                      "bms_blocking_charge": "Blokada ładowania BMS"}
+            invalid = dict.fromkeys(issue["source"] for issue in inputs.get("telemetry_issues", []))
+            details = ", ".join(f"{labels[key]} ({key})" if key in labels else key for key in invalid)
+            raise ValueError("Nie można włączyć sterowania: wymagane są świeże, poprawne pomiary mocy i baterii. "
+                "W Źródłach wybierz encje swojej instalacji oraz sprawdź jednostki i aktualność odczytów."
+                + (f" Źródła wymagające sprawdzenia: {details}." if details else ""))
         mode_issues = self._hardware_mode_issues()
         if mode_issues:
             raise ValueError("Nie można włączyć sterowania. " + "; ".join(mode_issues))

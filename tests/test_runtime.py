@@ -53,7 +53,20 @@ with patch.dict(sys.modules, stubs), patch("zoneinfo.ZoneInfo", return_value=TZ)
     sys.modules[spec.name] = runtime
     spec.loader.exec_module(runtime)
 Coordinator = runtime.DeyeEMSCoordinator
-SOURCES = runtime.DEFAULT_SOURCES
+# Existing-runtime regressions explicitly represent saved BMS and pump mappings.
+# Keep this fixture independent from the deliberately empty installation defaults.
+BMS_SOURCES = {
+    "soc": "sensor.fixture_battery_soc",
+    "voltage": "sensor.fixture_battery_voltage",
+    "bms_charge_current": "sensor.fixture_bms_charge_current",
+    "bms_blocking_charge": "sensor.fixture_bms_blocking_charge",
+}
+PC_SOURCES = {
+    "pc_energy_total": "sensor.pc_faza2_energy_total",
+    "pc_energy_today": "sensor.pc_faza2_energy_today",
+    "pc_energy_yesterday": "sensor.pc_faza2_energy_yesterday",
+}
+SOURCES = {**runtime.DEFAULT_SOURCES, **BMS_SOURCES, **PC_SOURCES}
 OWNERS = runtime.OWNER_ENTITIES
 
 
@@ -86,7 +99,8 @@ class Harness:
         self.hass = SimpleNamespace(states=SimpleNamespace(get=self.states.get),
                                     services=SimpleNamespace(async_call=self.call),
                                     config_entries=SimpleNamespace(async_update_entry=self.update_entry))
-        defaults = {"pv_peak_kwp": 20., "pv_forecast_reference_kwp": None, "pv_forecast_mode": "whole_system"}
+        defaults = {"pv_peak_kwp": 20., "pv_forecast_reference_kwp": None,
+                    "pv_forecast_mode": "whole_system", "sources": {**BMS_SOURCES, **PC_SOURCES}}
         self.entry = SimpleNamespace(entry_id="offline", data={**defaults, **(initial or {})}, options=options or {})
         self.co = Coordinator(self.hass, self.entry, store=self.store, clock=lambda: self.now,
                               statistics_provider=self.statistics)
@@ -112,6 +126,8 @@ class Harness:
                 value, unit = 40, "%"
             if key.startswith("pc_energy_"):
                 value, unit = 10, "kWh"
+            if key in ("battery_alarm", "battery_fault"):
+                value = "off"
             if key.startswith("tou_gc_"):
                 value = "off"
             if key.startswith("tou_time_"):
