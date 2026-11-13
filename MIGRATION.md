@@ -1,5 +1,15 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.0
+
+Przed zmianą zachowaj prywatną kopię ustawień bez danych dostępu, poprzedni ZIP i informacje o trybie oraz wpisach TOU. Zwykła aktualizacja nie wybiera operatora ani nowego harmonogramu: dotychczasowy `legacy_g13`, źródła, limity, rezerwa i topologia pozostają zachowane. Instalacja plików, załadowana wersja i tryb po starcie wymagają osobnego sprawdzenia.
+
+Nowy profil wybieraj dopiero po potwierdzeniu operatora, taryfy, zegara i warunków umowy. Podgląd nie zapisuje ustawień. Po końcowym zapisie kreator zamyka się, a manager HA może sam wznowić sterowanie po kontroli warunków. Ręczny STOP anuluje ten zamiar, również podczas przeładowania. Przy braku potwierdzenia GC OFF / 0 A przeładowanie jest blokowane. Nigdy nie traktuj samego przyjęcia polecenia lub odczytu nastawy jako dowodu fizycznej reakcji baterii.
+
+Po przejściu na profil OSD sprawdź rzeczywiste przedziały dziś/jutro, zegar, terminy celów i oddzielny plan sześciu TOU. Plan zachowawczy musi być jawnie oznaczony; brak danych nie może wyglądać jak prognoza zerowego poboru.
+
+**Powrót do 2.0.4:** najpierw STOP, potwierdzenie odczytów wyłączenia doładowania i brak oczekującego startu. Poprzednie wydanie nie obsługuje nowych taryf. Jeśli wybrano profil operatora, przywróć zgodną kopię konfiguracji i harmonogramu sprzed zmiany, a nie tylko pliki ZIP. Pozostaw obserwację podczas kontroli i restartu. Zweryfikuj źródła, rezerwę, limity, zegar i TOU przed jawnym przywróceniem poprzedniego trybu. Pełna kopia HA sprzed zmiany może służyć odtworzeniu również runtime; nie uruchamiaj starego algorytmu na nowym, nieobsługiwanym harmonogramie.
+
 ## Przejście na 2.0.3
 
 Zachowaj kopię ustawień bez danych dostępu i poprzedni ZIP. Aktualizacja zachowuje przypisania, rezerwę, topologię, limity i tryb pracy. Nowe propozycje źródeł jednofazowych zapisujesz oddzielnie w kreatorze w obserwacji. W profilu Deye bez dedykowanego CCL źródłem limitu staje się niezależna nastawa Deye; YamBMS i źródła ręczne zachowują wymagania. Sprawdź opis źródła limitu i alarmy przed włączeniem sterowania.

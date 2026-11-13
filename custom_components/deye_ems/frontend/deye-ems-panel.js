@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-0-4";
-const PANEL_VERSION = "2.0.4";
+const PANEL_TAG = "deye-ems-panel-2-1-0";
+const PANEL_VERSION = "2.1.0";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -26,6 +26,7 @@ const ranges = {
 const reasons = {
   planned:"Plan gotowy", initializing:"Uruchamianie", shadow:"Obserwacja",
   telemetry_invalid:"Brak poprawnych, świeżych pomiarów",
+  waiting_tou_charge_off_readback:"Oczekiwanie na potwierdzenie wyłączenia ładowania przed zmianą TOU",waiting_tou_clock_readback:"Oczekiwanie na odczyt godzin TOU po zmianie",tariff_program_updated:"Przygotowano nowy harmonogram TOU — trwa weryfikacja",invalid_tou_clock_readback:"Nieprawidłowy odczyt godzin TOU falownika",
   bms_blocked:"Blokada ładowania baterii", grid_headroom:"Ograniczenie poborem z sieci",
   connection_other_phase_headroom:"Ograniczenie przyłącza na fazie poza falownikiem — ładowanie wstrzymane",
   deye_charge_cap:"Limit Deye po odjęciu 5%", actuator_cap:"Zakres nastawy ładowania w Deye",
@@ -103,17 +104,64 @@ const hardwareMessages={
   already_in_progress:"Kreator jest już otwarty. Zamknij poprzednią konfigurację i spróbuj ponownie."
 };
 
+
+const tariffLabels={operator_id:"Operator sieci dystrybucyjnej",profile_id:"Taryfa zgodna z umową",clock_basis:"Zegar przełączania stref",confirm_tariff:"Potwierdzam operatora, taryfę, zegar i przedstawiony harmonogram"};
+const tariffMessages={confirm_tariff:"Sprawdź podgląd i zaznacz potwierdzenie przed zapisaniem.",tariff_configuration_changed:"Konfiguracja zmieniła się w trakcie podglądu. Otwórz kreator ponownie.",tariff_operator_mismatch:"Taryfa nie odpowiada wybranemu operatorowi.",tariff_profile_unavailable:"Ta taryfa nie ma zweryfikowanego harmonogramu dostępnego do sterowania.",tariff_outside_validity:"Profil nie obowiązuje w bieżącej dacie. Wybierz aktualny profil.",legacy_tariff_clock_unchanged:"Dotychczasowy własny profil zachowuje czas lokalny.",stop_before_mapping:"Przełącz EMS w tryb obserwacji przed zmianą taryfy.",invalid_tariff_operator:"Wybierz operatora z listy.",invalid_tariff_profile:"Wybierz taryfę dostępną dla wybranego operatora.",invalid_tariff_clock_basis:"Potwierdź sposób odmierzania czasu przez licznik: czas lokalny albo stały CET.",confirm_tariff_required:"Sprawdź podgląd i zaznacz potwierdzenie przed zapisaniem.",tariff_preview_changed:"Ustawienia lub harmonogram zmieniły się. Otwórz kreator ponownie i sprawdź aktualny podgląd.",already_in_progress:"Kreator jest już otwarty. Zamknij poprzednią konfigurację i spróbuj ponownie."};
+
 class DeyeEMSPanel extends HTMLElement {
   telemetryExpanded=false;
+  actionError=null;savedWizardNotice="";
+  tariffOpen=false;tariffBusy=false;tariffCommitting=false;tariffFlow=null;
+  tariffDraft={};tariffError="";tariffNotice="";tariffSequence=0;tariffCatalog=null;
   hardwareOpen=false;hardwareBusy=false;hardwareCommitting=false;hardwareFlow=null;
   hardwareDraft={};hardwareError="";hardwareNotice="";hardwareSequence=0;
   storeSyncSequence=0;storeSyncFlight=null;storeSyncAttempts=new Map();storeSyncTimer=null;storeRequestCancel=null;storeSyncStatus="";
   constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;this.sourceOpen=false;this.sourceBusy=false;this.sourceCommitting=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";this.sourceSequence=0;}
   set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
-  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;this.cancelStoreSync();clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);}
+  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;this.cancelStoreSync();clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);void this.cancelTariff(false,true);}
   async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=this.mergeUpdateStatus(payload);this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}void this.syncStoreMetadata();this.render();}
-  async command(args,draftKey=null,errorMessage=null){if(this.busy)return false;++this.requestSequence;this.busy=true;this.error="";this.render();try{this.payload=this.mergeUpdateStatus(await this._hass.callWS({type:"deye_ems/command",...args}));if(draftKey!==null)delete this.drafts[draftKey];return true;}catch(e){this.error=errorMessage||e.message||String(e);return false;}finally{this.busy=false;this.render();}}
+  async command(args,draftKey=null,errorMessage=null){
+    if(this.busy)return false;
+    const kind=args.command==="option"?"option:"+String(args.key):String(args.command);
+    ++this.requestSequence;this.busy=true;this.error="";this.render();
+    try{this.payload=this.mergeUpdateStatus(await this._hass.callWS({type:"deye_ems/command",...args}));
+      if(draftKey!==null)delete this.drafts[draftKey];
+      if(this.actionError?.kind===kind)this.actionError=null;
+      return true;
+    }catch(e){this.error=errorMessage||e.message||String(e);this.actionError={kind,message:this.error};return false;}
+    finally{this.busy=false;this.render();}
+  }
+  savedWizard(kind,label){
+    this[kind+"Open"]=false;this[kind+"Draft"]={};this[kind+"Notice"]="";
+    this.savedWizardNotice="Zapisano "+label+". Silnik sprawdza warunki automatycznego włączenia; wynik jest widoczny poniżej.";
+  }
+  postSaveState(){
+    const value=this.payload?.post_save_activation;
+    return value&&typeof value==="object"&&!Array.isArray(value)&&["idle","waiting","checking","active","blocked","cancelled"].includes(value.status)?value:{status:"idle",reason:null,issues:[]};
+  }
+  postSavePending(){return ["waiting","checking"].includes(this.postSaveState().status);}
+  postSaveHtml(){
+    const state=this.postSaveState();
+    if(state.status==="idle")return this.savedWizardNotice?'<div role="status" class="notice">'+esc(this.savedWizardNotice)+'</div>':"";
+    const messages={configuration_pause_failed:"Nie potwierdzono wyłączenia ładowania przed przeładowaniem. Sprawdź odczyty Deye i ponów zapis.",waiting_for_reload:"Oczekiwanie na załadowanie zapisanej konfiguracji.",waiting_for_measurements:"Oczekiwanie na poprawne, świeże pomiary.",waiting_for_plan:"Oczekiwanie na zakończenie obliczania planu.",activation_conditions_failed:"Warunki automatycznego włączenia nie są spełnione. EMS pozostaje w obserwacji.",activation_cancelled:"Automatyczne włączenie anulowano. EMS pozostaje w obserwacji.",configuration_changed:"Konfiguracja zmieniła się w trakcie sprawdzania. Sprawdź aktualne ustawienia.",configuration_reload_failed:"Nie udało się załadować zapisanej konfiguracji. EMS pozostaje w obserwacji.",activation_failed:"Nie udało się bezpiecznie włączyć sterowania. Sprawdź diagnostykę.",activation_completed:"Po sprawdzeniu warunków włączono sterowanie."};
+    const fallback={waiting:"Oczekiwanie na sprawdzenie zapisanej konfiguracji.",checking:"Sprawdzanie warunków automatycznego włączenia.",active:this.payload?.mode==="active"?"Sterowanie zostało włączone.":"Odczyt trybu po sprawdzeniu wymaga odświeżenia.",blocked:"Nie można automatycznie włączyć sterowania. EMS pozostaje w obserwacji.",cancelled:"Automatyczne włączenie zostało anulowane."};
+    let message=Object.hasOwn(messages,state.reason)?messages[state.reason]:fallback[state.status];
+    if(state.status==="active"&&this.payload?.mode!=="active")message=fallback.active;
+    const issueNames={missing:"brak odczytu",restored:"odczyt przywrócony po uruchomieniu",wrong_unit:"błędna jednostka",invalid:"nieprawidłowy odczyt",future:"czas odczytu w przyszłości",stale:"odczyt jest za stary",time_skew:"odczyty z różnych chwil",alias:"powtórzone przypisanie",telemetry_invalid:"brak poprawnych pomiarów",bms_blocked:"blokada ładowania",incomplete_48h_forecast:"brak kompletnej prognozy",unavailable:"brak danych",invalid_or_unsupported:"niepoprawna lub nieobsługiwana konfiguracja",provider_unavailable:"źródło danych jest niedostępne"};
+    const names={...sourceLabels,charge_power:"Zgodność czasowa pomiarów mocy",reserve:"Rezerwa SoC",forecast:"Prognoza",plan:"Plan",hardware:"Model falownika",battery_alarm:"Alarm baterii",battery_fault:"Błąd baterii",topology:"Układ pomiarowy",grid_setting:"Nastawa ładowania",tariff:"Operator i taryfa"};
+    for(const kind of ["grid","load","ct_grid"])for(let i=1;i<=3;i++)names[kind+"_l"+i+"_power"]=(kind==="ct_grid"?"CT":kind.toUpperCase())+" L"+i;
+    const issues=(Array.isArray(state.issues)?state.issues:[]).slice(0,24).filter(issue=>issue&&typeof issue==="object"&&Object.hasOwn(names,issue.source)&&Object.hasOwn(issueNames,issue.reason));
+    return '<div role="'+(state.status==="blocked"?'alert':'status')+'" class="notice '+(state.status==="blocked"?'error':'')+'" data-post-save="'+esc(state.status)+'"><p>'+(!this.snapshotFresh()?'Ostatni odczyt sprawdzania; oczekiwanie na aktualizację. ':'')+esc(message)+'</p>'+issues.map(issue=>'<p>'+esc(names[issue.source])+': '+esc(issueNames[issue.reason])+'.</p>').join("")+(state.plan_source==="own_conservative_fallback"?'<p>Silnik używa planu zachowawczego; brak kompletnej prognozy nie jest prognozą zerowego zużycia. Nadal obowiązują świeże pomiary i wszystkie ograniczenia.</p>':state.plan_source==="own_deterministic_planner"?'<p>Silnik używa bieżącego planu opartego na prognozie.</p>':'')+(this.postSavePending()?'<p>Sprawdzanie prowadzi silnik także po zamknięciu panelu. Przycisk „Zatrzymaj i obserwuj” anuluje automatyczne włączenie.</p>':'')+'</div>';
+  }
+  dismissActionError(){const message=this.actionError?.message;this.actionError=null;if(this.error===message)this.error="";this.render();}
+  runtimeErrorHtml(){
+    const code=this.payload?.data?.error;
+    if(typeof code!=="string"||!code)return "";
+    const messages={restored_active_preflight_failed:"Po uruchomieniu nie wznowiono sterowania. Sprawdź świeże pomiary i plan, a następnie włącz sterowanie jawnie.",ownership_conflict:"Działa inny sterownik. EMS pozostaje w obserwacji.",battery_low_soc_unavailable:"Brak poprawnego odczytu Battery low SOC. Sprawdź diagnostykę i przypisanie encji."};
+    const message=Object.hasOwn(messages,code)?messages[code]:/^[a-zA-Z0-9_:.-]{1,120}$/.test(code)?"Błąd silnika: "+code:"Silnik zgłasza błąd. Sprawdź diagnostykę.";
+    return '<div role="alert" class="notice error" data-runtime-error="true">'+(!this.snapshotFresh()?'Ostatnio zgłoszony błąd; stan silnika wymaga odświeżenia. ':'')+esc(message)+'</div>';
+  }
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
   telemetryIssueText(){
@@ -238,7 +286,7 @@ class DeyeEMSPanel extends HTMLElement {
     const at=updateTimestamp(this.payload?.updates?.retry_at),remaining=at===null?0:at-Date.now();
     return remaining>0&&remaining<=86400000?Math.ceil(remaining/1000):0;
   }
-  hasUnsavedChanges(){return Boolean(this.hardwareOpen||this.sourceOpen||this.solcastOpen||this.loadDraft||this.loadDelete||this.appearanceDraft!==null||Object.keys(this.drafts).length);}
+  hasUnsavedChanges(){return Boolean(this.tariffOpen||this.hardwareOpen||this.sourceOpen||this.solcastOpen||this.loadDraft||this.loadDelete||this.appearanceDraft!==null||Object.keys(this.drafts).length);}
   async checkUpdates(){
     const version=releaseVersion(this.payload?.backend_version);
     if(!this._hass||this.busy||this.updatesBusy||!version||this.updatesRetrySeconds()>0)return false;
@@ -435,19 +483,72 @@ class DeyeEMSPanel extends HTMLElement {
       (numeric(h.grid_passthrough_a)!==null?'<p class="legend">Przepustowość GRID→LOAD z dokumentacji: '+num(h.grid_passthrough_a,0)+' A. Informacja sprzętowa; nie podwyższa zapisanego limitu poboru portu GRID.</p>':'')+
       (h.control_supported===false?'<p class="notice warning">Ten profil nie ma potwierdzonej obsługi sterowania. Pozostaw EMS w obserwacji.</p>':'')+this.hardwareEditorHtml()+'</section>';
   }
+  tariffZone(row){
+    if(typeof row?.zone_label==="string"&&row.zone_label.trim())return row.zone_label;
+    const zones={off_peak:"Poza szczytem",morning_peak:"Szczyt przedpołudniowy",afternoon_peak:"Szczyt popołudniowy",peak:"Szczyt",cheap:"Poza szczytem",protected:"Chronione okno",night:"Noc",day:"Dzień",flat:"Strefa całodobowa",low:"Strefa niższa",high:"Strefa wyższa",normal:"Strefa podstawowa",day_offpeak:"Dzienna strefa pozaszczytowa",day_peak:"Dzienna strefa szczytowa"};
+    return Object.hasOwn(zones,row?.zone)?zones[row.zone]:typeof row?.zone==="string"?row.zone:"Niepotwierdzona strefa";
+  }
+  tariffInterval(row){
+    const offset=value=>new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",timeZoneName:"shortOffset",hour:"2-digit"}).formatToParts(new Date(value)).find(part=>part.type==="timeZoneName")?.value||"";
+    const from=offset(row.start),to=offset(row.end),changed=from!==to;
+    return time(row.start)+(changed?' ('+from+')':'')+'–'+time(row.end)+(changed?' ('+to+')':'');
+  }
+  tariffClock(value){return value==="local"||value==="local_time"?"Czas lokalny Europe/Warsaw — zmiana lato/zima":value==="fixed_cet"||value==="fixed_winter"?"Stały czas zimowy CET — bez zmiany lato/zima":"Podstawa zegara niepotwierdzona";}
+  tariffReason(value){
+    const labels={winter:"Sezon zimowy",summer:"Sezon letni",weekend:"Weekend",weekday:"Dzień roboczy",workday:"Dzień roboczy",holiday:"Święto",all_day:"Cała doba",virtual_checkpoint:"Planistyczny punkt kontrolny"};
+    return Object.hasOwn(labels,value)?labels[value]:typeof value==="string"&&value.startsWith("holiday:")?"Święto":"Reguła operatora / profilu";
+  }
+  tariffPermission(value){return value===true?"Dozwolone według polityki EMS":value===false?"Zablokowane":"Niepotwierdzone";}
+  tariffSlotTargetsHtml(){
+    const raw=this.payload?.data?.plan?.tariff_slot_targets;
+    if(!Array.isArray(raw)||!raw.length)return "";
+    if(!this.snapshotFresh())return '<p class="notice warning">Brak bieżącej tabeli celów SoC. Ostatni odczyt silnika wymaga odświeżenia.</p>';
+    const soc=value=>{const n=numeric(value);return n!==null&&n>=0&&n<=100?n:null;};
+    const rows=raw.slice(0,96).filter(row=>row&&typeof row==="object"&&!Array.isArray(row)&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start));
+    if(!rows.length)return '<p>Brak poprawnych przedziałów celów SoC.</p>';
+    return '<h3>Cele SoC w przedziałach taryfy</h3><div class="table"><table><thead><tr><th>Przedział</th><th>Strefa operatora</th><th>Sieć → bateria</th><th>Cel ładowania %</th><th>Rezerwa %</th><th>Prognoza SoC od → do %</th><th>Podstawa / termin celu</th></tr></thead><tbody>'+rows.map(row=>{
+      const start=updateTimestamp(row.start),end=updateTimestamp(row.end),past=row.quality==="past"||end<=Date.now();
+      const forecast=!past&&row.quality==="forecast",fallback=!past&&row.quality==="fallback",known=forecast||fallback;
+      const target=known&&row.grid_charge_allowed===true?soc(row.charge_target_soc_percent):null,reserve=known?soc(row.reserve_soc_percent):null;
+      const from=updateTimestamp(row.projection_from),projection=forecast&&from!==null&&from>=start&&from<end;
+      const projected=projection?num(soc(row.projected_soc_start_percent))+' → '+num(soc(row.projected_soc_end_percent))+' (od '+esc(time(row.projection_from))+')':'—';
+      const quality=past?"Przedział miniony — brak historycznej prognozy":fallback?"Cel zachowawczy; brak pełnej prognozy":forecast?"Prognoza modelu":"Brak wyliczenia";
+      return '<tr><td>'+esc(this.tariffInterval(row))+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+num(target)+(fallback&&target!==null?' (zachowawczy)':'')+'</td><td>'+num(reserve)+'</td><td>'+projected+'</td><td>'+quality+' · '+esc(this.tariffReason(row.reason))+(known&&updateTimestamp(row.deadline)!==null?' · '+esc(time(row.deadline)):'')+'</td></tr>';
+    }).join("")+'</tbody></table></div><p class="legend">Cel ładowania dotyczy terminu planu pokazanego w tabeli; nie jest poleceniem ciągłego poboru. Prognozowane SoC opisuje model od podanej chwili, nie historyczny pomiar na początku bieżącego przedziału. Rezerwa, PV, sezon oraz limity nadal obowiązują.</p>';
+  }
+  physicalTariffHtml(){
+    const program=this.payload?.options?.physical_tou;
+    if(!program||typeof program!=="object"||Array.isArray(program))return "";
+    const title='<section aria-label="Plan wpisów TOU falownika"><h2>Plan wpisów TOU falownika</h2>';
+    const rows=(Array.isArray(program.rows)?program.rows:[]).slice(0,7);
+    const valid=program.valid===true&&rows.length===6&&rows.every(row=>row&&Number.isInteger(row.slot)&&row.slot>=1&&row.slot<=6&&typeof row.time==="string"&&/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(row.time)&&typeof row.grid_charge_allowed==="boolean")&&new Set(rows.map(row=>row.slot)).size===6&&new Set(rows.map(row=>row.time)).size===6;
+    if(!valid)return title+'<p class="notice warning">Brak kompletnego, poprawnego planu sześciu wpisów TOU. Sprawdź kalendarz i diagnostykę przed sterowaniem.</p></section>';
+    return title+'<p>Techniczny podział na sześć wpisów wymaganych przez Deye. Rzeczywiste strefy operatora są pokazane osobno powyżej.</p><div class="table"><table><thead><tr><th>Wpis TOU</th><th>Początek</th><th>Strefa</th><th>Sieć → bateria</th><th>Rodzaj granicy</th></tr></thead><tbody>'+[...rows].sort((a,b)=>a.slot-b.slot).map(row=>'<tr><td>'+row.slot+'</td><td>'+esc(row.time)+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+(row.padding===true?'Podział techniczny tej samej strefy':'Granica strefy')+'</td></tr>').join("")+'</tbody></table></div><p class="legend">To przygotowany program, nie potwierdzenie odczytu rejestrów ani fizycznego ładowania. Dodatkowy podział nie tworzy nowej strefy taryfowej i nie rozszerza zgody na ładowanie.</p></section>';
+  }
+  modelTargetsHtml(){
+    const plan=this.payload?.data?.plan||{};
+    if(plan.quality!=="valid"||!this.snapshotFresh())return "";
+    const targets=Object.values(plan.targets||{}).filter(row=>row&&typeof row==="object"&&updateTimestamp(row.deadline)!==null).sort((a,b)=>updateTimestamp(a.deadline)-updateTimestamp(b.deadline)).slice(0,24);
+    return targets.length?'<div class="grid">'+targets.map(row=>'<article><span class="label">'+(row.virtual_checkpoint===true?'Planistyczny punkt kontrolny':'Modelowy cel SoC')+'</span><strong>'+num(numeric(row.soc_percent)!==null&&numeric(row.soc_percent)>=0&&numeric(row.soc_percent)<=100?row.soc_percent:null)+'<small>%</small></strong><span class="sub">'+esc(time(row.deadline))+(row.virtual_checkpoint===true?' · nie jest granicą strefy operatora':'')+'</span></article>').join("")+'</div>':"";
+  }
   tariffCalendarHtml(){
     const calendar=this.payload?.options?.tariff_calendar;
-    if(!calendar||typeof calendar!=="object"||Array.isArray(calendar))return '<section aria-label="Harmonogram taryfy"><h2>Harmonogram taryfy</h2><p>Oczekiwanie na kalendarz silnika. Wybór operatora i taryfy będzie dostępny w kolejnym etapie.</p></section>';
-    const zones={off_peak:"Poza szczytem",morning_peak:"Szczyt przedpołudniowy",afternoon_peak:"Szczyt popołudniowy",peak:"Szczyt",cheap:"Poza szczytem",protected:"Chronione okno",night:"Noc",day:"Dzień"};
-    const clock={local:"Czas lokalny Europe/Warsaw",local_time:"Czas lokalny Europe/Warsaw",fixed_cet:"Stały czas zimowy",fixed_winter:"Stały czas zimowy",unconfirmed:"Podstawa zegara niepotwierdzona"};
-    const clockLabel=Object.hasOwn(clock,calendar.clock_basis)?clock[calendar.clock_basis]:"Podstawa zegara: "+String(calendar.clock_basis??"niepotwierdzona");
-    const reasonLabel=value=>value==="winter"?"Sezon zimowy":value==="summer"?"Sezon letni":value==="weekend"?"Dzień wolny":typeof value==="string"&&value.startsWith("holiday:")?"Święto":"Reguła profilu";
-    const rows=values=>(Array.isArray(values)?values:[]).slice(0,32).filter(row=>row&&typeof row==="object"&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start)).map(row=>'<tr><td>'+esc(time(row.start))+'–'+esc(time(row.end))+'</td><td>'+esc(Object.hasOwn(zones,row.zone)?zones[row.zone]:row.zone)+'</td><td>'+(row.grid_charge_allowed===true?'Dozwolone według zasad sezonu':'Zablokowane')+'</td><td>'+reasonLabel(row.reason)+(Number.isInteger(row.legacy_slot)&&row.legacy_slot>=1&&row.legacy_slot<=6?' · slot '+row.legacy_slot:'')+'</td></tr>').join("");
-    const tables=[["Dziś",calendar.today],["Jutro",calendar.tomorrow]].map(([label,values])=>'<h3>'+label+'</h3><div class="table"><table><thead><tr><th>Przedział</th><th>Strefa</th><th>Ładowanie z sieci</th><th>Reguła</th></tr></thead><tbody>'+(rows(values)||'<tr><td colspan="4">Brak poprawnych przedziałów.</td></tr>')+'</tbody></table></div>').join("");
-    return '<section aria-label="Harmonogram taryfy"><h2>Harmonogram taryfy</h2><p><b>'+esc(calendar.label||calendar.profile_id||"Zachowany harmonogram")+'</b> · wersja '+esc(calendar.version||"niepotwierdzona")+'.</p><p>'+esc(clockLabel)+'.</p>'+
-      '<p>Aktualna strefa: '+esc(Object.hasOwn(zones,calendar.current_zone)?zones[calendar.current_zone]:calendar.current_zone??"niepotwierdzona")+' · następna zmiana: '+esc(time(calendar.next_change))+'.</p>'+
-      (calendar.preview_only===true||calendar.runtime_allowed===false?'<p class="notice warning">Podgląd kalendarza; nie jest potwierdzeniem zgody na sterowanie dla tego profilu.</p>':'')+
-      '<p class="legend">'+(calendar.profile_id==="legacy_g13"?'Zachowany profil G13 z wersji 1.x, codziennie bez automatycznych wyjątków operatora. ':'')+'Wybór operatora i katalog zweryfikowanych taryf pojawią się w kolejnym etapie. Zgoda w harmonogramie nie oznacza ciągłego ładowania; decydują także SoC, sezon, PV i limity.</p>'+tables+'</section>';
+    const heading='<section aria-label="Harmonogram taryfy"><h2>Operator i taryfa</h2>';
+    if(!calendar||typeof calendar!=="object"||Array.isArray(calendar))return heading+'<p>Oczekiwanie na zapisany kalendarz silnika.</p>'+this.tariffEditorHtml()+'</section>';
+    const operator=calendar.operator_label||this.tariffCatalog?.operators?.find(row=>row.operator_id===(calendar.operator_id||calendar.operator))?.label||calendar.operator||"Dotychczasowy profil własny";
+    const rows=values=>(Array.isArray(values)?values:[]).slice(0,48).filter(row=>row&&typeof row==="object"&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start)).map(row=>'<tr><td>'+esc(this.tariffInterval(row))+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+esc(this.tariffReason(row.reason))+'</td></tr>').join("");
+    const tables=[["Dziś",calendar.today],["Jutro",calendar.tomorrow]].map(([label,values])=>'<h3>'+label+'</h3><div class="table"><table><thead><tr><th>Przedział</th><th>Strefa operatora</th><th>Sieć → bateria</th><th>Reguła</th></tr></thead><tbody>'+(rows(values)||'<tr><td colspan="4">Brak poprawnych przedziałów.</td></tr>')+'</tbody></table></div>').join("");
+    const source=typeof calendar.source_url==="string"&&/^https:\/\/[A-Za-z0-9.-]+\/[^\s<>"']*$/.test(calendar.source_url)?calendar.source_url:null;
+    const targetTable=this.tariffSlotTargetsHtml();
+    const issues={tariff_contract_confirmation_required:"Brak potwierdzenia zgodności taryfy z umową. Otwórz wybór operatora i taryfy, sprawdź podgląd oraz zapisz potwierdzenie.",tariff_clock_confirmation_required:"Brak potwierdzonego zegara licznika. Wybierz czas lokalny albo stały CET i zapisz potwierdzenie.",tariff_outside_validity:"Profil taryfy jest poza okresem ważności. Wybierz aktualny profil.",unverified_region_schedule:"Brak zweryfikowanego harmonogramu dla regionu; ten profil nie może sterować ładowaniem.",dynamic_feed_required:"Ta taryfa wymaga zewnętrznego źródła aktualnych cen lub stref.",invalid_tariff_configuration:"Konfiguracja taryfy jest nieprawidłowa. Sprawdź operatora, taryfę i zegar."};
+    const warning=Object.hasOwn(issues,calendar.issue)?issues[calendar.issue]:calendar.within_validity===false?issues.tariff_outside_validity:calendar.valid===false?"Kalendarz taryfy nie jest zatwierdzony do sterowania. Sprawdź konfigurację.":"Profil wymaga sprawdzenia warunków umowy lub zegara.";
+    const requirements=(Array.isArray(calendar.requirements)?calendar.requirements:[]).filter(value=>typeof value==="string").slice(0,12);
+    const notes=(typeof calendar.notice==="string"&&calendar.notice?'<p class="notice">'+esc(calendar.notice)+'</p>':'')+(requirements.length?'<p class="legend">Warunki profilu: '+requirements.map(esc).join("; ")+'.</p>':'')+(calendar.valid_from||calendar.valid_until?'<p class="legend">Ważność profilu: '+esc(calendar.valid_from||"niepotwierdzona")+' – '+esc(calendar.valid_until||"bez podanej daty końcowej")+'.</p>':'');
+    return heading+'<p><b>'+esc(operator)+'</b> · '+esc(calendar.tariff||calendar.label||calendar.profile_id||"Zachowany harmonogram")+' · wersja '+esc(calendar.version||"niepotwierdzona")+'.</p><p>'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny tabel: Europe/Warsaw.</p>'+
+      '<p>Aktualna strefa: '+esc(this.snapshotFresh()?this.tariffZone({zone:calendar.current_zone,zone_label:calendar.current_interval?.zone_label}):"brak bieżącego odczytu")+' · następna zmiana: '+esc(time(this.snapshotFresh()?calendar.next_change:null))+'.</p>'+
+      (calendar.valid===false||calendar.preview_only===true||calendar.runtime_allowed===false||calendar.within_validity===false?'<p class="notice warning">'+esc(warning)+' Ten podgląd nie potwierdza zgody na sterowanie.</p>':'')+
+      (calendar.profile_id==="legacy_g13"?'<p class="notice">Zachowany własny harmonogram G13 z wcześniejszej wersji. Reguły operatora zaczną obowiązywać po wyborze i potwierdzeniu taryfy.</p>':'')+
+      '<p class="legend">Kalendarz uwzględnia reguły zapisanego operatora i profilu. Zezwolenie nie oznacza ciągłego ładowania: decydują także SoC, PV, sezon i limity.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+this.tariffEditorHtml()+(targetTable||tables)+'</section>';
   }
   panelThemeNames(){return Object.keys(this._hass?.themes?.themes||{}).sort((a,b)=>a.localeCompare(b));}
   savedPanelTheme(){return typeof this.payload?.appearance?.theme==="string"?this.payload.appearance.theme:"";}
@@ -626,8 +727,7 @@ class DeyeEMSPanel extends HTMLElement {
     }
     if(result.type==="create_entry"){
       this.clearSolcastSecret();this.solcastDraft={};flow.flow_id=null;
-      this.solcastNotice=this.solcastConfirmDisable?"Pobieranie przez EMS zostało wyłączone. Zapisany klucz i kalibracja pozostają zachowane.":
-        "Zapisano i włączono pobieranie przez EMS. Poczekaj na odczyt silnika i sprawdź plan przed włączeniem sterowania.";
+      this.savedWizard("solcast",this.solcastConfirmDisable?"wyłączenie pobierania Solcast":"konfigurację Solcast");
       this.solcastConfirmDisable=false;
     }
     return true;
@@ -643,12 +743,13 @@ class DeyeEMSPanel extends HTMLElement {
     }finally{
       if(sequence===this.solcastSequence){
         this.solcastBusy=false;this.solcastCommitting=false;this.busy=false;this.render();
-        if(this.solcastFlow?.type==="create_entry")void this.refreshAfterSolcast(sequence);
+        if(this.solcastFlow?.type==="create_entry")void this.refresh();
       }
     }
   }
   async openSolcast(){
     if(this.busy)return;
+    if(this.tariffOpen)await this.cancelTariff(false);
     if(this.hardwareOpen)await this.cancelHardware(false);
     if(this.sourceOpen)await this.cancelSources(false);
     const cleanup=this.cancelSolcast(false),openingSequence=this.solcastSequence;
@@ -731,11 +832,7 @@ class DeyeEMSPanel extends HTMLElement {
     if(flow?.type==="form")body='<form id="solcast-form"><fieldset '+(disabled?'disabled':'')+'><div class="fields">'+flow.data_schema.map(field=>this.solcastFieldHtml(field)).join("")+'</div></fieldset>'+flow.errors.map(message=>'<p role="alert" class="notice error">'+esc(message)+'</p>').join("")+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<p class="legend">Pobieranie po zapisie może zużyć limit API. Nieznane wykorzystanie pozostaw jako pełny limit doby UTC. Import nie wyłącza pobierania przez inne integracje.</p><div class="actions"><button type="submit" '+(disabled?'disabled':'')+'>'+(flow.step_id==="solcast_import"?'Wczytaj ustawienia do podglądu':'Zapisz i włącz pobieranie API')+'</button></div></form>';
     if(this.solcastConfirmDisable)body='<div role="alert" class="notice">Wyłączyć pobieranie prognozy przez EMS? Zapisany klucz i kalibracja pozostaną zachowane.<div class="actions"><button id="solcast-disable-confirm" '+(disabled?'disabled':'')+'>Tak, wyłącz pobieranie</button><button id="solcast-disable-back" class="secondary" '+(this.busy?'disabled':'')+'>Wróć</button></div></div>';
     if(flow?.type==="abort")body='<button id="solcast-reopen" class="secondary" '+(disabled?'disabled':'')+'>Otwórz kreator ponownie</button>';
-    if(flow?.type==="create_entry"&&!active){
-      const ready=this.solcastPlanReady();
-      body='<p class="legend">EMS pozostaje w trybie obserwacji. Sprawdź nowy plan; sterowanie włącza się osobno.</p><button id="solcast-resume" '+(this.busy||!ready?'disabled':'')+'>Włącz sterowanie po konfiguracji</button>';
-    }
-    return '<div class="solcast-editor"><h3>Konfiguracja Solcast</h3>'+locked+(this.solcastError?'<p role="alert" class="notice error">'+esc(this.solcastError)+'</p>':'')+(this.solcastNotice?'<p role="status" class="notice">'+esc(this.solcastNotice)+'</p>':'')+(this.solcastBusy?'<p role="status">'+(this.solcastCommitting?'Zapisywanie ustawień w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="solcast-cancel" type="button" class="secondary" '+(this.solcastCommitting?'disabled':'')+'>'+(flow?.type==="create_entry"?'Zamknij kreator':'Anuluj kreator')+'</button></div></div>';
+    return '<div class="solcast-editor"><h3>Konfiguracja Solcast</h3>'+locked+(this.solcastError?'<p role="alert" class="notice error">'+esc(this.solcastError)+'</p>':'')+(this.solcastNotice?'<p role="status" class="notice">'+esc(this.solcastNotice)+'</p>':'')+(this.solcastBusy?'<p role="status">'+(this.solcastCommitting?'Zapisywanie ustawień w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="solcast-cancel" type="button" class="secondary" '+(this.solcastCommitting?'disabled':'')+'>'+'Anuluj kreator'+'</button></div></div>';
   }
   bindSolcast(){
     const root=this.shadowRoot;
@@ -743,7 +840,6 @@ class DeyeEMSPanel extends HTMLElement {
     root.getElementById("solcast-reopen")?.addEventListener("click",()=>this.openSolcast());
     root.getElementById("solcast-cancel")?.addEventListener("click",()=>this.cancelSolcast());
     root.getElementById("solcast-observe")?.addEventListener("click",async()=>{if(await this.command({command:"mode",mode:"shadow"})){if(!this.solcastFlow||this.solcastFlow.type==="abort")await this.openSolcast();else this.render();}});
-    root.getElementById("solcast-resume")?.addEventListener("click",()=>{if(this.solcastPlanReady())this.command({command:"mode",mode:"active"});});
     root.querySelectorAll("[data-solcast-step]").forEach(button=>button.addEventListener("click",()=>{if(this.busy||this.payload?.mode==="active")return;if(button.dataset.solcastStep==="solcast_disable"){this.solcastConfirmDisable=true;this.render();}else this.advanceSolcast({next_step_id:button.dataset.solcastStep});}));
     root.getElementById("solcast-disable-confirm")?.addEventListener("click",()=>this.advanceSolcast({next_step_id:"solcast_disable"}));
     root.getElementById("solcast-disable-back")?.addEventListener("click",()=>{this.solcastConfirmDisable=false;this.render();});
@@ -754,6 +850,118 @@ class DeyeEMSPanel extends HTMLElement {
       else this.solcastDraft[field.name]=field.type==="boolean"?input.checked:input.value;
     }));
     root.getElementById("solcast-form")?.addEventListener("submit",event=>{event.preventDefault();this.submitSolcast();});
+  }
+  async cancelTariff(render=true,force=false){
+    if(this.tariffCommitting&&!force)return;
+    ++this.tariffSequence;const id=this.tariffFlow?.flow_id;
+    this.tariffOpen=false;this.tariffFlow=null;this.tariffDraft={};this.tariffError="";this.tariffNotice="";
+    if(this.tariffBusy)this.busy=false;
+    this.tariffBusy=false;this.tariffCommitting=false;
+    if(render)this.render();await this.cleanupSolcastFlow(id);
+  }
+  applyTariffResult(result,sequence){
+    if(sequence!==this.tariffSequence||!this.tariffOpen){void this.cleanupSolcastFlow(result?.flow_id);return false;}
+    if(!result||!["menu","form","abort","create_entry"].includes(result.type))throw Error("unsupported_flow");
+    const previous=this.tariffFlow,flow={type:result.type,flow_id:typeof result.flow_id==="string"?result.flow_id:previous?.flow_id,step_id:result.step_id,fields:[],errors:[],note:""};
+    if(result.type==="menu"&&(result.step_id!=="init"||!result.menu_options?.includes("tariff")))throw Error("unsupported_menu");
+    if(result.type==="form"){
+      const expected={tariff_operator:["operator_id"],tariff_plan:["profile_id","clock_basis"],tariff_confirm:["confirm_tariff"]}[result.step_id];
+      if(!expected||!Array.isArray(result.data_schema)||result.data_schema.length!==expected.length)throw Error("unsupported_form");
+      const names=new Set();
+      flow.fields=result.data_schema.map(field=>{
+        const selector=field?.selector||{},type=Object.keys(selector)[0],confirm=result.step_id==="tariff_confirm";
+        if(!field||Object.keys(selector).length!==1||names.has(field.name)||!expected.includes(field.name)||field.required!==true||
+          (confirm?type!=="boolean":type!=="select"||selector.select?.multiple===true))throw Error("unsupported_field");
+        names.add(field.name);
+        const value=Object.hasOwn(field,"default")?field.default:field.description?.suggested_value;
+        const options=type==="select"&&Array.isArray(selector.select.options)?selector.select.options.slice(0,128).map(option=>typeof option==="string"?{value:option,label:option}:{value:option?.value,label:typeof option?.label==="string"?option.label:option?.value}):[];
+        if(type==="select"&&(!options.length||options.some(option=>typeof option.value!=="string"||!option.value||option.value.length>200||typeof option.label!=="string")||new Set(options.map(option=>option.value)).size!==options.length))throw Error("unsupported_options");
+        if(field.name==="clock_basis"&&options.some(option=>!["local","fixed_cet"].includes(option.value)))throw Error("unsupported_clock");
+        return {name:field.name,type,options,required:true,value:type==="boolean"?false:typeof value==="string"&&options.some(option=>option.value===value)?value:""};
+      });
+      if(expected.some(name=>!names.has(name)))throw Error("incomplete_form");
+      const retain=previous?.type==="form"&&previous.step_id===flow.step_id;
+      this.tariffDraft=Object.fromEntries(flow.fields.map(field=>[field.name,retain&&Object.hasOwn(this.tariffDraft,field.name)?this.tariffDraft[field.name]:field.value]));
+      flow.errors=Object.values(result.errors||{}).map(code=>Object.hasOwn(tariffMessages,code)?tariffMessages[code]:"Sprawdź operatora, taryfę, zegar i warunki umowy. Ustawienia nie zostały zapisane.");
+      if(typeof result.description_placeholders?.tariff_preview==="string")flow.note=result.description_placeholders.tariff_preview;
+      else if(typeof result.description_placeholders?.tariff_notices==="string"&&result.description_placeholders.tariff_notices)flow.note="Pozycje niedostępne do sterowania: "+result.description_placeholders.tariff_notices.replaceAll("unverified_region_schedule","brak zweryfikowanego harmonogramu dla regionu").replaceAll("dynamic_feed_required","wymaga zewnętrznego źródła aktualnych cen / stref");
+    }
+    if(result.type==="abort")this.tariffError=Object.hasOwn(tariffMessages,result.reason)?tariffMessages[result.reason]:"Kreator zakończono bez zapisu. Otwórz go ponownie, aby sprawdzić taryfę.";
+    if(result.type==="create_entry"){
+      flow.flow_id=null;this.savedWizard("tariff","taryfę");
+    }
+    this.tariffFlow=flow;return true;
+  }
+  async runTariff(operation,committing=false){
+    if(this.busy||this.payload?.mode==="active")return false;
+    const sequence=++this.tariffSequence;this.tariffBusy=true;this.tariffCommitting=committing;this.busy=true;this.tariffError="";this.render();
+    try{await operation(sequence);return sequence===this.tariffSequence;}
+    catch{if(sequence===this.tariffSequence&&this.tariffOpen)this.tariffError="Nie udało się otworzyć lub zapisać taryfy. Sprawdź połączenie z HA i aktualną wersję integracji.";return false;}
+    finally{if(sequence===this.tariffSequence){this.tariffBusy=false;this.tariffCommitting=false;this.busy=false;this.render();if(this.tariffFlow?.type==="create_entry")void this.refresh();}}
+  }
+  async readTariffCatalog(sequence){
+    try{
+      const result=await this._hass.callWS({type:"deye_ems/tariff_catalog"});
+      if(sequence!==this.tariffSequence||!this.tariffOpen||result?.backend_version!==this.payload?.backend_version||!Array.isArray(result.operators)||!Array.isArray(result.profiles))return;
+      const operators=result.operators.slice(0,16).filter(row=>row&&typeof row.operator_id==="string"&&typeof row.label==="string").map(row=>({operator_id:row.operator_id,label:row.label}));
+      const profiles=result.profiles.slice(0,128).filter(row=>row&&typeof row.profile_id==="string"&&typeof row.operator_id==="string"&&typeof row.label==="string").map(row=>({profile_id:row.profile_id,operator_id:row.operator_id,label:row.label,tariff:typeof row.tariff==="string"?row.tariff:"",supported:row.supported===true,runtime_allowed:row.runtime_allowed===true}));
+      this.tariffCatalog={operators,profiles};
+    }catch{/* The native wizard validates its own choices if optional catalog lookup fails. */}
+  }
+  async openTariff(){
+    if(this.busy)return;
+    if(this.solcastOpen)await this.cancelSolcast(false);
+    if(this.sourceOpen)await this.cancelSources(false);
+    if(this.hardwareOpen)await this.cancelHardware(false);
+    const cleanup=this.cancelTariff(false),sequence=this.tariffSequence;await cleanup;if(sequence!==this.tariffSequence)return;
+    this.tariffOpen=true;
+    if(this.payload?.mode==="active"){this.render();return;}
+    if(typeof this.payload?.entry_id!=="string"||!this.payload.entry_id){this.tariffError="Poczekaj na odczyt integracji i ponów otwarcie kreatora.";this.render();return;}
+    return this.runTariff(async request=>{
+      await this.readTariffCatalog(request);
+      if(request!==this.tariffSequence||!this.tariffOpen)return;
+      const first=await this._hass.callApi("POST","config/config_entries/options/flow",{handler:this.payload.entry_id});
+      if(!this.applyTariffResult(first,request)||first.type!=="menu")return;
+      const result=await this._hass.callApi("POST","config/config_entries/options/flow/"+encodeURIComponent(this.tariffFlow.flow_id),{next_step_id:"tariff"});
+      this.applyTariffResult(result,request);
+    });
+  }
+  async submitTariff(){
+    if(this.tariffFlow?.type!=="form"||!this.tariffFlow.flow_id||this.busy||this.payload?.mode==="active")return;
+    const data={},id=this.tariffFlow.flow_id,confirm=this.tariffFlow.step_id==="tariff_confirm";
+    for(const field of this.tariffFlow.fields){
+      if(field.type==="boolean"){
+        if(this.tariffDraft[field.name]!==true){this.tariffError=tariffMessages.confirm_tariff_required;this.render();return;}
+        data[field.name]=true;
+      }else{
+        const value=String(this.tariffDraft[field.name]??"").trim();
+        if(!field.options.some(option=>option.value===value)){this.tariffError="Wybierz operatora, taryfę i potwierdź zegar z dostępnych list.";this.render();return;}
+        data[field.name]=value;
+      }
+    }
+    return this.runTariff(async sequence=>{const result=await this._hass.callApi("POST","config/config_entries/options/flow/"+encodeURIComponent(id),data);this.applyTariffResult(result,sequence);},confirm);
+  }
+  tariffEditorHtml(){
+    if(!this.tariffOpen)return '<button id="tariff-open" class="secondary" '+(this.busy?'disabled':'')+'>Wybierz operatora i taryfę</button>';
+    const flow=this.tariffFlow,active=this.payload?.mode==="active",disabled=this.busy||active;
+    let body=active?'<p class="notice">Zmiana taryfy wymaga obserwacji. Dotychczasowe sterowanie działa do jawnego przełączenia. <button id="tariff-observe" class="secondary" '+(this.busy?'disabled':'')+'>Przejdź do obserwacji</button></p>':'';
+    if(flow?.type==="form"){
+      const fields=flow.fields.map(field=>field.type==="boolean"?'<label class="check"><input type="checkbox" data-tariff-field="'+esc(field.name)+'" '+(this.tariffDraft[field.name]===true?'checked':'')+'>'+esc(tariffLabels[field.name])+'</label>':'<label>'+esc(tariffLabels[field.name])+'<select data-tariff-field="'+esc(field.name)+'" required><option value="" disabled '+(!this.tariffDraft[field.name]?'selected':'')+'>Wybierz…</option>'+field.options.map(option=>'<option value="'+esc(option.value)+'" '+(option.value===this.tariffDraft[field.name]?'selected':'')+'>'+esc(option.label)+'</option>').join("")+'</select></label>').join("");
+      const stages={tariff_operator:"Wybierz operatora zgodnego z umową dystrybucyjną.",tariff_plan:"Wybierz taryfę i zegar potwierdzony dla Twojego licznika. Czas lokalny zmienia się lato/zima; stały CET pozostaje czasem zimowym. Podgląd nie zapisuje ustawień.",tariff_confirm:"Sprawdź harmonogram, dni wolne, sezon i zegar. Zapis zmieni wyłącznie profil taryfy i jego potwierdzenia; pozostałe ustawienia zostaną zachowane."};
+      const buttons={tariff_operator:"Wybierz taryfę",tariff_plan:"Pokaż harmonogram",tariff_confirm:"Zapisz potwierdzoną taryfę"};
+      body+='<form id="tariff-form">'+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<fieldset '+(disabled?'disabled':'')+'><div class="fields">'+fields+'</div></fieldset>'+flow.errors.map(error=>'<p role="alert" class="notice error">'+esc(error)+'</p>').join("")+'<p class="legend">'+stages[flow.step_id]+'</p><button type="submit" '+(disabled?'disabled':'')+'>'+buttons[flow.step_id]+'</button></form>';
+    }
+    if(flow?.type==="abort")body+='<button id="tariff-reopen" class="secondary" '+(disabled?'disabled':'')+'>Otwórz kreator ponownie</button>';
+    return '<div class="tariff-editor">'+(this.tariffError?'<p role="alert" class="notice error">'+esc(this.tariffError)+'</p>':'')+(this.tariffNotice?'<p role="status" class="notice">'+esc(this.tariffNotice)+'</p>':'')+(this.tariffBusy?'<p role="status">'+(this.tariffCommitting?'Zapisywanie taryfy w HA…':'Otwieranie podglądu taryfy…')+'</p>':'')+body+'<div class="actions"><button id="tariff-cancel" type="button" class="secondary" '+(this.tariffCommitting?'disabled':'')+'>'+'Anuluj kreator'+'</button></div></div>';
+  }
+  bindTariff(){
+    const root=this.shadowRoot;
+    root.getElementById("tariff-open")?.addEventListener("click",()=>this.openTariff());
+    root.getElementById("tariff-reopen")?.addEventListener("click",()=>this.openTariff());
+    root.getElementById("tariff-cancel")?.addEventListener("click",()=>this.cancelTariff());
+    root.getElementById("tariff-observe")?.addEventListener("click",async()=>{if(await this.command({command:"mode",mode:"shadow"}))await this.openTariff();});
+    root.querySelectorAll("[data-tariff-field]").forEach(input=>input.addEventListener("input",()=>{this.tariffDraft[input.dataset.tariffField]=input.type==="checkbox"?input.checked:input.value;}));
+    root.getElementById("tariff-form")?.addEventListener("submit",event=>{event.preventDefault();return this.submitTariff();});
   }
   async cancelHardware(render=true,force=false){
     if(this.hardwareCommitting&&!force)return;
@@ -790,7 +998,7 @@ class DeyeEMSPanel extends HTMLElement {
     }
     if(result.type==="abort")this.hardwareError=Object.hasOwn(hardwareMessages,result.reason)?hardwareMessages[result.reason]:"Kreator został zakończony. Otwórz go ponownie, aby sprawdzić konfigurację.";
     if(result.type==="create_entry"){
-      flow.flow_id=null;this.hardwareDraft={};this.hardwareNotice="Zapisano model falownika. EMS pozostaje w obserwacji. Sprawdź świeże pomiary, limity i plan przed osobnym włączeniem sterowania.";
+      flow.flow_id=null;this.savedWizard("hardware","model falownika");
     }
     this.hardwareFlow=flow;return true;
   }
@@ -803,6 +1011,7 @@ class DeyeEMSPanel extends HTMLElement {
   }
   async openHardware(){
     if(this.busy)return;
+    if(this.tariffOpen)await this.cancelTariff(false);
     if(this.solcastOpen)await this.cancelSolcast(false);
     if(this.sourceOpen)await this.cancelSources(false);
     const cleanup=this.cancelHardware(false),sequence=this.hardwareSequence;await cleanup;if(sequence!==this.hardwareSequence)return;
@@ -840,10 +1049,10 @@ class DeyeEMSPanel extends HTMLElement {
     let body=active?'<p class="notice">Zmiana modelu wymaga obserwacji. <button id="hardware-observe" class="secondary" '+(this.busy?'disabled':'')+'>Przejdź do obserwacji</button></p>':'';
     if(flow?.type==="form"){
       const fields=flow.fields.map(field=>field.type==="boolean"?'<label class="check"><input type="checkbox" data-hardware-field="'+esc(field.name)+'" '+(this.hardwareDraft[field.name]===true?'checked':'')+'>'+esc(hardwareLabels[field.name])+'</label>':'<label>'+esc(hardwareLabels[field.name])+'<select data-hardware-field="'+esc(field.name)+'" '+(field.required?'required':'')+'>'+field.options.map(option=>'<option value="'+esc(option.value)+'" '+(option.value===this.hardwareDraft[field.name]?'selected':'')+'>'+esc(option.label)+'</option>').join("")+'</select></label>').join("");
-      body+='<form id="hardware-form">'+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<fieldset '+(disabled?'disabled':'')+'><div class="fields">'+fields+'</div></fieldset>'+flow.errors.map(error=>'<p role="alert" class="notice error">'+esc(error)+'</p>').join("")+'<p class="legend">'+(flow.step_id==="inverter"?'Wybór modelu określa liczbę faz falownika. Dla modelu własnego ustaw ją ręcznie. Faza L1/L2/L3 ma znaczenie dla falownika jednofazowego przy przyłączu trójfazowym. Podgląd nie zapisuje konfiguracji.':'Sprawdź model i niższe limity instalacji. Zapis zachowa rezerwę SoC, topologię oraz przypisania encji; sterowanie włączysz osobno.')+'</p><button type="submit" '+(disabled?'disabled':'')+'>'+(flow.step_id==="inverter"?'Pokaż parametry modelu':'Zapisz model i ograniczenia')+'</button></form>';
+      body+='<form id="hardware-form">'+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<fieldset '+(disabled?'disabled':'')+'><div class="fields">'+fields+'</div></fieldset>'+flow.errors.map(error=>'<p role="alert" class="notice error">'+esc(error)+'</p>').join("")+'<p class="legend">'+(flow.step_id==="inverter"?'Wybór modelu określa liczbę faz falownika. Dla modelu własnego ustaw ją ręcznie. Faza L1/L2/L3 ma znaczenie dla falownika jednofazowego przy przyłączu trójfazowym. Podgląd nie zapisuje konfiguracji.':'Sprawdź model i niższe limity instalacji. Zapis zachowa rezerwę SoC, topologię oraz przypisania encji; po zapisie silnik sprawdzi warunki automatycznego włączenia.')+'</p><button type="submit" '+(disabled?'disabled':'')+'>'+(flow.step_id==="inverter"?'Pokaż parametry modelu':'Zapisz model i ograniczenia')+'</button></form>';
     }
     if(flow?.type==="abort")body+='<button id="hardware-reopen" class="secondary" '+(disabled?'disabled':'')+'>Otwórz kreator ponownie</button>';
-    return '<div class="hardware-editor">'+(this.hardwareError?'<p role="alert" class="notice error">'+esc(this.hardwareError)+'</p>':'')+(this.hardwareNotice?'<p role="status" class="notice">'+esc(this.hardwareNotice)+'</p>':'')+(this.hardwareBusy?'<p role="status">'+(this.hardwareCommitting?'Zapisywanie modelu w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="hardware-cancel" type="button" class="secondary" '+(this.hardwareCommitting?'disabled':'')+'>'+(flow?.type==="create_entry"?'Zamknij kreator':'Anuluj kreator')+'</button></div></div>';
+    return '<div class="hardware-editor">'+(this.hardwareError?'<p role="alert" class="notice error">'+esc(this.hardwareError)+'</p>':'')+(this.hardwareNotice?'<p role="status" class="notice">'+esc(this.hardwareNotice)+'</p>':'')+(this.hardwareBusy?'<p role="status">'+(this.hardwareCommitting?'Zapisywanie modelu w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="hardware-cancel" type="button" class="secondary" '+(this.hardwareCommitting?'disabled':'')+'>'+'Anuluj kreator'+'</button></div></div>';
   }
   bindHardware(){
     const root=this.shadowRoot;
@@ -889,7 +1098,7 @@ class DeyeEMSPanel extends HTMLElement {
     }
     if(result.type==="abort")this.sourceError=Object.hasOwn(sourceMessages,result.reason)?sourceMessages[result.reason]:"Kreator został zakończony. Otwórz go ponownie, aby spróbować jeszcze raz.";
     if(result.type==="create_entry"){
-      flow.flow_id=null;this.sourceDraft={};this.sourceNotice="Zapisano prefiks i przypisania. EMS pozostaje w obserwacji. Poczekaj na świeże pomiary i sprawdź plan przed osobnym włączeniem sterowania.";
+      flow.flow_id=null;this.savedWizard("source","prefiks i przypisania");
     }
     this.sourceFlow=flow;return true;
   }
@@ -903,6 +1112,7 @@ class DeyeEMSPanel extends HTMLElement {
   }
   async openSources(){
     if(this.busy)return;
+    if(this.tariffOpen)await this.cancelTariff(false);
     if(this.hardwareOpen)await this.cancelHardware(false);
     if(this.solcastOpen)await this.cancelSolcast(false);
     const cleanup=this.cancelSources(false),sequence=this.sourceSequence;
@@ -958,7 +1168,7 @@ class DeyeEMSPanel extends HTMLElement {
         body+='<form id="sources-form"><fieldset '+(disabled?'disabled':'')+'><div class="fields">'+fields+'</div>'+[...lists.values()].join("")+'</fieldset>'+flow.errors.map(error=>'<p role="alert" class="notice error">'+esc(error)+'</p>').join("")+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<p class="legend">'+(flow.step_id==="entity_prefix"?'Dane baterii mogą pochodzić z Deye. YamBMS jest opcjonalny. Wpisz prefiks bez sensor., np. deye_dom_. Następny krok pokaże propozycje; zapis wymaga osobnego potwierdzenia.':'Sprawdź propozycje i własne przypisania. Puste pole wyłącza dane źródło. Prognozy PV, dodatkowy BMS i opcjonalne odbiorniki mają osobne encje.')+'</p><button type="submit" '+(disabled?'disabled':'')+'>'+(flow.step_id==="entity_prefix"?'Pokaż przypisania dla prefiksu':'Zapisz prefiks i przypisania')+'</button></form>';
       }
       if(flow?.type==="abort")body+='<button id="sources-reopen" class="secondary" '+(disabled?'disabled':'')+'>Otwórz kreator ponownie</button>';
-      body=(this.sourceError?'<p role="alert" class="notice error">'+esc(this.sourceError)+'</p>':'')+(this.sourceNotice?'<p role="status" class="notice">'+esc(this.sourceNotice)+'</p>':'')+(this.sourceBusy?'<p role="status">'+(this.sourceCommitting?'Zapisywanie przypisań w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="sources-cancel" type="button" class="secondary" '+(this.sourceCommitting?'disabled':'')+'>'+(flow?.type==="create_entry"?'Zamknij kreator':'Anuluj kreator')+'</button></div>';
+      body=(this.sourceError?'<p role="alert" class="notice error">'+esc(this.sourceError)+'</p>':'')+(this.sourceNotice?'<p role="status" class="notice">'+esc(this.sourceNotice)+'</p>':'')+(this.sourceBusy?'<p role="status">'+(this.sourceCommitting?'Zapisywanie przypisań w HA…':'Łączenie z kreatorem HA…')+'</p>':'')+body+'<div class="actions"><button id="sources-cancel" type="button" class="secondary" '+(this.sourceCommitting?'disabled':'')+'>'+'Anuluj kreator'+'</button></div>';
     }
     return '<section><h2>Źródła danych</h2><p class="legend">Wybierz prefiks swojej integracji Deye i sprawdź przypisania pomiarów oraz sterowania.</p>'+body+'</section>';
   }
@@ -1027,17 +1237,20 @@ class DeyeEMSPanel extends HTMLElement {
     const solcastStage=[this.solcastOpen,this.solcastFlow?.type,this.solcastFlow?.step_id,this.solcastConfirmDisable].join(":");
     const sourceStage=[this.sourceOpen,this.sourceFlow?.type,this.sourceFlow?.step_id,this.sourceError,this.sourceNotice,this.sourceFlow?.errors?.join("|")].join(":");
     const hardwareStage=[this.hardwareOpen,this.hardwareFlow?.type,this.hardwareFlow?.step_id,this.hardwareError,this.hardwareNotice,this.hardwareFlow?.errors?.join("|")].join(":");
+    const tariffStage=[this.tariffOpen,this.tariffFlow?.type,this.tariffFlow?.step_id,this.tariffError,this.tariffNotice,this.tariffFlow?.errors?.join("|")].join(":");
     const telemetryStage=this.telemetryDiagnosticStage();
     const appearanceStage=[this.savedPanelTheme(),this.appearanceMissing,this.panelThemeNames().join("|"),this.appearanceError,this.appearanceDraft].join(":");
-    const urgent=this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSourceStage!==sourceStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage||this.renderedHardwareStage!==hardwareStage||this.renderedTelemetryStage!==telemetryStage;
-    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-source-field],select[data-source-field],input[data-hardware-field],select[data-hardware-field],input[data-solcast-field],select[data-solcast-field],select[data-appearance-theme],select[data-topology]"))return;
+    const urgent=this.renderedPostSave!==JSON.stringify(this.payload?.post_save_activation)||this.renderedSavedNotice!==this.savedWizardNotice||this.renderedTariffStage!==tariffStage||this.renderedActionError!==this.actionError?.message||this.renderedRuntimeError!==this.payload?.data?.error||this.renderedMode!==this.payload?.mode||this.renderedError!==this.error||this.renderedLoadsReady!==Array.isArray(this.payload?.effective_loads)||this.renderedSolcastStage!==solcastStage||this.renderedSourceStage!==sourceStage||this.renderedSolcastError!==this.solcastError||this.renderedSolcastNotice!==this.solcastNotice||this.renderedAppearanceStage!==appearanceStage||this.renderedHardwareStage!==hardwareStage||this.renderedTelemetryStage!==telemetryStage;
+    if(!urgent&&!this.busy&&this.shadowRoot.activeElement?.matches?.("input[data-key],input[data-load-field],input[data-source-field],select[data-source-field],input[data-hardware-field],select[data-hardware-field],input[data-tariff-field],select[data-tariff-field],input[data-solcast-field],select[data-solcast-field],select[data-appearance-theme],select[data-topology]"))return;
     this.renderedMode=this.payload?.mode;this.renderedError=this.error;this.renderedLoadsReady=Array.isArray(this.payload?.effective_loads);
     this.renderedSolcastStage=solcastStage;this.renderedSolcastError=this.solcastError;this.renderedSolcastNotice=this.solcastNotice;
+    this.renderedPostSave=JSON.stringify(this.payload?.post_save_activation);this.renderedSavedNotice=this.savedWizardNotice;
+    this.renderedTariffStage=tariffStage;this.renderedActionError=this.actionError?.message;this.renderedRuntimeError=this.payload?.data?.error;
     this.renderedSourceStage=sourceStage;this.renderedHardwareStage=hardwareStage;this.renderedTelemetryStage=telemetryStage;
     this.renderedAppearanceStage=appearanceStage;
     const detailsOpen=this.shadowRoot.querySelector("details")?.open===true;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{},batteryLimit=this.batteryLimitInfo();
-    const active=p.mode==="active", targets=plan.targets||{}, rows=plan.rows||[];
+    const active=p.mode==="active",pendingStart=this.postSavePending(),rows=plan.rows||[];
     const lowerBound=numeric(o.min_soc_lower_bound),boundValid=o.min_soc_bound_valid===true&&lowerBound!==null&&lowerBound>=5&&lowerBound<=90;
     const rawFloor=numeric(o.effective_min_soc_percent)??numeric(o.min_soc_percent),floor=rawFloor!==null&&rawFloor>=5&&rawFloor<=90?rawFloor:null;
     const fresh=this.snapshotFresh(),request=fresh?c.next_a:null,readSetting=fresh&&d.inputs?.telemetry_valid===true?c.read_setting_a??d.inputs.current_a:null;
@@ -1061,11 +1274,12 @@ class DeyeEMSPanel extends HTMLElement {
     const phaseModel=o.hardware_profile?.phases===1?"Falownik jednofazowy — faza "+(o.hardware_profile.inverter_phase||"niepotwierdzona"):fresh&&d.inputs?.grid_charge_balanced===true?"Bilansowanie poboru GRID potwierdzone":"Wariant zachowawczy — bilansowanie GRID niepotwierdzone";
     const basicField=(key,button)=>{const r=key==="min_soc_percent"?[boundValid?lowerBound:40,90,1]:ranges[key],value=Object.hasOwn(this.drafts,key)?this.drafts[key]:(key==="min_soc_percent"?Math.max(numeric(o[key])??40,r[0]):o[key]??"");return '<label>'+esc(labels[key])+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" '+(this.busy||key==="min_soc_percent"&&!boundValid?'disabled':'')+'>'+esc(button)+'</button></label>';};
     this.shadowRoot.innerHTML='<style>'+
-      ":host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color,#fafafa));color:var(--primary-text-color,#212121);font:15px var(--primary-font-family,var(--ha-font-family-body,system-ui))}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:var(--ha-border-radius-pill,100px);background:var(--label-badge-background-color,var(--secondary-background-color));color:var(--label-badge-text-color,var(--primary-text-color));border:1px solid var(--divider-color);font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:var(--ha-card-backdrop-filter,none);border-width:var(--ha-card-border-width,1px);border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));box-shadow:var(--ha-card-box-shadow,none);color:var(--primary-text-color);padding:22px}.label,.sub{display:block;color:var(--secondary-text-color);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,12px);line-height:1.6;margin:18px 0}.warning{border-inline-start:4px solid var(--warning-color)}.error{border-inline-start:4px solid var(--error-color)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}"+
-      "button{font:inherit;cursor:pointer;border:1px solid transparent;border-radius:var(--ha-button-border-radius,var(--ha-border-radius-pill,20px));padding:11px 16px;background:var(--ems-button-background,var(--ha-color-fill-primary-normal-resting,var(--secondary-background-color)));color:var(--ems-button-text,var(--ha-color-on-primary-normal,var(--primary-color)));font-weight:var(--ha-font-weight-medium,600);box-shadow:var(--ha-button-box-shadow,none)}button.secondary{background:transparent;color:var(--primary-color);border-color:var(--divider-color)}button:hover:not(:disabled){background:var(--ems-button-hover,var(--ha-color-fill-primary-normal-hover,var(--secondary-background-color)))}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ha-color-focus,var(--primary-color));outline-offset:3px}button:disabled,input:disabled,select:disabled{opacity:1;color:var(--input-disabled-ink-color,var(--secondary-text-color));background:var(--input-disabled-fill-color,var(--secondary-background-color));border-color:var(--divider-color);cursor:not-allowed}svg{width:100%;height:230px;display:block}svg polyline{stroke:var(--primary-color)}svg line{stroke:var(--warning-color,var(--secondary-text-color))}.legend{font-size:12px;color:var(--secondary-text-color)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--input-label-ink-color,var(--secondary-text-color))}input,select{margin-top:7px;width:100%;border:1px solid var(--input-idle-line-color,var(--divider-color));border-radius:var(--ha-border-radius-md,8px);background:var(--input-fill-color,var(--ha-color-form-background,var(--secondary-background-color)));color:var(--input-ink-color,var(--primary-text-color));padding:10px;font:inherit;caret-color:var(--primary-color);accent-color:var(--primary-color)}select option,optgroup{background:var(--primary-background-color,Canvas);color:var(--primary-text-color,CanvasText)}select option:disabled{color:var(--secondary-text-color,GrayText)}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color);font-size:12px;line-height:1.7;margin-top:24px}a{color:var(--primary-color);text-underline-offset:3px}summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form,.solcast-editor{border-top:1px solid var(--divider-color);margin-top:18px;padding-top:6px}.solcast-note{white-space:pre-line}"+
-      "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
-      '</style><main><header><div><div class="eyebrow">Silnik lokalny · G13 · Deye</div><h1>Energia pod kontrolą</h1></div><div class="pill '+(active?'':'shadow')+'">'+mode+'</div></header>'+
-      (this.error?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+
+      ":host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color,#fafafa));color:var(--primary-text-color,#212121);font:15px var(--primary-font-family,var(--ha-font-family-body,system-ui))}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{position:sticky;top:0;z-index:3;background:var(--primary-background-color);padding-block:12px;display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:var(--ha-border-radius-pill,100px);background:var(--label-badge-background-color,var(--secondary-background-color));color:var(--label-badge-text-color,var(--primary-text-color));border:1px solid var(--divider-color);font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}article,section{background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:var(--ha-card-backdrop-filter,none);border-width:var(--ha-card-border-width,1px);border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));box-shadow:var(--ha-card-box-shadow,none);color:var(--primary-text-color);padding:22px}.label,.sub{display:block;color:var(--secondary-text-color);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,12px);line-height:1.6;margin:18px 0}.warning{border-inline-start:4px solid var(--warning-color)}.error{border-inline-start:4px solid var(--error-color)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}"+
+      "button{font:inherit;cursor:pointer;border:1px solid transparent;border-radius:var(--ha-button-border-radius,var(--ha-border-radius-pill,20px));padding:11px 16px;background:var(--ems-button-background,var(--ha-color-fill-primary-normal-resting,var(--secondary-background-color)));color:var(--ems-button-text,var(--ha-color-on-primary-normal,var(--primary-color)));font-weight:var(--ha-font-weight-medium,600);box-shadow:var(--ha-button-box-shadow,none)}button.secondary{background:transparent;color:var(--primary-color);border-color:var(--divider-color)}button:hover:not(:disabled){background:var(--ems-button-hover,var(--ha-color-fill-primary-normal-hover,var(--secondary-background-color)))}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ha-color-focus,var(--primary-color));outline-offset:3px}button:disabled,input:disabled,select:disabled{opacity:1;color:var(--input-disabled-ink-color,var(--secondary-text-color));background:var(--input-disabled-fill-color,var(--secondary-background-color));border-color:var(--divider-color);cursor:not-allowed} .mode-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.mode-controls button{white-space:normal}svg{width:100%;height:230px;display:block}svg polyline{stroke:var(--primary-color)}svg line{stroke:var(--warning-color,var(--secondary-text-color))}.legend{font-size:12px;color:var(--secondary-text-color)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--input-label-ink-color,var(--secondary-text-color))}input,select{margin-top:7px;width:100%;border:1px solid var(--input-idle-line-color,var(--divider-color));border-radius:var(--ha-border-radius-md,8px);background:var(--input-fill-color,var(--ha-color-form-background,var(--secondary-background-color)));color:var(--input-ink-color,var(--primary-text-color));padding:10px;font:inherit;caret-color:var(--primary-color);accent-color:var(--primary-color)}select option,optgroup{background:var(--primary-background-color,Canvas);color:var(--primary-text-color,CanvasText)}select option:disabled{color:var(--secondary-text-color,GrayText)}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color);font-size:12px;line-height:1.7;margin-top:24px}a{color:var(--primary-color);text-underline-offset:3px}summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form,.solcast-editor{border-top:1px solid var(--divider-color);margin-top:18px;padding-top:6px}.solcast-note{white-space:pre-line}"+
+      "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){header{flex-direction:column;gap:10px}.mode-controls{width:100%;justify-content:space-between}.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
+      '</style><main><header><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div><div class="mode-controls"><div class="pill '+(active?'':'shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div></header>'+
+      (this.actionError?'<div role="alert" class="notice error" data-action-error="true"><p><b>Ostatnia nieudana akcja</b></p><p>'+esc(this.actionError.message)+'</p><button id="action-error-dismiss" class="secondary">Zamknij komunikat</button></div>':'')+
+      (this.error&&this.error!==this.actionError?.message?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+this.runtimeErrorHtml()+this.postSaveHtml()+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Wybrany cel SoC",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
@@ -1075,7 +1289,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<div class="notice">'+esc(statusText)+'</div>'+
       (owners.length?'<div class="notice warning">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
       ((plan.unreachable||c.unreachable)?'<div class="notice warning">Dostępna energia lub moc może nie wystarczyć do osiągnięcia celu. Limit poboru ma pierwszeństwo.</div>':'')+
-      '<div class="actions"><button id="mode" '+(this.busy?'disabled':'')+'>'+(active?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div>'+
+
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       this.sourcesHtml()+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+
@@ -1085,15 +1299,13 @@ class DeyeEMSPanel extends HTMLElement {
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p>'+this.solcastHtml()+'</section>'+
       '<section><h2>Przyłącze sieciowe</h2><div class="fields">'+basicField("grid_import_limit_kw","Zapisz limit łączny")+basicField("grid_phase_limit_kw","Zapisz limit fazowy")+'</div><p class="legend">Maksymalny dozwolony pobór całej instalacji z sieci, niezależny od mocy falownika. Obowiązuje w LOAD i CT. W CT obejmuje również odbiory między przyłączem a portem GRID. Wpisz limity swojego przyłącza; regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Moc falownika, limit ładowarki i BMS pozostają osobnymi ograniczeniami.</p></section>'+
       this.loadsHtml()+
-      '<section><h2>Prognoza modelu</h2>'+(plan.quality==="valid"?'<div class="grid">'+card("Modelowy cel przed 07:00",num(targets.night?.soc_percent),"%",time(targets.night?.deadline))+
-      card("Modelowy cel przed szczytem",num(targets.peak?.soc_percent),"%",time(targets.peak?.deadline))+
-      '</div>':'')+
+      '<section><h2>Prognoza modelu</h2>'+this.modelTargetsHtml()+
       (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':'<div class="notice">Brak kompletnej prognozy. Silnik pokazuje zachowawcze cele i przyczynę braku planu.</div>')+
       '</section><details><summary>Ustawienia zaawansowane i szczegóły</summary>'+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
       '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+this.gridPhaseReadoutHtml()+' · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe zmiany o :00 i :30: wyliczona nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
-      '<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
+      this.physicalTariffHtml()+'<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
       '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja '+PANEL_VERSION+'.</footer></main>';
@@ -1103,11 +1315,13 @@ class DeyeEMSPanel extends HTMLElement {
     this.bindSolcast();
     this.bindSources();
     this.bindHardware();
+    this.bindTariff();
+    this.shadowRoot.getElementById("action-error-dismiss")?.addEventListener("click",()=>this.dismissActionError());
     this.bindAppearance();
     this.bindUpdates();
     this.bindTelemetryDiagnostics();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));
-    this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active?"shadow":"active"}));
+    this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active||pendingStart?"shadow":"active"}));
     this.shadowRoot.getElementById("topology")?.addEventListener("change",event=>{this.drafts.topology=event.target.value;});
     this.shadowRoot.getElementById("topology-save")?.addEventListener("click",()=>{
       if(active||this.busy)return;

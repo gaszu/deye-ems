@@ -35,6 +35,9 @@ from datetime import datetime, timedelta
 import math
 from zoneinfo import ZoneInfo
 
+if __package__:
+    from .tariff_calendar import calendar_context, describe_calendar, intervals_between
+
 
 DEFAULTS = {
     "timezone": "Europe/Warsaw", "capacity_kwh": 66.0,
@@ -186,7 +189,7 @@ def _prefix_need(rows, item, cfg):
     debt = maximum = 0.
     begin, end = item["at"].timestamp(), item["end"].timestamp()
     for row in rows:
-        hours = max(0., min(row["epoch"] + 1800, end) - max(row["epoch"], begin)) / 3600
+        hours = max(0., min(row.get("end_epoch", row["epoch"] + 1800), end) - max(row["epoch"], begin)) / 3600
         deficit = row["load_kw"] / cfg["eta_dc_ac"] - row["pv_p10_kw"]
         debt += (deficit / cfg["eta_discharge"] if deficit >= 0 else
                  -min(-deficit, cfg["battery_charge_max_kw"]) * cfg["eta_charge"]) * hours
@@ -199,13 +202,13 @@ def _weather(rows, item, cfg):
     end = begin + 86400
     clear = cfg["minimum_soc_percent"] + cfg["margin_soc_percent"]
     weak = max(cfg["winter_weather_soc_percent"], clear)
-    if rows[-1]["epoch"] + 1800 < end:
+    if rows[-1].get("end_epoch", rows[-1]["epoch"] + 1800) < end:
         # Tail projection only: no invented post-horizon PV. The two public
         # upcoming deadlines always have the full following 24h in the input.
         return weak, None, "tail_conservative_weather"
     pv = load = 0.
     for row in rows:
-        hours = max(0., min(row["epoch"] + 1800, end) - max(row["epoch"], begin)) / 3600
+        hours = max(0., min(row.get("end_epoch", row["epoch"] + 1800), end) - max(row["epoch"], begin)) / 3600
         pv += row["pv_p50_kw"] * cfg["eta_dc_ac"] * hours
         load += row["load_kw"] * hours
     coverage = pv / load if load > 0 else 1.
@@ -223,11 +226,12 @@ def _simulate(rows, now, soc, cfg, targets=None, quantile="pv_p10_kw"):
     output, observations = [], {}
     for row in rows:
         ts = max(row["epoch"], now.timestamp())
-        hours = (row["epoch"] + 1800 - ts) / 3600
+        row_end = row.get("end_epoch", row["epoch"] + 1800)
+        hours = (row_end - ts) / 3600
         if hours <= 0:
             continue
         dt = datetime.fromtimestamp(ts, cfg["zone"])
-        protected = _protected(dt)
+        protected = row.get("tariff_protected", _protected(dt))
         forthcoming = next((t for t in targets or [] if t["at"].timestamp() > ts), None)
         charge_allowed = (not protected and forthcoming is not None
                           and forthcoming["grid_charge_allowed"])
@@ -273,12 +277,16 @@ def _simulate(rows, now, soc, cfg, targets=None, quantile="pv_p10_kw"):
                            grid_import_kw=imported, grid_export_kw=exported,
                            grid_charge_kw=grid_charge, pv_charge_kw=pv_charge,
                            battery_discharge_kw=discharge, protected=protected))
+        if "tariff_protected" in row:
+            output[-1].update(timestamp=datetime.fromtimestamp(ts, cfg["zone"]).isoformat(),
+                              end=datetime.fromtimestamp(row_end, cfg["zone"]).isoformat(),
+                              soc_start_percent=before / cfg["capacity_kwh"] * 100)
         for target in targets or []:
             key = target["at"].isoformat()
             observed = observations.setdefault(key, {"deadline_soc_percent": None,
                                                      "minimum_soc_percent": 100.,
                                                      "protected_import_kwh": 0.})
-            if abs(row["epoch"] + 1800 - target["at"].timestamp()) < .1:
+            if abs(row_end - target["at"].timestamp()) < .1:
                 observed["deadline_soc_percent"] = final_soc
             if target["at"].timestamp() <= row["epoch"] < target["end"].timestamp():
                 observed["minimum_soc_percent"] = min(observed["minimum_soc_percent"],
@@ -398,6 +406,8 @@ def plan_energy(inputs: dict) -> dict:
     """
     if not isinstance(inputs, dict):
         inputs = {}
+    if isinstance(inputs.get("config"), dict) and inputs["config"].get("tariff_profile", "legacy_g13") != "legacy_g13":
+        return _plan_tariff(inputs)
     try:
         cfg = _settings(inputs.get("config", {}))
         now = _time(inputs.get("now"), cfg["zone"])
@@ -530,3 +540,288 @@ def plan_energy(inputs: dict) -> dict:
                                  "Beyond complete24h weather coverage, winter tail uses the configured weak-PV target conservatively"])
     except (ValueError, TypeError, KeyError, OverflowError) as exc:
         return _fallback(now, cfg, inputs, str(exc))
+
+
+def tariff_context(now, options):
+    """Fail-closed calendar boundary; a bad real profile never becomes legacy."""
+    try:
+        return calendar_context(now, options)
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return dict(valid=False, issue="invalid_tariff_configuration", metadata={},
+                    current_interval=None, charge_window=None, next_charge_window=None,
+                    protected_windows=[], deadlines=[], next_deadline=None)
+
+
+def tariff_identity(options, context):
+    metadata = context.get("metadata", {})
+    return dict(tariff_profile=options.get("tariff_profile", "legacy_g13"),
+                tariff_clock_basis=options.get("tariff_clock_basis", "local"),
+                tariff_version=metadata.get("version"))
+
+
+def tariff_target_items(now, options, *, horizon_end=None):
+    """Reserve deadlines are the starts of complete noncheap periods.
+
+    An all-cheap period still needs an outage/weather reserve. Its explicitly
+    labelled next-07:00 checkpoint belongs to the planner, not to the OSD.
+    """
+    context = tariff_context(now, options)
+    if context.get("valid") is not True:
+        return []
+    result = []
+    for row in context.get("protected_windows", []):
+        at, end = _time(row["start"], now.tzinfo), _time(row["end"], now.tzinfo)
+        if at.timestamp() <= now.timestamp():
+            continue
+        if horizon_end is not None and end.timestamp() > horizon_end:
+            continue
+        result.append(dict(key=f"tariff_{int(at.timestamp())}", at=at, end=end,
+                           virtual_checkpoint=False))
+    result.sort(key=lambda item: item["at"].timestamp())
+    if horizon_end is None:
+        result = result[:4]
+    # During a long all-cheap weekend, the next real deadline can fall outside
+    # the 48h forecast. Do not invent post-horizon energy to size its reserve.
+    if not result or (horizon_end is None and result[0]["at"].timestamp() - now.timestamp() > 86400):
+        at = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        if at.timestamp() <= now.timestamp():
+            at += timedelta(days=1)
+        result.insert(0, dict(key=f"tariff_{int(at.timestamp())}", at=at,
+                              end=at + timedelta(days=1), virtual_checkpoint=True))
+    return result
+
+
+def physical_tariff_tou(now, options):
+    """Compile one circular day to six strictly increasing Deye start clocks.
+
+    Operator intervals remain separate. Identical first/last classes are one
+    circular interval, so six transitions do not become seven at midnight.
+    Padding splits only an existing interval and never changes eligibility.
+    """
+    context = tariff_context(now, options)
+    if context.get("valid") is not True:
+        return dict(valid=False, issue=context.get("issue") or "invalid_tariff", rows=[])
+    try:
+        day = describe_calendar(now, options.get("tariff_profile", "legacy_g13"),
+                                options.get("tariff_clock_basis", "local"))["today"]
+        rows = []
+        for row in day:
+            at = _time(row["start"], now.tzinfo)
+            minute = at.hour * 60 + at.minute
+            kind = (row["zone"], row.get("tier"), row["grid_charge_allowed"])
+            if rows and rows[-1]["kind"] == kind:
+                continue
+            rows.append(dict(minute=minute, kind=kind))
+        if len(rows) > 1 and rows[0]["kind"] == rows[-1]["kind"]:
+            rows.pop(0)
+        if not rows or len(rows) > 6 or len({r["minute"] for r in rows}) != len(rows):
+            raise ValueError("tariff_exceeds_six_tou_slots")
+        while len(rows) < 6:
+            ordered = sorted(rows, key=lambda r: r["minute"])
+            spans = [((ordered[(i + 1) % len(ordered)]["minute"] - r["minute"]) % 1440 or 1440, r)
+                     for i, r in enumerate(ordered)]
+            length, largest = max(spans, key=lambda pair: (pair[0], -pair[1]["minute"]))
+            if length < 2:
+                raise ValueError("tariff_exceeds_six_tou_slots")
+            rows.append(dict(minute=(largest["minute"] + length // 2) % 1440,
+                             kind=largest["kind"], padding=True))
+        rows.sort(key=lambda r: r["minute"])
+        output = [dict(slot=index, time=f"{r['minute']//60:02}:{r['minute']%60:02}:00",
+                       zone=r["kind"][0], tier=r["kind"][1], grid_charge_allowed=r["kind"][2],
+                       padding=r.get("padding", False), minute=r["minute"])
+                  for index, r in enumerate(rows, 1)]
+        minute = now.hour * 60 + now.minute + now.second / 60
+        active = next((r["slot"] for r in reversed(output) if r["minute"] <= minute), 6)
+        return dict(valid=True, issue=None, rows=output, active_slot=active,
+                    **tariff_identity(options, context))
+    except (ValueError, TypeError, KeyError, OverflowError) as error:
+        return dict(valid=False, issue=str(error), rows=[])
+
+
+def _tariff_forecast(rows, now, options):
+    result = []
+    for row in rows:
+        begin = max(row["epoch"], now.timestamp())
+        end = row["epoch"] + 1800
+        if begin >= end:
+            continue
+        for interval in intervals_between(datetime.fromtimestamp(begin, now.tzinfo),
+                datetime.fromtimestamp(end, now.tzinfo), options["tariff_profile"],
+                options.get("tariff_clock_basis", "local")):
+            if interval.get("within_validity", True) is not True:
+                raise ValueError("tariff_forecast_outside_validity")
+            a, b = interval["start_ts"], interval["end_ts"]
+            result.append({**row, "epoch": a, "end_epoch": b,
+                           "timestamp": datetime.fromtimestamp(a, now.tzinfo).isoformat(),
+                           "tariff_protected": interval["grid_charge_allowed"] is not True})
+    return result
+
+
+def _tariff_cache(record, item, now, cfg, identity):
+    if (not isinstance(record, dict) or any(record.get(k) != v for k, v in identity.items())
+            or record.get("source") != "own_deterministic_planner"
+            or record.get("unreachable") is not False):
+        return None
+    try:
+        value = _value(record.get("soc_percent"), "cached_soc", cfg["minimum_soc_percent"], cfg["grid_max_soc_percent"])
+        created = _time(record.get("generated_at"), now.tzinfo)
+        deadline = _time(record.get("deadline"), now.tzinfo)
+        if (deadline.timestamp() != item["at"].timestamp() or not 0 <= now.timestamp() - created.timestamp() <= 86400
+                or created.timestamp() >= deadline.timestamp() or record.get("protected_until") != item["end"].isoformat()
+                or record.get("season") != ("winter" if _winter(now) else "summer")
+                or record.get("pv_forecast_mode") != cfg["pv_forecast_mode"]
+                or any(record.get(key) != cfg[key] for key in ("pv_peak_kwp", "pv_forecast_reference_kwp"))
+                or not isinstance(record.get("emergency"), bool)
+                or not isinstance(record.get("grid_charge_allowed"), bool)
+                or value < cfg["minimum_soc_percent"] + cfg["margin_soc_percent"]
+                    and (_winter(now) or value != cfg["minimum_soc_percent"] or record["emergency"])):
+            return None
+        return {**record, "selection_source": "validated_cache"}
+    except (ValueError, TypeError, KeyError):
+        return None
+
+
+def tariff_slot_targets(now, options, plan, soc, reserve):
+    """Logical operator rows, with nullable forecasts and separate charge goals."""
+    try:
+        calendar = describe_calendar(now, options.get("tariff_profile", "legacy_g13"),
+                                     options.get("tariff_clock_basis", "local"))
+    except (ValueError, TypeError, KeyError):
+        return []
+    targets = sorted((t for t in plan.get("targets", {}).values() if isinstance(t, dict)),
+                     key=lambda t: _time(t["deadline"], now.tzinfo).timestamp())
+    projection = plan.get("rows", []) if plan.get("quality") == "valid" else []
+    def projected(at):
+        if not projection:
+            return None
+        if at == now.timestamp() and isinstance(soc, (int, float)) and not isinstance(soc, bool):
+            return soc
+        for row in projection:
+            a = _time(row["timestamp"], now.tzinfo).timestamp()
+            b = a + row["duration_h"] * 3600
+            if a <= at <= b and row.get("soc_start_percent") is not None:
+                return row["soc_start_percent"] + (row["soc_percent"] - row["soc_start_percent"]) * (at-a)/(b-a)
+        return None
+    result = []
+    for interval in [*calendar["today"], *calendar["tomorrow"]]:
+        start, end = _time(interval["start"], now.tzinfo).timestamp(), _time(interval["end"], now.tzinfo).timestamp()
+        past = end <= now.timestamp()
+        begin = max(now.timestamp(), start)
+        selected = next((t for t in targets if _time(t["deadline"], now.tzinfo).timestamp() >= begin), None)
+        a, b = (None, None) if past else (projected(begin), projected(end))
+        if start <= now.timestamp() < end and soc is None:
+            a = b = None
+        fallback = plan.get("quality") != "valid"
+        result.append(dict(start=interval["start"], end=interval["end"], zone=interval["zone"],
+            tier=interval.get("tier"), grid_charge_allowed=interval["grid_charge_allowed"],
+            charge_target_soc_percent=(selected.get("soc_percent") if selected and not past
+                                       and interval["grid_charge_allowed"] else None),
+            reserve_soc_percent=reserve, projected_soc_start_percent=a,
+            projected_soc_end_percent=b, projection_from=None if past or a is None else datetime.fromtimestamp(begin, now.tzinfo).isoformat(),
+            deadline=selected.get("deadline") if selected and not past else None,
+            quality="past" if past else "fallback" if fallback and selected else "forecast" if a is not None and b is not None else "unavailable",
+            reason="past_interval" if past else "conservative_target_no_projection" if fallback and selected else
+                   "forecast_projection" if a is not None and b is not None else "outside_complete_forecast"))
+    return result
+
+
+def _plan_tariff(inputs):
+    raw = inputs.get("config", {})
+    try:
+        now = _time(inputs.get("now"), ZoneInfo(raw.get("timezone", "Europe/Warsaw")))
+    except (ValueError, TypeError, KeyError):
+        return dict(status="fallback", quality="invalid", reason="invalid_clock", generated_at=None,
+                    source="own_conservative_fallback", targets={}, rows=[], p10=None, p50=None,
+                    tariff_slot_targets=[], unreachable=True)
+    context = tariff_context(now, raw)
+    identity = tariff_identity(raw, context)
+    try:
+        cfg = _settings(raw)
+    except ValueError:
+        try:
+            cfg = _settings(raw, target_only=True)
+        except ValueError:
+            cfg = _settings({}, target_only=True)
+    def fallback(reason):
+        targets = {}
+        if context.get("valid") is True:
+            for item in tariff_target_items(now, raw):
+                cached = _tariff_cache(inputs.get("retained_targets", {}).get(item["key"]), item, now, cfg, identity)
+                targets[item["key"]] = cached or dict(soc_percent=min(cfg["grid_max_soc_percent"],
+                    max(cfg["winter_weather_soc_percent"], cfg["minimum_soc_percent"] + cfg["margin_soc_percent"]))
+                    if _winter(now) else cfg["grid_max_soc_percent"], deadline=item["at"].isoformat(),
+                    protected_until=item["end"].isoformat(), virtual_checkpoint=item["virtual_checkpoint"],
+                    emergency=not _winter(now), grid_charge_allowed=True, unreachable=True,
+                    source="own_conservative_fallback", reason="unverified_fallback", generated_at=now.isoformat(),
+                    season="winter" if _winter(now) else "summer", **identity,
+                    **{k: cfg[k] for k in ("pv_forecast_mode", "pv_peak_kwp", "pv_forecast_reference_kwp")})
+        result = dict(status="fallback", quality="invalid", reason=reason, generated_at=now.isoformat(),
+            source="own_conservative_fallback", season="winter" if _winter(now) else "summer",
+            targets=targets, rows=[], p10=None, p50=None, unreachable=True,
+            summer_emergency_window=None, **identity)
+        result["tariff_slot_targets"] = tariff_slot_targets(now, raw, result, inputs.get("soc_percent"), cfg["minimum_soc_percent"])
+        return result
+    if context.get("valid") is not True:
+        return fallback(context.get("issue") or "invalid_tariff_configuration")
+    try:
+        cfg = _settings(raw)
+        soc = _value(inputs.get("soc_percent"), "soc_percent", high=100)
+        if inputs.get("soc_valid", True) is not True:
+            raise ValueError("invalid_soc_freshness")
+        if "soc_updated_at" in inputs:
+            age = now.timestamp() - _time(inputs["soc_updated_at"], cfg["zone"]).timestamp()
+            voltage_age = (now.timestamp() - _time(inputs["voltage_updated_at"], cfg["zone"]).timestamp()
+                           if "voltage_updated_at" in inputs else float("inf"))
+            if age < 0 or not (age <= 1200 or 0 <= voltage_age <= 120):
+                raise ValueError("stale_soc_without_bms_communication")
+        if inputs.get("load_includes_heatpump", True) is not True:
+            raise ValueError("load_must_include_heatpump_once")
+        rows = _tariff_forecast(_forecast(inputs, now, cfg), now, raw)
+        horizon = rows[-1]["end_epoch"]
+        items = tariff_target_items(now, raw, horizon_end=horizon)
+        baseline_items = [dict(t, soc_percent=cfg["minimum_soc_percent"], grid_charge_allowed=False) for t in items]
+        base10, _, observed = _simulate(rows, now, soc, cfg, baseline_items)
+        base50, _, _ = _simulate(rows, now, soc, cfg, baseline_items, "pv_p50_kw")
+        targets = []
+        for item in items:
+            need = _prefix_need(rows, item, cfg)
+            energy = cfg["minimum_soc_percent"] + cfg["margin_soc_percent"] + need/cfg["capacity_kwh"]*100
+            observation = observed[item["at"].isoformat()]
+            weather, coverage, reason = _weather(rows, item, cfg) if _winter(item["at"]) else (None, None, "solar_reserve_sufficient")
+            emergency = (not _winter(item["at"]) and (observation["protected_import_kwh"] > TOLERANCE_KWH
+                         or observation["minimum_soc_percent"] < cfg["minimum_soc_percent"] + cfg["margin_soc_percent"] - 1e-7))
+            required = math.ceil(max(energy, weather or 0)-1e-7) if _winter(item["at"]) or emergency else cfg["minimum_soc_percent"]
+            targets.append(dict(item, soc_percent=min(required, cfg["grid_max_soc_percent"]),
+                required_soc_percent=required, deadline=item["at"].isoformat(), protected_until=item["end"].isoformat(),
+                emergency=emergency, grid_charge_allowed=_winter(item["at"]) or emergency,
+                unreachable=required>cfg["grid_max_soc_percent"], reason="predicted_buffer_deficit" if emergency else reason,
+                weather_target_percent=weather, pv_coverage=coverage, maximum_prefix_deficit_kwh=need,
+                source="own_deterministic_planner", selection_source="live_plan", generated_at=now.isoformat(),
+                season="winter" if _winter(now) else "summer", **identity,
+                **{k: cfg[k] for k in ("pv_forecast_mode", "pv_peak_kwp", "pv_forecast_reference_kwp")}))
+        risk, _, checked = _simulate(rows, now, soc, cfg, targets)
+        central, projection, _ = _simulate(rows, now, soc, cfg, targets, "pv_p50_kw")
+        public = {}
+        for target in targets:
+            obs = checked[target["at"].isoformat()]
+            reached = obs["deadline_soc_percent"]
+            if target["grid_charge_allowed"] and (reached is None or reached + .01 < target["soc_percent"]):
+                target.update(unreachable=True, reason="target_unreachable_before_deadline")
+            if obs["protected_import_kwh"] > TOLERANCE_KWH:
+                target.update(unreachable=True, reason="protected_energy_or_power_deficit")
+            target.update(projected_p10_deadline_soc_percent=reached,
+                          projected_p10_protected_import_kwh=obs["protected_import_kwh"])
+            public[target["key"]] = _public(target)
+        unreachable = any(t["unreachable"] for t in public.values()) or risk["protected_import_kwh"] > TOLERANCE_KWH or risk["grid_limit_excess_kwh"] > TOLERANCE_KWH
+        summary = list(public.values())
+        result = dict(status="unreachable" if unreachable else "ok", quality="valid", reason="forecast_energy_or_power_deficit" if unreachable else "planned",
+            source="own_deterministic_planner", generated_at=now.isoformat(), season="winter" if _winter(now) else "summer",
+            targets=public, target_summary={"night": summary[0], "peak": summary[min(1,len(summary)-1)]} if summary else {},
+            rows=projection, p10=risk, p50=central, baseline_p10=base10, baseline_p50=base50,
+            unreachable=bool(unreachable), summer_emergency_window=None,
+            assumptions=["Tariff eligibility is separate from BMS, reserve and physical device acknowledgement",
+                         "A virtual weather checkpoint is a planning boundary, not an operator tariff slot"], **identity)
+        result["tariff_slot_targets"] = tariff_slot_targets(now, raw, result, soc, cfg["minimum_soc_percent"])
+        return result
+    except (ValueError, TypeError, KeyError, OverflowError) as error:
+        return fallback(str(error))

@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Panel in the Home Assistant left menu",
-        "description": "**After installation, find the Deye EMS panel in the Home Assistant left menu.**\n\nThe panel is available to administrators. If it is missing, refresh the page and check Sidebar in the integration options and your Home Assistant sidebar settings. Direct panel path: `/deye-ems`.\n\nA local EMS without EMHASS, helpers or automations. Minimum safe SoC is a fixed reserve; weather targets are separate. The integration starts in observation. You can configure entities and other parameters later.\n\nChoose the exact nameplate model. A catalog model determines inverter phases and power ceilings; the inverter phase-count field applies to custom models. A home can have a three-phase connection with a single-phase inverter. The next screen previews changes without saving. LV 40–60 V models only; HV and 24 V models are not supported yet. Saving requires observation.",
+        "description": "**After installation, find the Deye EMS panel in the Home Assistant left menu.**\n\nThe panel is available to administrators. If it is missing, refresh the page and check Sidebar in the integration options and your Home Assistant sidebar settings. Direct panel path: `/deye-ems`.\n\nA local EMS without EMHASS, helpers or automations. Minimum safe SoC is a fixed reserve; weather targets are separate. The integration starts in observation. You can configure entities and other parameters later.\n\nChoose the exact nameplate model. A catalog model determines inverter phases and power ceilings; the inverter phase-count field applies to custom models. A home can have a three-phase connection with a single-phase inverter. The next screen previews changes without saving. LV 40–60 V models only; HV and 24 V models are not supported yet. Saving requires observation.\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "min_soc_percent": "Minimum safe SoC",
           "capacity_kwh": "Battery capacity",
@@ -23,9 +23,31 @@
       },
       "user_inverter_confirm": {
         "title": "Confirm inverter model",
-        "description": "{model_preview}",
+        "description": "{model_preview}\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "confirm_model": "Confirm selected model, phases and limits"
+        }
+      },
+      "tariff_operator": {
+        "title": "Operator and tariff",
+        "description": "Choose the distribution operator on your contract. The next step shows its household tariffs.",
+        "data": {
+          "operator_id": "Distribution operator"
+        }
+      },
+      "tariff_plan": {
+        "title": "Tariff and meter clock",
+        "description": "Choose your contracted tariff and the settlement meter clock. Tariff seasons and daylight-saving clock changes are separate rules. Operator hours come from its published document and cannot be edited. The next screen previews the selection before saving.\n\n{tariff_notices}",
+        "data": {
+          "profile_id": "Tariff",
+          "clock_basis": "Settlement meter clock"
+        }
+      },
+      "tariff_confirm": {
+        "title": "Review and save tariff",
+        "description": "{tariff_preview}\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
+        "data": {
+          "confirm_tariff": "Confirm the contracted tariff and settlement meter clock"
         }
       }
     },
@@ -40,20 +62,37 @@
       "invalid_inverter_phase": "Choose L1, L2 or L3; a single-phase home connection uses L1.",
       "inverter_model_phase_mismatch": "The phase count does not match the selected model.",
       "invalid_inverter_limits": "Power limits must be valid positive numbers.",
-      "confirm_inverter_model": "Review the summary and check the confirmation."
+      "confirm_inverter_model": "Review the summary and check the confirmation.",
+      "invalid_tariff_operator": "Choose a listed operator.",
+      "invalid_tariff_profile": "Choose a listed operator tariff.",
+      "tariff_operator_mismatch": "This tariff belongs to another operator.",
+      "tariff_profile_unavailable": "This profile needs an additional verified schedule. Choose a supported tariff.",
+      "invalid_tariff_clock_basis": "Choose the settlement meter clock.",
+      "legacy_tariff_clock_unchanged": "The preserved schedule retains local time. Choose an operator profile to change the time basis.",
+      "tariff_outside_validity": "The profile document does not cover this date. Update the catalog.",
+      "confirm_tariff": "Review the schedule and check confirmation before saving."
     },
     "abort": {
-      "already_configured": "Deye EMS is already configured."
+      "already_configured": "Deye EMS is already configured.",
+      "invalid_tariff_operator": "Choose a listed operator.",
+      "invalid_tariff_profile": "Choose a listed operator tariff.",
+      "tariff_operator_mismatch": "This tariff belongs to another operator.",
+      "tariff_profile_unavailable": "This profile needs an additional verified schedule. Choose a supported tariff.",
+      "invalid_tariff_clock_basis": "Choose the settlement meter clock.",
+      "legacy_tariff_clock_unchanged": "The preserved schedule retains local time. Choose an operator profile to change the time basis.",
+      "tariff_outside_validity": "The profile document does not cover this date. Update the catalog.",
+      "confirm_tariff": "Review the schedule and check confirmation before saving.",
+      "tariff_configuration_changed": "Configuration changed after the preview. Open tariff selection again."
     },
     "create_entry": {
-      "default": "After installation, find the Deye EMS panel in the Home Assistant left menu. Open Deye EMS or go to /deye-ems. The panel is available to administrators. The integration starts in observation."
+      "default": "After installation, find the Deye EMS panel in the Home Assistant left menu. Open /deye-ems to view condition checks and control startup. After saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason."
     }
   },
   "options": {
     "step": {
       "topology": {
         "title": "Topology and inverter power",
-        "description": "Choose where grid exchange is measured. For hot water consumers between GRID and CT, choose Zero Export To CT and map CT and GRID separately, including totals and phases. Positive power means import into the home or inverter. LOAD must measure only the LOAD/UPS output. Rated power covers the entire inverter, home and hot water. The combined limit is a model limit; it does not write device power settings. Inconsistent measurements block control. Changes require observation; resume control explicitly.",
+        "description": "Choose where grid exchange is measured. For hot water consumers between GRID and CT, choose Zero Export To CT and map CT and GRID separately, including totals and phases. Positive power means import into the home or inverter. LOAD must measure only the LOAD/UPS output. Rated power covers the entire inverter, home and hot water. The combined limit is a model limit; it does not write device power settings. Inconsistent measurements block control. Changes require observation; resume control explicitly.\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "topology": "Installation topology",
           "inverter_max_power_kw": "Total inverter power",
@@ -70,7 +109,7 @@
       },
       "parameters": {
         "title": "Engine parameters",
-        "description": "The SoC reserve applies to every slot. The maximum target must be at least the reserve plus its margin.",
+        "description": "The SoC reserve applies to every slot. The maximum target must be at least the reserve plus its margin.\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "combined_output_limit_kw": "Combined model limit for LOAD and consumers before GRID",
           "min_soc_percent": "Minimum safe SoC",
@@ -90,7 +129,7 @@
       },
       "sources": {
         "title": "Measurements and control",
-        "description": "Select existing Deye or optional YamBMS entities and PV forecast entities. LOAD must cover the total modeled home consumption; verify its scope for the LOAD/CT topology. Do not add consumer channels to the total again. No EMS helpers or automations are required. Change mappings in observation mode.\n\n{prefix_preview}",
+        "description": "Select existing Deye or optional YamBMS entities and PV forecast entities. LOAD must cover the total modeled home consumption; verify its scope for the LOAD/CT topology. Do not add consumer channels to the total again. No EMS helpers or automations are required. Change mappings in observation mode.\n\n{prefix_preview}\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "battery_low_soc": "Inverter Battery low SOC (EMS reserve at least 5 percentage points higher)",
           "ct_grid_power": "CT grid exchange total (+ import, - export)",
@@ -163,7 +202,7 @@
       },
       "solcast_manual": {
         "title": "Solcast inside EMS",
-        "description": "The built-in client does not need a separate Solcast integration. Find your key and site IDs in the Solcast toolkit. Configure AC/DC power, orientation and tilt in the Solcast portal. A typical Hobbyist limit is 10 requests per UTC day; every fetch for every site consumes a request. Do not use another client on the same account at the same time. If usage is unknown, leave 10; the client waits for the next UTC day. Entered usage never reduces recorded usage. {import_note}",
+        "description": "The built-in client does not need a separate Solcast integration. Find your key and site IDs in the Solcast toolkit. Configure AC/DC power, orientation and tilt in the Solcast portal. A typical Hobbyist limit is 10 requests per UTC day; every fetch for every site consumes a request. Do not use another client on the same account at the same time. If usage is unknown, leave 10; the client waits for the next UTC day. Entered usage never reduces recorded usage. {import_note}\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "api_key": "Solcast API key (leave blank to keep saved key)",
           "resource_ids": "Solcast site IDs (comma separated; blank for discovery)",
@@ -177,7 +216,7 @@
       },
       "solcast_import": {
         "title": "Import available Solcast settings",
-        "description": "The key, account limit and exclusions are copied locally in Home Assistant. Current correction factors are read from the selected integration correction sensor. Only their current state is imported, without full history or continued self-learning. Home Assistant sensor forecasts are already corrected and are not corrected again. Import does not disable the other integration or reset account usage.",
+        "description": "The key, account limit and exclusions are copied locally in Home Assistant. Current correction factors are read from the selected integration correction sensor. Only their current state is imported, without full history or continued self-learning. Home Assistant sensor forecasts are already corrected and are not corrected again. Import does not disable the other integration or reset account usage.\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "source_entry": "Existing Solcast integration"
         }
@@ -203,7 +242,8 @@
           "sidebar": "Sidebar",
           "entity_prefix": "Deye entity prefix",
           "topology": "Topology and inverter power",
-          "inverter": "Inverter model and phases"
+          "inverter": "Inverter model and phases",
+          "tariff": "Operator and tariff"
         }
       },
       "solcast": {
@@ -226,9 +266,31 @@
       },
       "inverter_confirm": {
         "title": "Confirm inverter model",
-        "description": "{model_preview}",
+        "description": "{model_preview}\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
         "data": {
           "confirm_model": "Confirm selected model, phases and limits"
+        }
+      },
+      "tariff_operator": {
+        "title": "Operator and tariff",
+        "description": "Choose the distribution operator on your contract. The next step shows its household tariffs.",
+        "data": {
+          "operator_id": "Distribution operator"
+        }
+      },
+      "tariff_plan": {
+        "title": "Tariff and meter clock",
+        "description": "Choose your contracted tariff and the settlement meter clock. Tariff seasons and daylight-saving clock changes are separate rules. Operator hours come from its published document and cannot be edited. The next screen previews the selection before saving.\n\n{tariff_notices}",
+        "data": {
+          "profile_id": "Tariff",
+          "clock_basis": "Settlement meter clock"
+        }
+      },
+      "tariff_confirm": {
+        "title": "Review and save tariff",
+        "description": "{tariff_preview}\n\nAfter saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.",
+        "data": {
+          "confirm_tariff": "Confirm the contracted tariff and settlement meter clock"
         }
       }
     },
@@ -248,7 +310,15 @@
       "invalid_inverter_phase": "Choose L1, L2 or L3; a single-phase home connection uses L1.",
       "inverter_model_phase_mismatch": "The phase count does not match the selected model.",
       "invalid_inverter_limits": "Power limits must be valid positive numbers.",
-      "confirm_inverter_model": "Review the summary and check the confirmation."
+      "confirm_inverter_model": "Review the summary and check the confirmation.",
+      "invalid_tariff_operator": "Choose a listed operator.",
+      "invalid_tariff_profile": "Choose a listed operator tariff.",
+      "tariff_operator_mismatch": "This tariff belongs to another operator.",
+      "tariff_profile_unavailable": "This profile needs an additional verified schedule. Choose a supported tariff.",
+      "invalid_tariff_clock_basis": "Choose the settlement meter clock.",
+      "legacy_tariff_clock_unchanged": "The preserved schedule retains local time. Choose an operator profile to change the time basis.",
+      "tariff_outside_validity": "The profile document does not cover this date. Update the catalog.",
+      "confirm_tariff": "Review the schedule and check confirmation before saving."
     },
     "abort": {
       "no_extra_loads": "No additional consumption channels to remove.",
@@ -258,7 +328,16 @@
       "sidebar_saved": "Panel visibility saved. Open /deye-ems or refresh the sidebar. The operating mode is unchanged.",
       "panel_not_ready": "The integration has not finished loading. Check its status and Home Assistant logs.",
       "invalid_topology": "Choose a valid installation topology.",
-      "inverter_settings_changed": "Inverter settings changed after the preview was prepared. Open the wizard again."
+      "inverter_settings_changed": "Inverter settings changed after the preview was prepared. Open the wizard again.",
+      "invalid_tariff_operator": "Choose a listed operator.",
+      "invalid_tariff_profile": "Choose a listed operator tariff.",
+      "tariff_operator_mismatch": "This tariff belongs to another operator.",
+      "tariff_profile_unavailable": "This profile needs an additional verified schedule. Choose a supported tariff.",
+      "invalid_tariff_clock_basis": "Choose the settlement meter clock.",
+      "legacy_tariff_clock_unchanged": "The preserved schedule retains local time. Choose an operator profile to change the time basis.",
+      "tariff_outside_validity": "The profile document does not cover this date. Update the catalog.",
+      "confirm_tariff": "Review the schedule and check confirmation before saving.",
+      "tariff_configuration_changed": "Configuration changed after the preview. Open tariff selection again."
     }
   }
 }

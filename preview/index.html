@@ -10,7 +10,7 @@
   .demo label {display:block;margin-top:8px}.demo select {padding:6px 10px;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px}
 </style>
 <div class="demo"><strong>Podgląd na danych syntetycznych.</strong> Przyciski symulują działanie. Strona nie łączy się z Home Assistant ani falownikiem.<label>Tryb profilu w podglądzie <select id="preview-theme-mode"><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label><label>Przykładowy układ <select id="preview-topology"><option value="load_only">LOAD</option><option value="load_with_external_ct">LOAD i CT</option></select></label></div>
-<deye-ems-panel-2-0-4 id="preview"></deye-ems-panel-2-0-4>
+<deye-ems-panel-2-1-0 id="preview"></deye-ems-panel-2-1-0>
 <script src="../custom_components/deye_ems/frontend/deye-ems-panel.js"></script>
 <script>
   // Deliberately generic samples: no household history, credentials or API.
@@ -18,7 +18,7 @@
   const night=new Date();night.setHours(7,0,0,0);if(night.getTime()<=Date.now())night.setDate(night.getDate()+1);
   const peak=new Date();peak.setHours(16,0,0,0);if(peak.getTime()<=Date.now())peak.setDate(peak.getDate()+1);
   const deadline=night.toISOString();
-  const example={entry_id:"preview-entry",backend_version:"2.0.4",updates:{status:"not_checked",latest_version:null,checked_at:null,retry_at:null,reason:null,release_url:null,marketplace_url:"/marketplace"},appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
+  const example={entry_id:"preview-entry",backend_version:"2.1.0",updates:{status:"not_checked",latest_version:null,checked_at:null,retry_at:null,reason:null,release_url:null,marketplace_url:"/marketplace"},appearance:{theme:"synthetic-neutral"},mode:"shadow",loads_revision:"demo-1",effective_loads:[{id:"demo-pump",name:"Pompa ciepła (przykład)",energy_entity:"sensor.demo_pump_energy",power_entity:"",included_in_load:true}],options:{min_soc_percent:50,capacity_kwh:66,
     grid_import_limit_kw:12,grid_phase_limit_kw:5,inverter_max_power_kw:12,reserve_margin_soc_percent:5,
     winter_weather_soc_percent:75,topology:"load_only",
     discharge_max_kw:10,grid_max_soc_percent:95,
@@ -35,12 +35,31 @@
         soc_percent:Math.min(96,Math.max(50,64+13*Math.sin(i/11))),
         pv_kw:Math.max(0,5*Math.sin((i%48-12)/12)),load_kw:2.8,
         grid_import_kw:i<16?1.8:0}))}}};
+  const previewOperators=[{operator_id:"tauron_dystrybucja",label:"TAURON Dystrybucja"},{operator_id:"pge_dystrybucja",label:"PGE Dystrybucja"},{operator_id:"enea_operator",label:"Enea Operator"},{operator_id:"energa_operator",label:"Energa Operator"},{operator_id:"pge_energetyka_kolejowa",label:"PGE Energetyka Kolejowa"}];
+  const previewCatalog={backend_version:"2.1.0",operators:previewOperators,profiles:previewOperators.map(row=>({profile_id:"demo_"+row.operator_id,operator_id:row.operator_id,label:row.label+" — profil syntetyczny",tariff:"G13 — przykład",supported:true,runtime_allowed:true}))};
+  const previewIntervals=[];
+  for(let day=0;day<2;day++)for(const [index,hour] of [0,7,13,16,21].entries()){
+    const next=[7,13,16,21,24][index],from=new Date(),to=new Date();from.setDate(from.getDate()+day);from.setHours(hour,0,0,0);to.setDate(to.getDate()+day);to.setHours(next,0,0,0);
+    const cheap=[0,2,4].includes(index);previewIntervals.push({start:from.toISOString(),end:to.toISOString(),zone:cheap?"off_peak":index===1?"morning_peak":"afternoon_peak",tier:cheap?0:2,grid_charge_allowed:cheap,reason:"weekday"});
+  }
+  example.post_save_activation={status:"idle",reason:null,issues:[],updated_at:null};
+  example.options.tariff_calendar={profile_id:"demo_tauron_dystrybucja",operator_id:"tauron_dystrybucja",operator_label:"TAURON Dystrybucja — podgląd syntetyczny",tariff:"G13 — przykład",label:"Profil demonstracyjny",version:"demo",clock_basis:"local",runtime_allowed:true,preview_only:false,current_zone:previewIntervals.find(row=>Date.parse(row.start)<=Date.now()&&Date.parse(row.end)>Date.now())?.zone,next_change:previewIntervals.find(row=>Date.parse(row.end)>Date.now())?.end,today:previewIntervals.slice(0,5),tomorrow:previewIntervals.slice(5)};
+  example.data.plan.tariff_slot_targets=previewIntervals.map(row=>({...row,charge_target_soc_percent:row.tier===0?75:null,reserve_soc_percent:50,projected_soc_start_percent:64,projected_soc_end_percent:row.tier===0?75:58,projection_from:new Date(Math.max(Date.now(),Date.parse(row.start))).toISOString(),deadline:row.end,quality:Date.parse(row.end)<=Date.now()?"past":"forecast"}));
+  let previewActivationTimer=null;
+  function previewActivateAfterSave(){
+    clearTimeout(previewActivationTimer);example.post_save_activation={status:"waiting",reason:"waiting_for_measurements",issues:[],updated_at:new Date().toISOString()};
+    previewActivationTimer=setTimeout(()=>{example.mode="active";example.post_save_activation={status:"active",reason:"activation_completed",issues:[],updated_at:new Date().toISOString()};previewPanel.refresh();},1500);
+  }
   let revision=1;
   const previewFlows=new Map();
   let previewFlowNumber=0,previewConfigured=false;
   const previewMenu=(flow)=>({type:"menu",flow_id:flow.id,step_id:flow.step,
-    menu_options:flow.step==="init"?["parameters","solcast","sources"]:["solcast_manual","solcast_import","solcast_disable"]});
+    menu_options:flow.step==="init"?["parameters","solcast","sources","tariff"]:["solcast_manual","solcast_import","solcast_disable"]});
   function previewForm(flow,errors={}){
+    if(flow.step==="tariff_operator")return {type:"form",flow_id:flow.id,step_id:flow.step,errors,data_schema:[{name:"operator_id",required:true,selector:{select:{options:previewOperators.map(row=>({value:row.operator_id,label:row.label}))}}}]};
+    if(flow.step==="tariff_plan")return {type:"form",flow_id:flow.id,step_id:flow.step,errors,data_schema:[{name:"profile_id",required:true,selector:{select:{options:previewCatalog.profiles.filter(row=>row.operator_id===flow.operator).map(row=>({value:row.profile_id,label:row.label}))}}},{name:"clock_basis",required:true,selector:{select:{options:[{value:"local",label:"Czas lokalny — lato/zima"},{value:"fixed_cet",label:"Stały CET"}]}}}]};
+    if(flow.step==="tariff_confirm")return {type:"form",flow_id:flow.id,step_id:flow.step,errors,description_placeholders:{tariff_preview:"Podgląd demonstracyjny, dane syntetyczne. Operator: "+flow.operator+". Zegar: "+flow.clock+". W prawdziwej integracji silnik pobiera reguły z katalogu operatora; ten ekran nie potwierdza rzeczywistej taryfy."},data_schema:[{name:"confirm_tariff",required:true,default:false,selector:{boolean:{}}}]};
+
     if(flow.step==="solcast_import")return {type:"form",flow_id:flow.id,step_id:flow.step,errors,
       data_schema:[{name:"source_entry",required:true,selector:{select:{options:[
         {value:"preview-solcast",label:"Solcast — syntetyczne źródło z kalibracją"}]}}}]};
@@ -86,10 +105,19 @@
     if(example.mode==="active"){previewFlows.delete(id);return {type:"abort",reason:"stop_before_mapping"};}
     if(method==="GET")return flow.step==="init"||flow.step==="solcast"?previewMenu(flow):previewForm(flow);
     if(data.next_step_id){
-      flow.step=data.next_step_id;
+      flow.step=data.next_step_id==="tariff"?"tariff_operator":data.next_step_id;
       if(flow.step==="solcast")return previewMenu(flow);
       if(flow.step!=="solcast_disable")return previewForm(flow);
       example.data.solcast.status="disabled";
+    }else if(flow.step==="tariff_operator"){
+      if(!previewOperators.some(row=>row.operator_id===data.operator_id))return previewForm(flow,{base:"invalid_tariff_operator"});
+      flow.operator=data.operator_id;flow.step="tariff_plan";return previewForm(flow);
+    }else if(flow.step==="tariff_plan"){
+      if(!previewCatalog.profiles.some(row=>row.profile_id===data.profile_id&&row.operator_id===flow.operator)||!["local","fixed_cet"].includes(data.clock_basis))return previewForm(flow,{base:"invalid_tariff_profile"});
+      flow.profile=data.profile_id;flow.clock=data.clock_basis;flow.step="tariff_confirm";return previewForm(flow);
+    }else if(flow.step==="tariff_confirm"){
+      if(data.confirm_tariff!==true)return previewForm(flow,{base:"confirm_tariff_required"});
+      example.options.tariff_calendar={...example.options.tariff_calendar,profile_id:flow.profile,operator_id:flow.operator,operator_label:previewOperators.find(row=>row.operator_id===flow.operator).label+" — podgląd syntetyczny",clock_basis:flow.clock};
     }else if(flow.step==="solcast_import"){
       flow.imported=true;flow.step="solcast_manual";return previewForm(flow);
     }else{
@@ -105,9 +133,10 @@
     }
     previewFlows.delete(id);
     example.data.updated_at=new Date().toISOString();example.data.plan.generated_at=new Date().toISOString();
-    return {type:"create_entry",flow_id:id};
+    previewActivateAfterSave();return {type:"create_entry",flow_id:id};
   },async callWS(message){
-    if(message.command==="check_updates")example.updates={status:"current",latest_version:"2.0.4",checked_at:new Date().toISOString(),retry_at:new Date(Date.now()+60000).toISOString(),reason:null,release_url:"https://github.com/gaszu/deye-ems/releases/tag/v2.0.4",marketplace_url:"/marketplace",stale:false};
+    if(message.type==="deye_ems/tariff_catalog")return structuredClone(previewCatalog);
+    if(message.command==="check_updates")example.updates={status:"current",latest_version:"2.1.0",checked_at:new Date().toISOString(),retry_at:new Date(Date.now()+60000).toISOString(),reason:null,release_url:"https://github.com/gaszu/deye-ems/releases/tag/v2.1.0",marketplace_url:"/marketplace",stale:false};
     if(message.command==="appearance")example.appearance={theme:message.theme};
     if(["load_save","load_delete","load_toggle"].includes(message.command)){
       if(example.mode==="active")throw Error("Przejdź do obserwacji przed zmianą odbiorników.");
@@ -119,7 +148,10 @@
       else example.effective_loads.push({...message.channel,id:"demo-new-"+revision});
       example.loads_revision="demo-"+(++revision);
     }
-    if(message.command==="mode")example.mode=message.mode;
+    if(message.command==="mode"){
+      example.mode=message.mode;
+      if(message.mode==="shadow"&&["waiting","checking"].includes(example.post_save_activation.status)){clearTimeout(previewActivationTimer);example.post_save_activation={status:"cancelled",reason:"activation_cancelled",issues:[],updated_at:new Date().toISOString()};}
+    }
     if(message.command==="option")example.options[message.key]=message.value;
     example.data.updated_at=new Date().toISOString();
     example.data.control.target_soc=Math.max(75,example.options.min_soc_percent);

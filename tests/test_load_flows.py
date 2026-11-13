@@ -148,7 +148,9 @@ class NativeLoadFlows(unittest.IsolatedAsyncioTestCase):
         shown = await native.async_step_remove_load()
         self.assertEqual(choices(shown), [{"value": "configured_heatpump", "label": "Pompa ciepła"}])
         result = await native.async_step_remove_load({"load_id": "configured_heatpump"})
-        self.assertEqual(result["data"], {"min_soc_percent": 60,
+        self.assertRegex(result["data"]["_configuration_save_id"], r"^[0-9a-f]{32}$")
+        self.assertEqual({key: value for key, value in result["data"].items()
+                          if key != "_configuration_save_id"}, {"min_soc_percent": 60,
             "extra_loads": [], "extra_loads_managed": True})
         reloaded = flow(options=result["data"])
         self.assertEqual(reloaded._loads(), [])

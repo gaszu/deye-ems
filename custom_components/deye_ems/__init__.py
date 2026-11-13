@@ -8,6 +8,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT
 from .appearance import AppearanceManager, DATA_APPEARANCE
 from .const import DOMAIN, PLATFORMS, VERSION
 from .coordinator import DeyeEMSCoordinator
+from .post_save import cancel_post_save, get_post_save_manager
 from .updates import UpdateManager, DATA_UPDATES
 from .websocket import async_register
 
@@ -15,6 +16,13 @@ PANEL_PATH = "deye-ems"
 
 
 async def async_setup_entry(hass, entry):
+    activate_after_install = getattr(entry, "data", {}).get("activate_after_install") is True
+    if activate_after_install:
+        # One-shot user intent: consume before registering listeners or creating
+        # the coordinator. A failed/interrupted installation stays in shadow.
+        data = dict(entry.data)
+        data.pop("activate_after_install")
+        hass.config_entries.async_update_entry(entry, data=data)
     if DATA_UPDATES not in hass.data:
         # Release checks are app-wide and never run in the EMS refresh path.
         hass.data[DATA_UPDATES] = UpdateManager(hass)
@@ -37,6 +45,10 @@ async def async_setup_entry(hass, entry):
     if not hass.data.get(DOMAIN + "_panel"):
         await async_update_panel(hass)
     await _async_enable_update_checks(hass)
+    if activate_after_install:
+        manager = get_post_save_manager(hass)
+        ticket = manager.begin(entry, previous_runtime=None)
+        manager.after_reload(ticket, True)
 
 
 async def _async_enable_update_checks(hass):
@@ -84,7 +96,30 @@ async def async_update_panel(hass):
 
 
 async def _async_options_changed(hass, entry):
-    await hass.config_entries.async_reload(entry.entry_id)
+    manager = get_post_save_manager(hass)
+    ticket = manager.begin(entry)
+    previous = getattr(entry, "runtime_data", None)
+    if previous is not None and getattr(previous, "mode", None) == "active":
+        try:
+            # Internal guarded pause keeps the saved activation intent, but uses
+            # normal GC OFF / 0 A commands and requires register readbacks before
+            # relinquishing this coordinator. Service acceptance is insufficient.
+            await previous.async_set_mode("shadow", activation_guard=lambda: manager.is_current(ticket))
+        except Exception:
+            manager.pause_failed(ticket)
+            return
+    if not manager.is_current(ticket):
+        return
+    try:
+        success = await hass.config_entries.async_reload(entry.entry_id)
+    except BaseException:
+        manager.after_reload(ticket, False)
+        raise
+    manager.after_reload(ticket, success)
+
+
+async def async_remove_entry(hass, entry):
+    cancel_post_save(hass, entry.entry_id, "configuration_changed")
 
 
 async def async_unload_entry(hass, entry):

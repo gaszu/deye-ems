@@ -1,0 +1,1440 @@
+{
+  "schema_version": 1,
+  "catalog_version": "2026-reviewed-2026-11-13",
+  "operators": [
+    {
+      "operator_id": "tauron_dystrybucja",
+      "label": "TAURON Dystrybucja"
+    },
+    {
+      "operator_id": "pge_dystrybucja",
+      "label": "PGE Dystrybucja"
+    },
+    {
+      "operator_id": "enea_operator",
+      "label": "ENEA Operator"
+    },
+    {
+      "operator_id": "energa_operator",
+      "label": "ENERGA-OPERATOR"
+    },
+    {
+      "operator_id": "pge_energetyka_kolejowa",
+      "label": "PGE Energetyka Kolejowa Operator"
+    }
+  ],
+  "sources": {
+    "TAURON-2026": {
+      "url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "operator": "TAURON Dystrybucja",
+      "pages": [
+        9,
+        11,
+        12,
+        13,
+        44
+      ],
+      "valid_year": 2026
+    },
+    "ENERGA-2026": {
+      "url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "landing_url": "https://energa-operator.pl/uslugi/oplaty-i-faktury/taryfa",
+      "operator": "ENERGA-OPERATOR",
+      "pages": [
+        8,
+        12
+      ],
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31"
+    },
+    "PGE-EK-2026": {
+      "url": "https://bip.ure.gov.pl/download/3/20368/PGEEnergetykaKolejowaSA.pdf",
+      "operator": "PGE Energetyka Kolejowa Operator",
+      "decision": "DRE.WRE.4211.56.5.2025.AKr3",
+      "pages": [
+        9,
+        10,
+        13
+      ],
+      "valid_year": 2026,
+      "rename_decision_url": "https://bip.ure.gov.pl/download/3/20661/PGEEnergetykaKolejowa.pdf"
+    },
+    "PGE-2026": {
+      "publisher": "PGE Dystrybucja S.A.",
+      "title": "Tekst jednolity taryfy od 01.02.2026",
+      "url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "limitation": "later 2026 amendments not verified because current operator HTML inaccessible"
+    },
+    "ENEA-Q4": {
+      "publisher": "ENEA Operator sp. z o.o.",
+      "title": "Wyciag z taryfy 01.10.2026-31.12.2026",
+      "url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31"
+    },
+    "ENEA-FAQ": {
+      "publisher": "ENEA Operator sp. z o.o.",
+      "title": "Pytania i odpowiedzi: Zasady rozliczen G12/G12p",
+      "url": "https://www.operator.enea.pl/obsluga-klienta/pytania-i-odpowiedzi"
+    }
+  },
+  "profiles": [
+    {
+      "operator": "tauron_dystrybucja",
+      "tariff": "G11",
+      "source": "TAURON-2026",
+      "source_pages": [
+        9
+      ],
+      "default_zone": "flat",
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "tauron_g11_2026",
+      "label": "TAURON Dystrybucja — G11 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "tauron_dystrybucja",
+      "tariff": "G12",
+      "source": "TAURON-2026",
+      "source_pages": [
+        12
+      ],
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "15:00"
+        ],
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "meter_confirmation": "Older unadapted meter may retain previous zone hours; verify settings.",
+      "profile_id": "tauron_g12_2026",
+      "label": "TAURON Dystrybucja — G12 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "tauron_dystrybucja",
+      "tariff": "G12w",
+      "source": "TAURON-2026",
+      "source_pages": [
+        12
+      ],
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "15:00"
+        ],
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "all_day_low_on": [
+        "saturday",
+        "sunday",
+        "statutory_holiday"
+      ],
+      "schedule_status": "verified_2026_document",
+      "profile_id": "tauron_g12w_2026",
+      "label": "TAURON Dystrybucja — G12w (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "tauron_dystrybucja",
+      "tariff": "G13",
+      "source": "TAURON-2026",
+      "source_pages": [
+        11
+      ],
+      "default_zone": "low",
+      "seasonal_high_windows": {
+        "summer": [
+          [
+            "07:00",
+            "13:00"
+          ],
+          [
+            "19:00",
+            "22:00"
+          ]
+        ],
+        "winter": [
+          [
+            "07:00",
+            "13:00"
+          ],
+          [
+            "16:00",
+            "21:00"
+          ]
+        ]
+      },
+      "all_day_low_on": [
+        "saturday",
+        "sunday",
+        "statutory_holiday"
+      ],
+      "schedule_status": "verified_2026_document",
+      "zone_names": [
+        "morning_peak",
+        "afternoon_peak",
+        "other"
+      ],
+      "profile_id": "tauron_g13_2026",
+      "label": "TAURON Dystrybucja — G13 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "tauron_dystrybucja",
+      "tariff": "G13s",
+      "source": "TAURON-2026",
+      "source_pages": [
+        11,
+        44
+      ],
+      "default_zone": "night",
+      "seasonal_zones": {
+        "summer": {
+          "day_offpeak": [
+            [
+              "09:00",
+              "17:00"
+            ]
+          ],
+          "day_peak": [
+            [
+              "07:00",
+              "09:00"
+            ],
+            [
+              "17:00",
+              "21:00"
+            ]
+          ],
+          "night": [
+            [
+              "21:00",
+              "07:00"
+            ]
+          ]
+        },
+        "winter": {
+          "day_offpeak": [
+            [
+              "10:00",
+              "15:00"
+            ]
+          ],
+          "day_peak": [
+            [
+              "07:00",
+              "10:00"
+            ],
+            [
+              "15:00",
+              "21:00"
+            ]
+          ],
+          "night": [
+            [
+              "21:00",
+              "07:00"
+            ]
+          ]
+        }
+      },
+      "ascending_preference": {
+        "summer": [
+          "day_offpeak",
+          "night",
+          "day_peak"
+        ],
+        "winter": [
+          "night",
+          "day_offpeak",
+          "day_peak"
+        ]
+      },
+      "holiday_rule": "same_time_zones_with_distinct_rates",
+      "schedule_status": "verified_2026_document",
+      "requirements": [
+        "remote_meter",
+        "monthly_settlement",
+        "contract_group_confirmation"
+      ],
+      "profile_id": "tauron_g13s_2026",
+      "label": "TAURON Dystrybucja — G13s (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "energa_operator",
+      "tariff": "G11",
+      "source": "ENERGA-2026",
+      "source_pages": [
+        8
+      ],
+      "default_zone": "flat",
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "energa_g11_2026",
+      "label": "ENERGA-OPERATOR — G11 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "energa_operator",
+      "tariff": "G12",
+      "source": "ENERGA-2026",
+      "source_pages": [
+        12
+      ],
+      "source_section": "3.2.5",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "15:00"
+        ],
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "energa_g12_2026",
+      "label": "ENERGA-OPERATOR — G12 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "energa_operator",
+      "tariff": "G12w",
+      "source": "ENERGA-2026",
+      "source_pages": [
+        12
+      ],
+      "source_section": "3.2.6",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "15:00"
+        ],
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "all_day_low_on": [
+        "saturday",
+        "sunday",
+        "statutory_holiday"
+      ],
+      "schedule_status": "verified_2026_document",
+      "profile_id": "energa_g12w_2026",
+      "label": "ENERGA-OPERATOR — G12w (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "energa_operator",
+      "tariff": "G12r",
+      "source": "ENERGA-2026",
+      "source_pages": [
+        12
+      ],
+      "source_section": "3.2.8",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "16:00"
+        ],
+        [
+          "22:00",
+          "07:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "energa_g12r_2026",
+      "label": "ENERGA-OPERATOR — G12r (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_energetyka_kolejowa",
+      "tariff": "G11",
+      "source": "PGE-EK-2026",
+      "source_pages": [
+        9
+      ],
+      "default_zone": "flat",
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "pge_ek_g11_2026",
+      "label": "PGE Energetyka Kolejowa Operator — G11 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://bip.ure.gov.pl/download/3/20368/PGEEnergetykaKolejowaSA.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_energetyka_kolejowa",
+      "tariff": "G12",
+      "source": "PGE-EK-2026",
+      "source_pages": [
+        13
+      ],
+      "source_section": "2.2.5",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "15:00"
+        ],
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "pge_ek_g12_2026",
+      "label": "PGE Energetyka Kolejowa Operator — G12 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://bip.ure.gov.pl/download/3/20368/PGEEnergetykaKolejowaSA.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_energetyka_kolejowa",
+      "tariff": "G12w",
+      "source": "PGE-EK-2026",
+      "source_pages": [
+        13
+      ],
+      "source_section": "2.2.6",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "13:00",
+          "15:00"
+        ],
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "all_day_low_on": [
+        "saturday",
+        "sunday",
+        "statutory_holiday"
+      ],
+      "schedule_status": "verified_2026_document",
+      "profile_id": "pge_ek_g12w_2026",
+      "label": "PGE Energetyka Kolejowa Operator — G12w (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://bip.ure.gov.pl/download/3/20368/PGEEnergetykaKolejowaSA.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_dystrybucja",
+      "tariff": "G11",
+      "schedule_status": "verified_2026_document",
+      "source": "PGE-2026",
+      "source_pages": [
+        10,
+        11,
+        12,
+        59
+      ],
+      "default_zone": "flat",
+      "low_windows": [],
+      "high_windows": [],
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "pge_g11_2026",
+      "label": "PGE Dystrybucja — G11 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_dystrybucja",
+      "tariff": "G12",
+      "schedule_status": "verified_2026_document",
+      "source": "PGE-2026",
+      "source_pages": [
+        16
+      ],
+      "source_section": "2.2.6",
+      "default_zone": "high",
+      "seasonal_low_windows": {
+        "winter": [
+          [
+            "22:00",
+            "06:00"
+          ],
+          [
+            "13:00",
+            "15:00"
+          ]
+        ],
+        "summer": [
+          [
+            "22:00",
+            "06:00"
+          ],
+          [
+            "15:00",
+            "17:00"
+          ]
+        ]
+      },
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "pge_g12_2026",
+      "label": "PGE Dystrybucja — G12 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_dystrybucja",
+      "tariff": "G12w",
+      "schedule_status": "verified_2026_document",
+      "source": "PGE-2026",
+      "source_pages": [
+        16
+      ],
+      "source_section": "2.2.8",
+      "default_zone": "high",
+      "seasonal_low_windows": {
+        "winter": [
+          [
+            "22:00",
+            "06:00"
+          ],
+          [
+            "13:00",
+            "15:00"
+          ]
+        ],
+        "summer": [
+          [
+            "22:00",
+            "06:00"
+          ],
+          [
+            "15:00",
+            "17:00"
+          ]
+        ]
+      },
+      "all_day_low_on": [
+        "saturday",
+        "sunday",
+        "statutory_holiday"
+      ],
+      "profile_id": "pge_g12w_2026",
+      "label": "PGE Dystrybucja — G12w (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_dystrybucja",
+      "tariff": "G12n",
+      "schedule_status": "verified_2026_document",
+      "source": "PGE-2026",
+      "source_pages": [
+        16
+      ],
+      "source_section": "2.2.7",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "01:00",
+          "05:00"
+        ]
+      ],
+      "all_day_low_on": [
+        "sunday",
+        "statutory_holiday"
+      ],
+      "ordinary_saturday_is_all_day_low": false,
+      "profile_id": "pge_g12n_2026",
+      "label": "PGE Dystrybucja — G12n (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_dystrybucja",
+      "tariff": "G12as",
+      "schedule_status": "verified_2026_document",
+      "source": "PGE-2026",
+      "source_pages": [
+        17
+      ],
+      "source_section": "2.2.10",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "billing_qualification_required": "incremental_consumption_vs_reference_period; window alone does not establish a discount",
+      "profile_id": "pge_g12as_2026",
+      "label": "PGE Dystrybucja — G12as (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową. Niższa opłata zależy od przyrostu zużycia względem okresu bazowego; kalendarz nie potwierdza przyznania ulgi ani jej wielkości.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "pge_dystrybucja",
+      "tariff": "G12e",
+      "schedule_status": "requires_official_schedule_and_region_verification",
+      "source": "PGE-2026",
+      "source_pages": [
+        16
+      ],
+      "source_section": "2.2.9",
+      "special_schedule_url": "https://pgedystrybucja.pl/taryfaelastyczna",
+      "special_schedule_read_status": "unavailable_during_2026_11_13_research",
+      "fallback_profile_only_if_confirmed_outside_special_area": "pge_g12w",
+      "requires_remote_read_meter": true,
+      "no_automatic_fallback": true,
+      "seller_eligibility_is_separate": true,
+      "profile_id": "pge_g12e_2026",
+      "label": "PGE Dystrybucja — G12e (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274",
+      "supported": false,
+      "runtime_allowed": false,
+      "preview_only": true,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Brak zweryfikowanego harmonogramu i obszaru szczególnego; nie można uruchomić tego profilu.",
+      "blocked_reason": "unverified_region_schedule"
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G11",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        6,
+        7
+      ],
+      "default_zone": "flat",
+      "low_windows": [],
+      "high_windows": [],
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "enea_g11_2026",
+      "label": "ENEA Operator — G11 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G12",
+      "schedule_status": "verified_2026_q4_plus_operator_faq",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        2
+      ],
+      "source_section": "2.2.7",
+      "exact_hours_source": "ENEA-FAQ",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ],
+        [
+          "13:00",
+          "15:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "enea_g12_2026",
+      "label": "ENEA Operator — G12 (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G12w",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        2
+      ],
+      "source_section": "2.2.5",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "21:00",
+          "06:00"
+        ]
+      ],
+      "all_day_low_on": [
+        "saturday",
+        "sunday",
+        "statutory_holiday"
+      ],
+      "midday_low_window": false,
+      "profile_id": "enea_g12w_2026",
+      "label": "ENEA Operator — G12w (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": false,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G12as",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        1,
+        2
+      ],
+      "source_section": "2.2.8",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "billing_qualification_required": "incremental_consumption_vs_reference_period; window alone does not establish a discount",
+      "profile_id": "enea_g12as_2026",
+      "label": "ENEA Operator — G12as (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową. Niższa opłata zależy od przyrostu zużycia względem okresu bazowego; kalendarz nie potwierdza przyznania ulgi ani jej wielkości.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G12sezON",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        2
+      ],
+      "source_section": "2.2.10",
+      "default_zone": "normal",
+      "seasonal_low_windows": {
+        "winter": [
+          [
+            "22:00",
+            "06:00"
+          ],
+          [
+            "11:00",
+            "13:00"
+          ]
+        ],
+        "summer": [
+          [
+            "04:00",
+            "06:00"
+          ],
+          [
+            "09:00",
+            "17:00"
+          ]
+        ]
+      },
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "enea_g12sezon_2026",
+      "label": "ENEA Operator — G12sezON (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G13active",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        2,
+        3
+      ],
+      "source_section": "2.2.11",
+      "default_zone": "normal",
+      "holiday_rule": "same_as_every_day",
+      "monthly_windows": {
+        "1": {
+          "low": [
+            [
+              "23:00",
+              "06:00"
+            ]
+          ],
+          "high": [
+            [
+              "07:00",
+              "10:00"
+            ],
+            [
+              "15:00",
+              "20:00"
+            ]
+          ]
+        },
+        "2": {
+          "low": [
+            [
+              "23:00",
+              "06:00"
+            ]
+          ],
+          "high": [
+            [
+              "07:00",
+              "09:00"
+            ],
+            [
+              "16:00",
+              "21:00"
+            ]
+          ]
+        },
+        "3": {
+          "low": [
+            [
+              "10:00",
+              "16:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "16:00",
+              "23:00"
+            ]
+          ]
+        },
+        "4": {
+          "low": [
+            [
+              "10:00",
+              "16:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "18:00",
+              "23:00"
+            ]
+          ]
+        },
+        "5": {
+          "low": [
+            [
+              "09:00",
+              "17:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "18:00",
+              "23:00"
+            ]
+          ]
+        },
+        "6": {
+          "low": [
+            [
+              "09:00",
+              "17:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "18:00",
+              "23:00"
+            ]
+          ]
+        },
+        "7": {
+          "low": [
+            [
+              "09:00",
+              "17:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "18:00",
+              "23:00"
+            ]
+          ]
+        },
+        "8": {
+          "low": [
+            [
+              "09:00",
+              "17:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "18:00",
+              "23:00"
+            ]
+          ]
+        },
+        "9": {
+          "low": [
+            [
+              "10:00",
+              "16:00"
+            ]
+          ],
+          "high": [
+            [
+              "06:00",
+              "09:00"
+            ],
+            [
+              "17:00",
+              "23:00"
+            ]
+          ]
+        },
+        "10": {
+          "low": [
+            [
+              "10:00",
+              "16:00"
+            ]
+          ],
+          "high": [
+            [
+              "07:00",
+              "09:00"
+            ],
+            [
+              "16:00",
+              "23:00"
+            ]
+          ]
+        },
+        "11": {
+          "low": [
+            [
+              "23:00",
+              "06:00"
+            ]
+          ],
+          "high": [
+            [
+              "07:00",
+              "09:00"
+            ],
+            [
+              "14:00",
+              "21:00"
+            ]
+          ]
+        },
+        "12": {
+          "low": [
+            [
+              "23:00",
+              "06:00"
+            ]
+          ],
+          "high": [
+            [
+              "07:00",
+              "10:00"
+            ],
+            [
+              "13:00",
+              "20:00"
+            ]
+          ]
+        }
+      },
+      "profile_id": "enea_g13active_2026",
+      "label": "ENEA Operator — G13active (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "profile_id": "tauron_g12as_2026",
+      "operator": "tauron_dystrybucja",
+      "tariff": "G12as",
+      "label": "TAURON Dystrybucja — G12as (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "source_pages": [
+        9,
+        11,
+        12,
+        13,
+        44
+      ],
+      "source": "TAURON-2026",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Godziny są potwierdzone; niższa opłata zależy od przyrostu zużycia względem okresu bazowego. Kalendarz nie potwierdza przyznania ulgi ani jej wielkości. Potwierdź własną umowę.",
+      "description": "Kalendarz stref G12as bez kalkulatora ulg wolumenowych."
+    },
+    {
+      "profile_id": "tauron_g14dynamic_2026",
+      "operator": "tauron_dystrybucja",
+      "tariff": "G14dynamic",
+      "label": "TAURON Dystrybucja — G14dynamic (wymaga danych dziennych)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
+      "source_pages": [
+        9,
+        13
+      ],
+      "source": "TAURON-2026",
+      "schedule_status": "requires_external_daily_feed",
+      "supported": false,
+      "runtime_allowed": false,
+      "preview_only": true,
+      "blocked_reason": "dynamic_feed_required",
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "description": "Godziny wymagają aktualnych danych Energetycznego Kompasu; brak adaptera tego źródła.",
+      "notice": "Profil informacyjny; nie uruchamia sterowania i nie udaje stałego rozkładu godzin."
+    },
+    {
+      "operator": "energa_operator",
+      "tariff": "G11f",
+      "source": "ENERGA-2026",
+      "source_pages": [
+        8
+      ],
+      "default_zone": "flat",
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "profile_id": "energa_g11f_2026",
+      "label": "ENERGA-OPERATOR — G11f (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Jedna strefa. Szczególne warunki grupy G11f i własną umowę należy potwierdzić; EMS nie wylicza opłat.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "profile_id": "energa_g12as_2026",
+      "operator": "energa_operator",
+      "tariff": "G12as",
+      "label": "ENERGA-OPERATOR — G12as (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf",
+      "source_pages": [
+        8,
+        12
+      ],
+      "source": "ENERGA-2026",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Godziny są potwierdzone; niższa opłata zależy od przyrostu zużycia względem okresu bazowego. Kalendarz nie potwierdza przyznania ulgi ani jej wielkości. Potwierdź własną umowę.",
+      "description": "Kalendarz stref G12as bez kalkulatora ulg wolumenowych."
+    },
+    {
+      "profile_id": "pge_ek_g12as_2026",
+      "operator": "pge_energetyka_kolejowa",
+      "tariff": "G12as",
+      "label": "PGE Energetyka Kolejowa Operator — G12as (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://bip.ure.gov.pl/download/3/20368/PGEEnergetykaKolejowaSA.pdf",
+      "source_pages": [
+        9,
+        10,
+        13
+      ],
+      "source": "PGE-EK-2026",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "schedule_status": "verified_2026_document",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Godziny są potwierdzone; niższa opłata zależy od przyrostu zużycia względem okresu bazowego. Kalendarz nie potwierdza przyznania ulgi ani jej wielkości. Potwierdź własną umowę.",
+      "description": "Kalendarz stref G12as bez kalkulatora ulg wolumenowych."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G11p",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        6,
+        7
+      ],
+      "default_zone": "flat",
+      "low_windows": [],
+      "high_windows": [],
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "enea_g11p_2026",
+      "label": "ENEA Operator — G11p (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Potwierdź szczególne warunki własnej umowy: prepayment contract. Kalendarz odwzorowuje godziny, bez wyliczania opłat.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G12p",
+      "schedule_status": "verified_2026_q4_plus_operator_faq",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        2
+      ],
+      "source_section": "2.2.7",
+      "exact_hours_source": "ENEA-FAQ",
+      "default_zone": "high",
+      "low_windows": [
+        [
+          "22:00",
+          "06:00"
+        ],
+        [
+          "13:00",
+          "15:00"
+        ]
+      ],
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "enea_g12p_2026",
+      "label": "ENEA Operator — G12p (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Potwierdź szczególne warunki własnej umowy: prepayment contract. Kalendarz odwzorowuje godziny, bez wyliczania opłat.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    },
+    {
+      "operator": "enea_operator",
+      "tariff": "G11pewna",
+      "schedule_status": "verified_2026_q4",
+      "source": "ENEA-Q4",
+      "source_pages": [
+        6,
+        7
+      ],
+      "default_zone": "flat",
+      "low_windows": [],
+      "high_windows": [],
+      "holiday_rule": "same_as_every_day",
+      "profile_id": "enea_g11pewna_2026",
+      "label": "ENEA Operator — G11pewna (2026)",
+      "version": "2026-reviewed-2026-11-13",
+      "valid_from": "2026-01-01",
+      "valid_until": "2026-12-31",
+      "source_url": "https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf",
+      "supported": true,
+      "runtime_allowed": true,
+      "preview_only": false,
+      "clock_confirmation_required": true,
+      "requires_contract_confirmation": true,
+      "notice": "Potwierdź szczególne warunki własnej umowy: distinct qualification and billing; no promise of equivalent costs. Kalendarz odwzorowuje godziny, bez wyliczania opłat.",
+      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+    }
+  ]
+}

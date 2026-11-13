@@ -1,3 +1,18 @@
+# Wersja 2.1.0 — operatorzy, rzeczywiste przedziały i start po zapisie
+
+**798 testów Python i 206 testów panelu PASS** w końcowym pełnym sprawdzeniu offline.
+
+- Katalog pięciu OSD: 30 profili dostępnych warunkowo, dwie pozycje zablokowane i zachowany profil własny. Reguły dni tygodnia, świąt, sezonów, stałego CET i czasu lokalnego, ważność profili i wymagane potwierdzenia są testowane syntetycznie.
+- Planer i regulator używają rzeczywistych przedziałów taryfy. Generyczne terminy, okresy tanie przez północ, rezerwa, taryfa jednostrefowa z punktem kontrolnym, brak pełnej prognozy oraz nullable SoC minionych przedziałów mają osobne regresje.
+- Niezależny przegląd kompilacji objął dodatkowo 1080 kombinacji (30 profili × 18 dat × 2 zegary): brak nieprawidłowych programów oraz różnic zgody na ładowanie względem kalendarza. Nie jest to test firmware urządzeń. Cykliczne sześć TOU sprawdzono w oficjalnych instrukcjach EU LV; źródła i strony są w SPECIFICATION oraz TARIFFS.
+- Zmiana programu TOU wymaga wyłączenia GC i weryfikacji nastaw; nieprawidłowy lub brakujący odczyt nie zezwala na ładowanie. Model sześciu wpisów nie tworzy nowych stref operatora.
+- Zapis kreatora jest powiązany z nową rewizją, także przy powtórnym identycznym zapisie. Przeładowanie wymaga wcześniejszego potwierdzenia GC OFF / 0 A w ograniczonym czasie. Stary runtime nie może działać według niezaładowanych opcji. Test usunięcia domyślnego odbiornika porównuje wszystkie pozostałe ustawienia i wymaga poprawnego nonce; nie maskuje utraty danych.
+- Manager startu po zapisie: nowe i starsze zapisy, brak pomiarów/planu, poprawny plan zachowawczy, błędy, stop/unload, ręczny STOP podczas przeładowania, zmiana konfiguracji i anulowanie szkicu. Zwykłe zabezpieczenia aktywacji i poleceń nie są omijane.
+- UI: natywny wybór operatora/taryfy/zegara, jawny podgląd i potwierdzenie; brak zapisów przy odczycie, renderowaniu lub anulowaniu. Poprawne numeryczne poziomy taryfy i nadrzędna zgoda strefy, powtarzana godzina DST, puste minione/nieznane SoC, osobny program sprzętowy i jasny fallback. Wszystkie cztery kreatory zamykają się po zapisie; klient tylko czyta wynik startu silnika. STOP pozostaje dostępny podczas oczekiwania.
+- Stały komunikat ostatniej nieudanej akcji przetrwa odpytywanie. Zamknięcie komunikatu nie usuwa rzeczywistego błędu silnika ani ochrony przed nieaktualnym odczytem. Formularze zachowują szkic i fokus. Test podglądu wykonuje syntetyczny wybór taryfy oraz anulowanie oczekującego startu bez sieci i urządzeń.
+
+Testy awarii wykonano offline. Publikacja kodu, instalacja plików, załadowana wersja, przyjęcie polecenia, odczyt rejestru i fizyczna reakcja pozostają odrębnymi etapami weryfikacji. Rezerwa, topologia i firmware produkcji nie służyły do testów demonstracyjnych.
+
 # Wersja 2.0.4 — zgodność encji update i historyczny komunikat startowy
 
 **687 testów Python i 173 testy panelu PASS** w pełnym sprawdzeniu offline.

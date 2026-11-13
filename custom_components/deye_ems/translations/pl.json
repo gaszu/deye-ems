@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Panel w lewym menu Home Assistant",
-        "description": "**Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne. Po dodaniu integracja tylko obserwuje. Encje i pozostałe parametry można uzupełnić później.\n\nWybierz dokładny model z tabliczki. Model z katalogu wyznacza liczbę faz oraz górne ograniczenia mocy; pole liczby faz falownika dotyczy modelu własnego. Przyłącze domu może być trójfazowe także przy falowniku jednofazowym. Następny ekran pokaże wynik bez zapisu. Modele LV 40–60 V; HV i 24 V nie są jeszcze obsługiwane. Zapis wymaga obserwacji.",
+        "description": "**Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**\n\nPanel jest dostępny dla administratorów. Jeśli nie widzisz wpisu, odśwież stronę lub sprawdź ustawienie „Panel boczny” w opcjach integracji oraz edycję paska bocznego HA. Bezpośredni adres panelu: `/deye-ems`.\n\nLokalny EMS bez EMHASS, helperów i automatyzacji. Minimalny bezpieczny SoC jest stałą rezerwą; cele pogodowe są osobne.  Encje i pozostałe parametry można uzupełnić później.\n\nWybierz dokładny model z tabliczki. Model z katalogu wyznacza liczbę faz oraz górne ograniczenia mocy; pole liczby faz falownika dotyczy modelu własnego. Przyłącze domu może być trójfazowe także przy falowniku jednofazowym. Następny ekran pokaże wynik bez zapisu. Modele LV 40–60 V; HV i 24 V nie są jeszcze obsługiwane. Zapis wymaga obserwacji.\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "min_soc_percent": "Minimalny bezpieczny SoC",
           "capacity_kwh": "Pojemność magazynu",
@@ -23,9 +23,31 @@
       },
       "user_inverter_confirm": {
         "title": "Potwierdź model falownika",
-        "description": "{model_preview}",
+        "description": "{model_preview}\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "confirm_model": "Potwierdzam wybrany model, fazy i limity"
+        }
+      },
+      "tariff_operator": {
+        "title": "Operator i taryfa",
+        "description": "Wybierz operatora z umowy dystrybucyjnej. Następny krok pokaże jego taryfy dla gospodarstw domowych.",
+        "data": {
+          "operator_id": "Operator sieci"
+        }
+      },
+      "tariff_plan": {
+        "title": "Taryfa i zegar licznika",
+        "description": "Wybierz grupę taryfową z własnej umowy i sposób działania zegara licznika rozliczeniowego. Zmiana sezonu taryfy i przestawienie zegara to odrębne zasady. Harmonogram jest odczytywany z dokumentu operatora; nie edytujesz jego godzin. Następny ekran jest podglądem przed zapisem.\n\n{tariff_notices}",
+        "data": {
+          "profile_id": "Taryfa",
+          "clock_basis": "Zegar licznika rozliczeniowego"
+        }
+      },
+      "tariff_confirm": {
+        "title": "Sprawdź i zapisz taryfę",
+        "description": "{tariff_preview}\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
+        "data": {
+          "confirm_tariff": "Potwierdzam taryfę z umowy oraz sposób działania zegara licznika"
         }
       }
     },
@@ -40,20 +62,37 @@
       "invalid_inverter_phase": "Wybierz L1, L2 lub L3; dla przyłącza jednofazowego wybierz L1.",
       "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem.",
       "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami.",
-      "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie."
+      "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie.",
+      "invalid_tariff_operator": "Wybierz operatora z listy.",
+      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
+      "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
+      "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
+      "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
+      "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
+      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem."
     },
     "abort": {
-      "already_configured": "Integracja Deye EMS jest już skonfigurowana."
+      "already_configured": "Integracja Deye EMS jest już skonfigurowana.",
+      "invalid_tariff_operator": "Wybierz operatora z listy.",
+      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
+      "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
+      "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
+      "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
+      "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
+      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem.",
+      "tariff_configuration_changed": "Konfiguracja zmieniła się od podglądu. Otwórz wybór taryfy ponownie."
     },
     "create_entry": {
-      "default": "Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant. Otwórz Deye EMS lub przejdź do /deye-ems. Panel jest dostępny dla administratorów. Integracja rozpoczyna pracę w obserwacji."
+      "default": "Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant. Otwórz /deye-ems, aby zobaczyć sprawdzanie warunków i uruchomienie sterowania. Po zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę."
     }
   },
   "options": {
     "step": {
       "topology": {
         "title": "Topologia i moc falownika",
-        "description": "Wybierz miejsce pomiaru wymiany z siecią. Dla CWU między GRID a CT wybierz Zero Export To CT i w Źródłach przypisz osobno CT oraz port GRID (sumy i fazy). Oba kierunki dodatnie oznaczają pobór z sieci/do falownika. LOAD musi mierzyć samo wyjście LOAD/UPS. Moc znamionowa dotyczy całego falownika, łącznie domu i CWU. Wspólny limit jest limitem modelu; nie zapisuje ustawień mocy urządzenia. Brak zgodnych pomiarów blokuje sterowanie. Zmiana wymaga obserwacji, a wznowienie jest ręczne.",
+        "description": "Wybierz miejsce pomiaru wymiany z siecią. Dla CWU między GRID a CT wybierz Zero Export To CT i w Źródłach przypisz osobno CT oraz port GRID (sumy i fazy). Oba kierunki dodatnie oznaczają pobór z sieci/do falownika. LOAD musi mierzyć samo wyjście LOAD/UPS. Moc znamionowa dotyczy całego falownika, łącznie domu i CWU. Wspólny limit jest limitem modelu; nie zapisuje ustawień mocy urządzenia. Brak zgodnych pomiarów blokuje sterowanie. Zmiana wymaga obserwacji, \n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "topology": "Układ instalacji",
           "inverter_max_power_kw": "Moc falownika — łącznie",
@@ -70,7 +109,7 @@
       },
       "parameters": {
         "title": "Parametry silnika",
-        "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.",
+        "description": "Rezerwa SoC obowiązuje we wszystkich slotach. Maksymalny cel musi być nie mniejszy niż rezerwa plus bufor.\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "combined_output_limit_kw": "Wspólny limit modelowy LOAD i odbiorów przed GRID",
           "min_soc_percent": "Minimalny bezpieczny SoC",
@@ -90,7 +129,7 @@
       },
       "sources": {
         "title": "Pomiary i sterowanie",
-        "description": "Wskaż istniejące encje Deye albo opcjonalnego YamBMS oraz prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}",
+        "description": "Wskaż istniejące encje Deye albo opcjonalnego YamBMS oraz prognoz PV. Wybrany LOAD powinien obejmować całe zużycie modelowanego domu; sprawdź zakres pomiaru dla topologii LOAD/CT. Kanałów odbiorników nie doliczamy ponownie. Nie są wymagane helpery ani automatyzacje EMS. Zmiany przypisań wykonuj w trybie obserwacji.\n\n{prefix_preview}\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "battery_low_soc": "Battery low SOC — próg falownika (odczyt, rezerwa EMS co najmniej +5 p.p.)",
           "ct_grid_power": "Wymiana z siecią na CT — suma (+ import, − eksport)",
@@ -163,7 +202,7 @@
       },
       "solcast_manual": {
         "title": "Solcast wewnątrz EMS",
-        "description": "Wbudowany klient nie wymaga osobnej integracji Solcast. Klucz i identyfikatory znajdziesz w toolkit.solcast.com.au. Moc AC/DC, kierunek i nachylenie paneli ustaw w portalu Solcast; EMS pobiera prognozę dla zapisanej tam instalacji. Zwykły limit Hobbyist: 10 zapytań na dobę UTC, każde pobranie dla każdej instalacji zużywa osobne zapytanie. Nie odpytuj równocześnie tego konta innym klientem. Przy nieznanym zużyciu pozostaw 10; klient zaczeka na nową dobę UTC. Wpisane zużycie nie zmniejsza rejestru; po zmianie konfiguracji może go podnieść. {import_note}",
+        "description": "Wbudowany klient nie wymaga osobnej integracji Solcast. Klucz i identyfikatory znajdziesz w toolkit.solcast.com.au. Moc AC/DC, kierunek i nachylenie paneli ustaw w portalu Solcast; EMS pobiera prognozę dla zapisanej tam instalacji. Zwykły limit Hobbyist: 10 zapytań na dobę UTC, każde pobranie dla każdej instalacji zużywa osobne zapytanie. Nie odpytuj równocześnie tego konta innym klientem. Przy nieznanym zużyciu pozostaw 10; klient zaczeka na nową dobę UTC. Wpisane zużycie nie zmniejsza rejestru; po zmianie konfiguracji może go podnieść. {import_note}\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "api_key": "Klucz API Solcast (puste pole zachowuje zapisany)",
           "resource_ids": "Identyfikatory instalacji Solcast (oddzielone przecinkami; puste = wykrywanie)",
@@ -177,7 +216,7 @@
       },
       "solcast_import": {
         "title": "Import dostępnych ustawień Solcast",
-        "description": "Klucz, limit konta i wykluczenia są kopiowane lokalnie w HA. Kreator odczytuje bieżące współczynniki z sensora korekt przypisanego do wybranej integracji. Przenosi ich stan, bez pełnej historii i mechanizmu dalszego samouczenia. Prognozy sensorów HA są już skorygowane — nie korygujemy ich ponownie. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta.",
+        "description": "Klucz, limit konta i wykluczenia są kopiowane lokalnie w HA. Kreator odczytuje bieżące współczynniki z sensora korekt przypisanego do wybranej integracji. Przenosi ich stan, bez pełnej historii i mechanizmu dalszego samouczenia. Prognozy sensorów HA są już skorygowane — nie korygujemy ich ponownie. Import nie wyłącza dotychczasowej integracji ani nie zeruje limitu konta.\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "source_entry": "Obecna integracja Solcast"
         }
@@ -203,7 +242,8 @@
           "sidebar": "Panel boczny",
           "entity_prefix": "Prefiks encji Deye",
           "topology": "Topologia i moc falownika",
-          "inverter": "Model i fazy falownika"
+          "inverter": "Model i fazy falownika",
+          "tariff": "Operator i taryfa"
         }
       },
       "solcast": {
@@ -226,9 +266,31 @@
       },
       "inverter_confirm": {
         "title": "Potwierdź model falownika",
-        "description": "{model_preview}",
+        "description": "{model_preview}\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
         "data": {
           "confirm_model": "Potwierdzam wybrany model, fazy i limity"
+        }
+      },
+      "tariff_operator": {
+        "title": "Operator i taryfa",
+        "description": "Wybierz operatora z umowy dystrybucyjnej. Następny krok pokaże jego taryfy dla gospodarstw domowych.",
+        "data": {
+          "operator_id": "Operator sieci"
+        }
+      },
+      "tariff_plan": {
+        "title": "Taryfa i zegar licznika",
+        "description": "Wybierz grupę taryfową z własnej umowy i sposób działania zegara licznika rozliczeniowego. Zmiana sezonu taryfy i przestawienie zegara to odrębne zasady. Harmonogram jest odczytywany z dokumentu operatora; nie edytujesz jego godzin. Następny ekran jest podglądem przed zapisem.\n\n{tariff_notices}",
+        "data": {
+          "profile_id": "Taryfa",
+          "clock_basis": "Zegar licznika rozliczeniowego"
+        }
+      },
+      "tariff_confirm": {
+        "title": "Sprawdź i zapisz taryfę",
+        "description": "{tariff_preview}\n\nPo zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę.",
+        "data": {
+          "confirm_tariff": "Potwierdzam taryfę z umowy oraz sposób działania zegara licznika"
         }
       }
     },
@@ -248,7 +310,15 @@
       "invalid_inverter_phase": "Wybierz L1, L2 lub L3; dla przyłącza jednofazowego wybierz L1.",
       "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem.",
       "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami.",
-      "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie."
+      "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie.",
+      "invalid_tariff_operator": "Wybierz operatora z listy.",
+      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
+      "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
+      "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
+      "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
+      "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
+      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
@@ -258,7 +328,16 @@
       "sidebar_saved": "Zapisano widoczność panelu. Otwórz /deye-ems lub odśwież menu boczne. Sterowanie pozostaje w dotychczasowym trybie.",
       "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA.",
       "invalid_topology": "Wybierz poprawną topologię instalacji.",
-      "inverter_settings_changed": "Ustawienia falownika zmieniły się od przygotowania podglądu. Otwórz kreator ponownie."
+      "inverter_settings_changed": "Ustawienia falownika zmieniły się od przygotowania podglądu. Otwórz kreator ponownie.",
+      "invalid_tariff_operator": "Wybierz operatora z listy.",
+      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
+      "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
+      "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
+      "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
+      "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
+      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem.",
+      "tariff_configuration_changed": "Konfiguracja zmieniła się od podglądu. Otwórz wybór taryfy ponownie."
     }
   }
 }

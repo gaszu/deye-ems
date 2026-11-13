@@ -4,7 +4,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.0.4
+## Instalacja wersji 2.1.0
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -17,12 +17,12 @@ Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcze
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.0.4** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v2.1.0** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
-Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
+Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
 
-Alternatywnie pobierz [deye-ems-2.0.4.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.4/deye-ems-2.0.4.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.0.4.md).
+Alternatywnie pobierz [deye-ems-2.1.0.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.0/deye-ems-2.1.0.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.0.md).
 
 ## Diagnostyka pomiarów
 
@@ -32,7 +32,7 @@ Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połącze
 
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.0.4 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.0 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
 
@@ -42,7 +42,15 @@ W profilu **Deye**, bez zewnętrznego BMS, źródłem limitu może być **Maximu
 
 Zmiana istniejącego modelu odbywa się w obserwacji, przez podgląd i osobne potwierdzenie. Aktualizacja z 1.x zachowuje profil własny i dotychczasowe ograniczenia; nie wybiera automatycznie nowego modelu ani nie zmienia topologii/rezerwy. Panel pokazuje wybrany sprzęt i ograniczenia skuteczne.
 
-Kalendarz w panelu pokazuje zachowany harmonogram dzisiaj/jutro. Katalog wszystkich polskich operatorów i taryf to kolejny etap 2.x. Obecnego harmonogramu nie należy utożsamiać z pełną taryfą OSD z wyjątkami weekendowymi. [Zakres i reguły kalendarza](TARIFFS.md).
+## Operator, taryfa i cele SoC
+
+W panelu wybierz **Operator i taryfa → Wybierz operatora i taryfę**. Katalog obejmuje PGE Dystrybucja, TAURON Dystrybucja, Enea Operator, Energa Operator i PGE Energetyka Kolejowa: 30 zweryfikowanych profili oraz dwie pozycje niedostępne do sterowania z powodu brakujących danych regionalnych lub dynamicznych. Dotychczasowy własny harmonogram G13 pozostaje osobnym profilem. Szczegóły, warunki umów i dokumenty źródłowe: [TARIFFS.md](TARIFFS.md).
+
+Wybór wymaga sprawdzenia taryfy z umową oraz potwierdzenia zegara: lokalnego Europe/Warsaw ze zmianą lato/zima albo stałego CET. Kalendarz uwzględnia reguły wybranego operatora, sezon, dni tygodnia i święta. Samo otwarcie lub anulowanie podglądu nie zmienia ustawień. Aktualizacja nie wybiera nowej taryfy za użytkownika.
+
+Tabela pokazuje rzeczywiste przedziały taryfy, zgodę na doładowanie z sieci, wyliczony cel, rezerwę i prognozowane SoC. Cel zachowawczy jest opisany oddzielnie; brak lub miniony odczyt ma znak „—”, a nie sztuczne zero. Punkt planistyczny w taryfie jednostrefowej nie jest granicą strefy operatora. Sześć technicznych wpisów TOU Deye pokazano osobno w szczegółach.
+
+Po **Zapisz** kreator źródeł, modelu, Solcast lub taryfy zamyka się sam. Sprawdzanie wznowienia obejmuje także pozostałe zmienione opcje wpisu integracji. Zmiana motywu lub widoczności paska bocznego, odczyty katalogu, podgląd, anulowanie bez zapisu i ręczny STOP nie uruchamiają automatycznego startu. Sprawdzanie i ewentualne wznowienie prowadzi silnik HA także po zamknięciu przeglądarki. Ręczny **Zatrzymaj i obserwuj** anuluje oczekujący start. Błąd ostatniej akcji pozostaje widoczny do zamknięcia komunikatu albo udanej powtórki powiązanej akcji; bieżące blokady silnika mają osobną diagnostykę.
 
 ## Konfiguracja
 

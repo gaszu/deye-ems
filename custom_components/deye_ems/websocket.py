@@ -6,6 +6,8 @@ from homeassistant.exceptions import HomeAssistantError
 from .appearance import DATA_APPEARANCE
 from .const import DOMAIN, DEFAULT_OPTIONS, DEFAULT_SOURCES, VERSION
 from .updates import DATA_UPDATES
+from .tariff_calendar import calendar_operators, calendar_profiles
+from .post_save import post_save_status, cancel_all_post_save
 
 
 def _coordinator(hass):
@@ -15,8 +17,13 @@ def _coordinator(hass):
 
 def _payload(coordinator, appearance=None, updates=None):
     options = coordinator.options
+    hass = getattr(coordinator, "hass", None)
+    completion = post_save_status(hass, coordinator.entry.entry_id) if hass is not None else {
+        "status": "idle", "reason": None, "issues": [], "updated_at": None,
+        "plan_source": None, "plan_reason": None}
     return {"entry_id": coordinator.entry.entry_id, "mode": coordinator.mode, "data": coordinator.data or {},
         "backend_version": VERSION,
+        "post_save_activation": completion,
         "updates": updates.status if updates is not None else {
             "status": "not_checked", "latest_version": None, "checked_at": None,
             "retry_at": None, "reason": None, "release_url": None, "marketplace_url": "/marketplace", "stale": False},
@@ -25,7 +32,7 @@ def _payload(coordinator, appearance=None, updates=None):
         "options": {**{k: options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
                     **{k: options.get(k) for k in (
                         "min_soc_lower_bound", "min_soc_bound_valid", "effective_min_soc_percent",
-                        "hardware_profile", "effective_hardware_limits", "tariff_calendar")}},
+                        "hardware_profile", "effective_hardware_limits", "tariff_calendar", "physical_tou")}},
         "sources": {**DEFAULT_SOURCES, **options.get("sources", {})}}
 
 
@@ -40,6 +47,15 @@ async def status(hass, connection, msg):
     connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE), hass.data.get(DATA_UPDATES)))
 
 
+@websocket_api.websocket_command({vol.Required("type"): "deye_ems/tariff_catalog"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def tariff_catalog(hass, connection, msg):
+    """Embedded public rules only; no source, device, history or network calls."""
+    connection.send_result(msg["id"], {"backend_version": VERSION,
+        "operators": calendar_operators(), "profiles": calendar_profiles()})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/command",
     vol.Required("command"): vol.In(("recalculate", "mode", "option", "load_save", "load_delete", "load_toggle", "appearance", "check_updates")),
     vol.Optional("theme"): str,
@@ -51,6 +67,9 @@ async def status(hass, connection, msg):
 @websocket_api.require_admin
 @websocket_api.async_response
 async def command(hass, connection, msg):
+    if msg["command"] == "mode" and msg.get("mode") == "shadow":
+        # Revoke waiting activation even while the config entry is reloading.
+        cancel_all_post_save(hass)
     coordinator = _coordinator(hass)
     if coordinator is None:
         connection.send_error(msg["id"], "not_loaded", "Deye EMS is not loaded")
@@ -96,4 +115,5 @@ async def command(hass, connection, msg):
 def async_register(hass):
     websocket_api.async_register_command(hass, status)
     websocket_api.async_register_command(hass, command)
+    websocket_api.async_register_command(hass, tariff_catalog)
 

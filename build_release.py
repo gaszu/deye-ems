@@ -226,6 +226,60 @@ for language, translation in (("pl", doc), ("en", doc_en)):
         "Ustawienia falownika zmieniły się od przygotowania podglądu. Otwórz kreator ponownie."
         if pl else "Inverter settings changed after the preview was prepared. Open the wizard again.")
 
+# Tariff selection is part of both initial setup and the existing entry. Keep
+# the generator authoritative so packaging cannot drop these flow steps.
+for language, translation in (("pl", doc), ("en", doc_en)):
+    pl = language == "pl"
+    tariff_title = "Operator i taryfa" if pl else "Operator and tariff"
+    tariff_steps = {
+        "tariff_operator": {
+            "title": tariff_title,
+            "description": ("Wybierz operatora z umowy dystrybucyjnej. Następny krok pokaże jego taryfy dla gospodarstw domowych."
+                if pl else "Choose the distribution operator on your contract. The next step shows its household tariffs."),
+            "data": {"operator_id": "Operator sieci" if pl else "Distribution operator"}},
+        "tariff_plan": {
+            "title": "Taryfa i zegar licznika" if pl else "Tariff and meter clock",
+            "description": ("Wybierz grupę taryfową z własnej umowy i sposób działania zegara licznika rozliczeniowego. Zmiana sezonu taryfy i przestawienie zegara to odrębne zasady. Harmonogram jest odczytywany z dokumentu operatora; nie edytujesz jego godzin. Następny ekran jest podglądem przed zapisem.\n\n{tariff_notices}"
+                if pl else "Choose your contracted tariff and the settlement meter clock. Tariff seasons and daylight-saving clock changes are separate rules. Operator hours come from its published document and cannot be edited. The next screen previews the selection before saving.\n\n{tariff_notices}"),
+            "data": {"profile_id": "Taryfa" if pl else "Tariff",
+                     "clock_basis": "Zegar licznika rozliczeniowego" if pl else "Settlement meter clock"}},
+        "tariff_confirm": {
+            "title": "Sprawdź i zapisz taryfę" if pl else "Review and save tariff",
+            "description": "{tariff_preview}",
+            "data": {"confirm_tariff": ("Potwierdzam taryfę z umowy oraz sposób działania zegara licznika"
+                if pl else "Confirm the contracted tariff and settlement meter clock")}},
+    }
+    errors = {
+        "invalid_tariff_operator": "Wybierz operatora z listy." if pl else "Choose a listed operator.",
+        "invalid_tariff_profile": "Wybierz taryfę z listy operatora." if pl else "Choose a listed operator tariff.",
+        "tariff_operator_mismatch": "Ta taryfa należy do innego operatora." if pl else "This tariff belongs to another operator.",
+        "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę." if pl else "This profile needs an additional verified schedule. Choose a supported tariff.",
+        "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika." if pl else "Choose the settlement meter clock.",
+        "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu." if pl else "The preserved schedule retains local time. Choose an operator profile to change the time basis.",
+        "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu." if pl else "The profile document does not cover this date. Update the catalog.",
+        "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem." if pl else "Review the schedule and check confirmation before saving.",
+    }
+    for section in ("config", "options"):
+        translation[section]["step"].update(json.loads(json.dumps(tariff_steps)))
+        translation[section]["error"].update(errors)
+        translation[section]["abort"].update(errors)
+        translation[section]["abort"]["tariff_configuration_changed"] = (
+            "Konfiguracja zmieniła się od podglądu. Otwórz wybór taryfy ponownie."
+            if pl else "Configuration changed after the preview. Open tariff selection again.")
+    translation["options"]["step"]["init"]["menu_options"]["tariff"] = tariff_title
+    completion = ("Po zapisie kreator zamknie się automatycznie. EMS sprawdzi świeże pomiary, plan i zabezpieczenia przed automatycznym włączeniem sterowania. Jeśli warunki nie są spełnione, pozostanie w obserwacji i pokaże przyczynę."
+        if pl else "After saving the wizard closes automatically. EMS checks fresh measurements, its plan and safety conditions before enabling control. If conditions are not met, it stays in observation and shows the reason.")
+    for section in ("config", "options"):
+        for step_id, step in translation[section]["step"].items():
+            if step_id in ("user", "user_inverter_confirm", "inverter_confirm", "sources", "solcast_manual", "solcast_import", "tariff_confirm", "topology", "parameters"):
+                step["description"] = step.get("description", "").replace("a wznowienie jest ręczne.", "")
+                step["description"] = step["description"].replace("Po dodaniu integracja tylko obserwuje.", "")
+                step["description"] = step["description"].replace("After adding the integration, it only observes.", "")
+                step["description"] += "\n\n" + completion
+    translation["config"]["create_entry"] = {"default": (
+        "Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant. Otwórz /deye-ems, aby zobaczyć sprawdzanie warunków i uruchomienie sterowania. " + completion
+        if pl else "After installation, find the Deye EMS panel in the Home Assistant left menu. Open /deye-ems to view condition checks and control startup. " + completion)}
+
 COMPONENT.joinpath("translations").mkdir(exist_ok=True)
 for path, content in ((COMPONENT/"strings.json", doc_en), (COMPONENT/"translations/en.json", doc_en),
         (COMPONENT/"translations/pl.json", doc)):

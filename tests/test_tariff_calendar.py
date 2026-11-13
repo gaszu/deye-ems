@@ -69,10 +69,10 @@ class TariffCalendarTests(unittest.TestCase):
         self.assertEqual(result["current_interval"]["start"], "2026-07-10T19:00:00+02:00")
         self.assertEqual(result["current_interval"]["end"], "2026-07-10T22:00:00+02:00")
 
-    def test_official_profile_is_preview_only_and_treats_weekend_as_off_peak(self):
+    def test_verified_official_profile_treats_weekend_as_off_peak(self):
         result = describe("2026-11-14T08:00:00+01:00", "tauron_g13_2026")
-        self.assertTrue(result["preview_only"])
-        self.assertFalse(result["runtime_allowed"])
+        self.assertFalse(result["preview_only"])
+        self.assertTrue(result["runtime_allowed"])
         self.assertEqual(len(result["today"]), 1)
         self.assertEqual(result["current_zone"], "off_peak")
         self.assertEqual(result["current_interval"]["reason"], "weekend")

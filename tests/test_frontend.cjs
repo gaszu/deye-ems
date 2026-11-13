@@ -24,10 +24,10 @@ class FakeNode {
 
 class FakeShadow {
   constructor() {this.activeElement=null;this.html="";this.nodes=[];}
-  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const hardwareName=/data-hardware-field="([^"]+)"/.exec(match[1])?.[1];const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=hardwareName?this.nodes.find(n=>n.dataset.hardwareField===hardwareName):name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
+  set innerHTML(html) {this.html=html;this.nodes=[];for(const match of html.matchAll(/<(input|select|button|details|form)\b([^>]*)>/g)){const attrs={tag:match[1]};for(const pair of match[2].matchAll(/([\w-]+)="([^"]*)"/g))attrs[pair[1]]=pair[2];for(const flag of ["open","checked","disabled","required"])attrs[flag]=new RegExp('(?:^|\\s)'+flag+'(?:\\s|$)').test(match[2]);this.nodes.push(new FakeNode(attrs));}for(const match of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)){const tariffName=/data-tariff-field="([^"]+)"/.exec(match[1])?.[1];const hardwareName=/data-hardware-field="([^"]+)"/.exec(match[1])?.[1];const name=/data-solcast-field="([^"]+)"/.exec(match[1])?.[1],sourceName=/data-source-field="([^"]+)"/.exec(match[1])?.[1],id=/\bid="([^"]+)"/.exec(match[1])?.[1],node=tariffName?this.nodes.find(n=>n.dataset.tariffField===tariffName):hardwareName?this.nodes.find(n=>n.dataset.hardwareField===hardwareName):name?this.nodes.find(n=>n.dataset.solcastField===name):sourceName?this.nodes.find(n=>n.dataset.sourceField===sourceName):this.nodes.find(n=>n.attrs.id===id);const selected=/<option\b([^>]*\bselected\b[^>]*)>/.exec(match[2]);if(node&&selected)node.value=decode(/value="([^"]*)"/.exec(selected[1])?.[1]??"");}}
   get innerHTML() {return this.html;}
   getElementById(id) {return this.nodes.find(n=>n.attrs.id===id);}
-  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const hardware=/\[data-hardware-field="([^"]+)"\]/.exec(selector)?.[1];if(hardware)return this.nodes.find(n=>n.dataset.hardwareField===hardware);const source=/\[data-source-field="([^"]+)"\]/.exec(selector)?.[1];if(source)return this.nodes.find(n=>n.dataset.sourceField===source);const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
+  querySelector(selector) {if(selector==="details")return this.nodes.find(n=>n.attrs.tag==="details");const tariff=/\[data-tariff-field="([^"]+)"\]/.exec(selector)?.[1];if(tariff)return this.nodes.find(n=>n.dataset.tariffField===tariff);const hardware=/\[data-hardware-field="([^"]+)"\]/.exec(selector)?.[1];if(hardware)return this.nodes.find(n=>n.dataset.hardwareField===hardware);const source=/\[data-source-field="([^"]+)"\]/.exec(selector)?.[1];if(source)return this.nodes.find(n=>n.dataset.sourceField===source);const solcast=/\[data-solcast-field="([^"]+)"\]/.exec(selector)?.[1];if(solcast)return this.nodes.find(n=>n.dataset.solcastField===solcast);const field=/\[data-load-field="([^"]+)"\]/.exec(selector)?.[1];if(field)return this.nodes.find(n=>n.dataset.loadField===field);const key=/input\[data-key="([^"]+)"\]/.exec(selector)?.[1];return this.nodes.find(n=>n.attrs.tag==="input"&&n.dataset.key===key);}
   querySelectorAll(selector) {const data=/^\[data-([a-z-]+)\]$/.exec(selector)?.[1];if(data){const key=data.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());return this.nodes.filter(n=>n.dataset[key]!==undefined);}return this.nodes.filter(n=>selector==="input[data-key]"&&n.attrs.tag==="input"&&n.dataset.key!==undefined);}
 }
 
@@ -40,13 +40,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:(fn,ms)=>{const timer={id:++timerId,fn,ms,cleared:false};timers.push(timer);return timer.id;},clearTimeout:id=>{const timer=timers.find(t=>t.id===id);if(timer)timer.cleared=true;},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-0-4");
+  const Panel = registry.get("deye-ems-panel-2-1-0");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"2.0.4",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.1.0",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -62,8 +62,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-0-4"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.0\.4/);
+  assert.notEqual(registry.get("deye-ems-panel-2-1-0"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.1\.0/);
 });
 
 function apiUsage(panel,changes={}){
@@ -81,8 +81,8 @@ test("software version and manual update check are visible without opening advan
   const {panel,calls,reloads}=fixture();
   const html=panel.shadowRoot.innerHTML.split("<details>")[0];
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>2\.0\.4<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>2\.0\.4<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.1\.0<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.1\.0<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -91,18 +91,18 @@ test("software version and manual update check are visible without opening advan
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"2.0.4",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.1.0",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
-  html=updateInfo(panel,{status:"available",latest_version:"2.0.200",checked_at});
-  assert.match(html,/Dostępna aktualizacja: 2\.0\.200/);
+  html=updateInfo(panel,{status:"available",latest_version:"2.1.200",checked_at});
+  assert.match(html,/Dostępna aktualizacja: 2\.1\.200/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"2.0.5",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.1.1",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"2.0.4"},
-    {status:"current",latest_version:"2.0.4",checked_at:"0"},
-    {status:"current",latest_version:"2.0.4",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"2.0.4",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.1.0"},
+    {status:"current",latest_version:"2.1.0",checked_at:"0"},
+    {status:"current",latest_version:"2.1.0",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.1.0",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -110,12 +110,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="2.0.5";panel.render();
+  panel.payload.backend_version="2.1.1";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v2.0.4","2.0.4-beta","02.0.4"]){
+  for(const value of [undefined,null,17,"unknown","v2.1.0","2.1.0-beta","02.1.0"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -125,22 +125,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.0.5",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.1.1",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 2\.0\.5/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.1\.1/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"2.0.5",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.0\.5"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.1\.1"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['2.0.5\" onclick=\"unexpected()','<img src=x>','2.0.5/../../x',"v2.0.5",true,18,"2.0.5-beta","999999999.0.1"]){
+  for(const latest_version of ['2.1.1\" onclick=\"unexpected()','<img src=x>','2.1.1/../../x',"v2.1.1",true,18,"2.1.1-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -159,9 +159,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"2.0.5",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.0.5");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.1.1");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -171,9 +171,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"2.0.5",updates:{status:"not_checked"}};
-  finish({backend_version:"2.0.4",updates:{status:"current",latest_version:"2.0.4",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.0.5");
+  panel.payload={...panel.payload,backend_version:"2.1.1",updates:{status:"not_checked"}};
+  finish({backend_version:"2.1.0",updates:{status:"current",latest_version:"2.1.0",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.1.1");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -208,20 +208,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"2.0.5",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"2.0.5");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"2.0.5",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.1.1");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.1.1",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="2.0.5";
+  panel.payload.backend_version="2.1.1";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -244,18 +244,18 @@ test("automatic Deye current ceiling is read-only and independent of the control
   assert.equal(calls.length,0);
 });
 
-const storeRow=(available_version="v2.0.4",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
+const storeRow=(available_version="v2.1.0",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
 function storeFixture(){
   const result=fixture(),{panel}=result;
   panel.isConnected=true;panel._hass.user={is_admin:true};
-  panel.payload.updates={status:"available",latest_version:"2.0.5",checked_at:new Date(NOW).toISOString(),stale:false};
+  panel.payload.updates={status:"available",latest_version:"2.1.1",checked_at:new Date(NOW).toISOString(),stale:false};
   return result;
 }
 function successfulStore(panel,calls,{legacy=false,alreadyCurrent=false}={}){
   let refreshed=false;
   panel._hass.callWS=async message=>{calls.push(message);
     if(legacy&&message.type.startsWith("marketplace/"))throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.0.4")];
+    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.1.0")];
     if(message.type.endsWith("/repository/refresh")){refreshed=true;return {};}
     throw Error("Unexpected store request");};
 }
@@ -271,7 +271,7 @@ test("open admin panel synchronizes only its older installed repository metadata
   assert.equal(calls.length,3);assert.equal(reloads(),0);assert.equal(panel.busy,false);
   assert.match(panel.updatesHtml(),/Marketplace otrzymał aktualne metadane/);
   assert.ok(calls.every(message=>!JSON.stringify(message).match(/install|download|restart|version\"|mode/)));
-  panel.payload.updates.latest_version="2.0.6";successfulStore(panel,calls);
+  panel.payload.updates.latest_version="2.1.2";successfulStore(panel,calls);
   assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,6);
 });
 
@@ -281,18 +281,18 @@ test("store metadata work is single-flight and never occupies the EMS stop contr
   const first=panel.syncStoreMetadata(),second=panel.syncStoreMetadata();
   assert.equal(first,second);assert.equal(calls.length,1);assert.equal(panel.busy,false);
   assert.equal(panel.shadowRoot.getElementById("mode").disabled,false);
-  finish([storeRow("v2.0.5")]);assert.equal(await first,true);assert.equal(calls.length,1);
+  finish([storeRow("v2.1.1")]);assert.equal(await first,true);assert.equal(calls.length,1);
 });
 
 test("already current marketplace metadata does not issue refresh and cannot downgrade a newer store release",async()=>{
-  for(const version of ["2.0.5","v2.0.6"]){
+  for(const version of ["2.1.1","v2.1.2"]){
     const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return [storeRow(version)];};
     assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,1);
   }
 });
 
 test("metadata sync requires an open admin panel and a fresh validated available release",async()=>{
-  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.0.5"},{latest_version:"2.0.4"},
+  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.1.1"},{latest_version:"2.1.0"},
     {latest_version:"<img src=x>"},{checked_at:new Date(NOW+1).toISOString()},
     {checked_at:new Date(NOW-7200001).toISOString()},{checked_at:null}];
   for(const changes of bad){const {panel,calls}=storeFixture();Object.assign(panel.payload.updates,changes);assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,0);}
@@ -303,9 +303,9 @@ test("metadata sync requires an open admin panel and a fresh validated available
 });
 
 test("wrong ambiguous uninstalled or malformed repository metadata never permits a refresh",async()=>{
-  const rows=[[],{},[storeRow("2.0.4",{id:"different"})],[storeRow("2.0.4",{full_name:"other/repo"})],
-    [storeRow("2.0.4",{domain:"other"})],[storeRow("2.0.4",{category:"plugin"})],
-    [storeRow("2.0.4",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
+  const rows=[[],{},[storeRow("2.1.0",{id:"different"})],[storeRow("2.1.0",{full_name:"other/repo"})],
+    [storeRow("2.1.0",{domain:"other"})],[storeRow("2.1.0",{category:"plugin"})],
+    [storeRow("2.1.0",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
   for(const response of rows){const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return response;};
     assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,1);await panel.syncStoreMetadata();assert.equal(calls.length,1);}
 });
@@ -326,7 +326,7 @@ test("legacy HACS fallback is allowed only for unknown_command and uses the same
 test("an unknown refresh endpoint rediscovers the same repository through legacy HACS before refreshing",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="marketplace/repository/refresh")throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.0.5":"v2.0.4")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.1":"v2.1.0")];done=true;return {};};
   assert.equal(await panel.syncStoreMetadata(),true);
   assert.deepEqual(calls.map(message=>message.type),["marketplace/repositories/list","marketplace/repository/refresh","hacs/repositories/list","hacs/repository/refresh","hacs/repositories/list"]);
 });
@@ -348,7 +348,7 @@ test("metadata responses after unmount cancellation or release changes never tri
     panel._hass.callWS=message=>{calls.push(message);return new Promise(resolve=>{finish=resolve;});};
     const pending=panel.syncStoreMetadata();
     if(reason==="disconnect"){panel.isConnected=false;panel.disconnectedCallback();}
-    else if(reason==="changed_release")panel.payload.updates.latest_version="2.0.6";else panel.payload.updates.stale=true;
+    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.2";else panel.payload.updates.stale=true;
     finish([storeRow()]);assert.equal(await pending,false);assert.equal(calls.length,1);
   }
 });
@@ -370,7 +370,7 @@ test("successful metadata fetch does not claim the store offers an unconfirmed n
 test("normal status polling can trigger metadata synchronization without a separate release check command",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="deye_ems/status")return panel.payload;
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.0.5":"v2.0.4")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.1":"v2.1.0")];done=true;return {};};
   await panel.refresh();await panel.storeSyncFlight;
   assert.equal(calls.filter(message=>message.type==="marketplace/repository/refresh").length,1);
   assert.ok(calls.every(message=>message.command!=="check_updates"));
@@ -946,7 +946,7 @@ test("command completion respects closing details while the command is pending",
 test("distinguishes selected target, forecast target, request, register and physical power",()=>{
   const {panel}=fixture();
   const html=panel.shadowRoot.innerHTML;
-  assert.match(html,/Wybrany cel SoC/);assert.match(html,/Modelowy cel przed 07:00/);
+  assert.match(html,/Wybrany cel SoC/);assert.match(html,/Modelowy cel SoC/);
   assert.match(html,/ostatni poprawny plan/);
   assert.match(html,/Żądany limit ładowania/);assert.match(html,/Odczyt nastawy: 27 A/);
   assert.match(html,/pomiar baterii:/);
@@ -961,7 +961,7 @@ test("unverified fallback targets are not presented as forecasts",()=>{
   panel.render();
   assert.match(panel.shadowRoot.innerHTML,/Wybrany cel SoC/);
   assert.match(panel.shadowRoot.innerHTML,/Brak kompletnej prognozy/);
-  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Modelowy cel przed 07:00/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Modelowy cel SoC/);
 });
 
 test("missing numeric values stay missing, while real zero remains zero",()=>{
@@ -1612,17 +1612,17 @@ function calendarData(panel,changes={}){
     tomorrow:[{start:"2026-11-11T00:00:00+01:00",end:"2026-11-11T04:00:00+01:00",zone:"off_peak",grid_charge_allowed:true,reason:"winter",legacy_slot:1}],...changes};
   panel.render();return panel.tariffCalendarHtml();
 }
-test("retained calendar shows today tomorrow zone and clock basis without offering unsupported operators",()=>{
+test("retained calendar remains selected until an explicit tariff choice and render is read only",()=>{
   const {panel,calls}=fixture();const html=calendarData(panel);
   assert.match(html,/Dotychczasowy harmonogram EMS G13/);assert.match(html,/Dziś/);assert.match(html,/Jutro/);
-  assert.match(html,/Szczyt przedpołudniowy/);assert.match(html,/Zablokowane/);assert.match(html,/Dozwolone według zasad sezonu/);
-  assert.match(html,/Czas lokalny Europe\/Warsaw/);assert.match(html,/Sezon zimowy · slot 3/);
-  assert.match(html,/bez automatycznych wyjątków operatora/);assert.match(html,/Wybór operatora.*kolejnym etapie/);
+  assert.match(html,/Szczyt przedpołudniowy/);assert.match(html,/Zablokowane/);assert.match(html,/Dozwolone według polityki EMS/);
+  assert.match(html,/Czas lokalny Europe\/Warsaw/);assert.match(html,/Sezon zimowy/);
+  assert.match(html,/Zachowany własny harmonogram G13/);assert.match(html,/po wyborze i potwierdzeniu taryfy/);assert.ok(panel.shadowRoot.getElementById("tariff-open"));
   assert.match(panel.shadowRoot.innerHTML.split("<details>")[0],/Harmonogram taryfy/);assert.equal(calls.length,0);
 });
 test("preview calendar and fixed meter clock are distinct from a runtime schedule",()=>{
   const {panel}=fixture();const html=calendarData(panel,{profile_id:"tauron_g13_2026",label:"TAURON G13 — podgląd",preview_only:true,runtime_allowed:false,clock_basis:"fixed_cet"});
-  assert.match(html,/Stały czas zimowy/);assert.match(html,/Podgląd kalendarza/);assert.doesNotMatch(html,/Zachowany profil G13 z wersji 1.x/);
+  assert.match(html,/Stały czas zimowy/);assert.match(html,/podgląd nie potwierdza zgody/);assert.doesNotMatch(html,/Zachowany profil G13 z wersji 1.x/);
 });
 test("calendar rejects malformed intervals and escapes labels without reading raw source URLs",()=>{
   const {panel}=fixture();const html=calendarData(panel,{label:'<img src=x>',version:'<script>x</script>',source_url:'javascript:unexpected()',
@@ -1709,7 +1709,7 @@ test("new prefix is only a native preview until explicit source save and preserv
   assert.match(panel.sourcesHtml(),/Puste pole wyłącza dane źródło/);
   sourceInput(panel,"soc","sensor.reviewed_soc");await panel.shadowRoot.getElementById("sources-form").events.submit({preventDefault(){}});
   assert.equal(effects.writes,1);assert.deepEqual(JSON.parse(JSON.stringify(apiCalls.at(-1).data)),{soc:"sensor.reviewed_soc",load_power:"sensor.custom_load"});
-  assert.equal(panel.sourceFlow.type,"create_entry");assert.match(panel.sourcesHtml(),/EMS pozostaje w obserwacji/);
+  assert.equal(panel.sourceFlow.type,"create_entry");assert.equal(panel.sourceOpen,false);assert.match(panel.savedWizardNotice,/Silnik sprawdza warunki automatycznego włączenia/);
   assert.equal(panel.payload.mode,"shadow");assert.doesNotMatch(JSON.stringify(panel.sourceFlow)+panel.sourcesHtml(),/must-not-be-kept|private_server_result/);
   assert.equal(calls.some(call=>call.command==="mode"),false);
 });
@@ -1913,7 +1913,7 @@ test("Solcast disable requires a separate explicit confirmation and cancel never
   panel.shadowRoot.getElementById("solcast-disable-back").events.click();assert.equal(effects.writes,0);
   button.events.click();await panel.shadowRoot.getElementById("solcast-disable-confirm").events.click();
   assert.equal(effects.writes,1);assert.equal(apiCalls.at(-1).data.next_step_id,"solcast_disable");
-  assert.match(panel.solcastNotice,/wyłączone/);
+  assert.equal(panel.solcastOpen,false);assert.match(panel.savedWizardNotice,/wyłączenie pobierania Solcast/);
 });
 
 test("Solcast final saves cannot be cancelled while an already dispatched commit is pending",async()=>{
@@ -2007,17 +2007,17 @@ test("Solcast drafts and password input survive polling without inserting the pa
   assert.match(panel.solcastHtml(),/Przejdź do obserwacji/);assert.equal(panel.solcastDraft.resource_ids,"roof-draft");
 });
 
-test("a valid plan from before Solcast SAVE cannot enable resume, and a new plan requires an explicit click",async()=>{
+test("Solcast save closes the wizard and observes server activation without issuing active commands",async()=>{
   const {panel,calls}=fixture();panel.payload.data.plan.generated_at=new Date(NOW-1000).toISOString();
   nativeSolcast(panel);await openManual(panel);await panel.submitSolcast();await flush();
-  assert.equal(panel.solcastPlanReady(),false);assert.equal(panel.shadowRoot.getElementById("solcast-resume").disabled,true);
-  assert.equal(calls.some(call=>call.command==="mode"),false);
-  panel.payload={...panel.payload,data:{...panel.payload.data,plan:{...panel.payload.data.plan,generated_at:new Date(NOW).toISOString()}}};
-  await panel.refreshAfterSolcast(panel.solcastSequence);
-  assert.equal(panel.solcastPlanReady(),true);assert.equal(panel.shadowRoot.getElementById("solcast-resume").disabled,false);
-  assert.equal(calls.some(call=>call.command==="mode"),false);
-  await panel.shadowRoot.getElementById("solcast-resume").events.click();
-  assert.equal(calls.at(-1).command,"mode");assert.equal(calls.at(-1).mode,"active");
+  assert.equal(panel.solcastOpen,false);assert.equal(panel.solcastSecret,"");assert.equal(panel.shadowRoot.getElementById("solcast-resume"),undefined);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Zamknij kreator/);assert.ok(calls.every(call=>call.type==="deye_ems/status"));
+  panel.payload.post_save_activation={status:"checking",reason:"waiting_for_plan",issues:[]};panel.render();
+  assert.match(panel.postSaveHtml(),/Oczekiwanie na zakończenie obliczania planu/);assert.match(panel.shadowRoot.innerHTML,/Zatrzymaj i obserwuj/);
+  const updated={...panel.payload,mode:"active",post_save_activation:{status:"active",reason:"activation_completed",issues:[]}};
+  panel._hass.callWS=async message=>{calls.push(message);return updated;};await panel.refresh();
+  assert.equal(panel.payload.mode,"active");assert.match(panel.postSaveHtml(),/Po sprawdzeniu warunków włączono sterowanie/);
+  assert.ok(calls.every(call=>call.type==="deye_ems/status"));
 });
 
 function appearanceThemes(panel){
@@ -2188,4 +2188,202 @@ test("a removed draft theme cannot be sent and HA card and Lovelace shape variab
   for(const variable of ["--lovelace-background","--ha-card-background","--ha-card-border-radius","--ha-card-border-width","--ha-card-box-shadow","--ha-card-backdrop-filter","--input-fill-color","--primary-color"]){
     assert.ok(source.includes(variable),variable);
   }
+});
+const tariffOperators=[{value:"tauron_dystrybucja",label:"TAURON Dystrybucja"},{value:"pge_dystrybucja",label:"PGE Dystrybucja"},{value:"enea_operator",label:"Enea Operator"},{value:"energa_operator",label:"Energa Operator"},{value:"pge_energetyka_kolejowa",label:"PGE Energetyka Kolejowa"},{value:"custom",label:"Dotychczasowy własny profil"}];
+const tariffOperatorForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_operator",errors,data_schema:[{name:"operator_id",required:true,default:"tauron_dystrybucja",selector:{select:{options:tariffOperators}}}]});
+const tariffPlanForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_plan",errors,data_schema:[{name:"profile_id",required:true,selector:{select:{options:[{value:"tauron_g13_2026",label:"G13 — trzy strefy"},{value:"tauron_g11_2026",label:"G11 — jedna strefa"}]}}},{name:"clock_basis",required:true,selector:{select:{options:[{value:"local",label:"Czas lokalny — lato/zima"},{value:"fixed_cet",label:"Stały CET"}]}}}]});
+const tariffConfirmForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_confirm",errors,description_placeholders:{tariff_preview:"TAURON G13. Czas lokalny. Dzień roboczy 07–13 szczyt; święto: poza szczytem."},data_schema:[{name:"confirm_tariff",required:true,default:false,selector:{boolean:{}}}]});
+function nativeTariff(panel,{plan,confirm,finish,catalogError=false}={}){
+  const apiCalls=[],wsCalls=[],effects={writes:0};
+  panel._hass.callWS=async message=>{wsCalls.push(message);if(message.type==="deye_ems/tariff_catalog"){
+    if(catalogError)throw Error("private-catalog-body");
+    return {backend_version:"2.1.0",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:[{profile_id:"tauron_g13_2026",operator_id:"tauron_dystrybucja",label:"TAURON G13",tariff:"G13",supported:true,runtime_allowed:true,private_key:"must-not-retain"}],private_body:"must-not-retain"};}
+    return panel.payload;};
+  panel._hass.callApi=async(method,route,data)=>{apiCalls.push({method,route,data});if(method==="DELETE")return {};
+    if(route==="config/config_entries/options/flow")return {type:"menu",flow_id:"tariff-flow",step_id:"init",menu_options:["tariff","inverter","sources"]};
+    if(data.next_step_id==="tariff")return tariffOperatorForm();
+    if(Object.hasOwn(data,"operator_id"))return plan?plan(data):tariffPlanForm();
+    if(Object.hasOwn(data,"profile_id"))return confirm?confirm(data):tariffConfirmForm();
+    assert.deepEqual(JSON.parse(JSON.stringify(data)),{confirm_tariff:true});effects.writes++;
+    return finish?finish(data):{type:"create_entry",data:{private_body:"must-not-retain"}};};
+  return {apiCalls,wsCalls,effects};
+}
+function tariffInput(panel,name,value){const input=panel.shadowRoot.querySelector('[data-tariff-field="'+name+'"]');assert.ok(input,name);if(input.type==="checkbox")input.checked=value;else input.value=value;input.events.input();return input;}
+async function openTariffPlan(panel){await panel.openTariff();await panel.submitTariff();}
+async function openTariffConfirm(panel){await openTariffPlan(panel);tariffInput(panel,"profile_id","tauron_g13_2026");tariffInput(panel,"clock_basis","local");await panel.submitTariff();}
+
+test("mode action is unique in the sticky responsive header beside the real mode",async()=>{
+  const {panel,calls}=fixture();let html=panel.shadowRoot.innerHTML;
+  assert.equal((html.match(/id="mode"/g)||[]).length,1);assert.ok(html.indexOf('id="mode"')<html.indexOf('</header>'));assert.ok(html.indexOf('</header>')<html.indexOf('class="grid stats"'));
+  assert.match(html,/header\{position:sticky;top:0/);assert.match(html,/@media\(max-width:600px\)\{header\{flex-direction:column/);
+  panel._hass.callWS=async message=>{calls.push(message);return {...panel.payload,mode:message.mode};};
+  await panel.shadowRoot.getElementById("mode").events.click();assert.equal(calls.at(-1).mode,"active");assert.match(panel.shadowRoot.innerHTML,/Sterowanie aktywne/);
+  await panel.shadowRoot.getElementById("mode").events.click();assert.equal(calls.at(-1).mode,"shadow");
+});
+test("failed action stays visible through normal polling and is escaped until explicit dismissal",async()=>{
+  const {panel}=fixture();panel._hass.callWS=async()=>{throw Error('Brak świeżych pomiarów <img src=x>');};
+  assert.equal(await panel.command({command:"mode",mode:"active"}),false);
+  panel._hass.callWS=async()=>panel.payload;for(let i=0;i<4;i++)await panel.refresh();
+  assert.match(panel.shadowRoot.innerHTML,/Brak świeżych pomiarów &lt;img/);assert.doesNotMatch(panel.shadowRoot.innerHTML,/<img/);
+  await panel.shadowRoot.getElementById("action-error-dismiss").events.click();assert.equal(panel.actionError,null);assert.doesNotMatch(panel.shadowRoot.innerHTML,/Brak świeżych pomiarów &lt;img/);
+});
+test("only a successful related command clears a persistent action error",async()=>{
+  const {panel}=fixture();panel._hass.callWS=async()=>{throw Error("Activation guard rejected");};await panel.command({command:"mode",mode:"active"});
+  panel._hass.callWS=async message=>({...panel.payload,mode:message.mode||panel.payload.mode});
+  await panel.command({command:"recalculate"});assert.equal(panel.actionError.kind,"mode");
+  await panel.command({command:"mode",mode:"active"});assert.equal(panel.actionError,null);
+});
+test("dismissing an action error never clears current runtime diagnostics or stale-data protection",async()=>{
+  const {panel}=fixture();panel.payload.mode="active";panel.payload.data.error="battery_low_soc_unavailable";panel.payload.data.inputs.telemetry_valid=false;
+  panel.actionError={kind:"mode",message:"Previous action failed"};panel.render();panel.shadowRoot.getElementById("action-error-dismiss").events.click();
+  assert.match(panel.shadowRoot.innerHTML,/Brak poprawnego odczytu Battery low SOC/);assert.match(panel.shadowRoot.innerHTML,/Brak poprawnych, świeżych pomiarów/);
+  panel.payload.data.updated_at=new Date(NOW-30001).toISOString();panel.render();assert.match(panel.shadowRoot.innerHTML,/Ostatnio zgłoszony błąd/);assert.match(panel.shadowRoot.innerHTML,/Brak aktualnego odczytu silnika/);
+  panel.payload.data.error=null;panel.render();assert.doesNotMatch(panel.shadowRoot.innerHTML,/data-runtime-error/);assert.match(panel.shadowRoot.innerHTML,/Brak aktualnego odczytu silnika/);
+});
+test("tariff render shows operator meter clock and operator zone names without requests",()=>{
+  const {panel,calls}=fixture();const html=calendarData(panel,{profile_id:"pge_g12w_2026",operator:"pge_dystrybucja",operator_label:"PGE Dystrybucja",tariff:"G12w",clock_basis:"fixed_cet",current_zone:"low",current_interval:{zone_label:"Pozaszczytowa — święto"}});
+  assert.match(html,/PGE Dystrybucja/);assert.match(html,/G12w/);assert.match(html,/Stały czas zimowy CET/);assert.match(html,/Pozaszczytowa — święto/);assert.doesNotMatch(html,/kolejnym etapie/);assert.equal(calls.length,0);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Silnik lokalny · G13/);
+});
+test("tariff wizard reads catalog and creates only a native draft before operator selection",async()=>{
+  const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,wsCalls,effects}=nativeTariff(panel);
+  await panel.shadowRoot.getElementById("tariff-open").events.click();
+  assert.equal(panel.tariffFlow.step_id,"tariff_operator");assert.equal(panel.tariffDraft.operator_id,"tauron_dystrybucja");assert.equal(effects.writes,0);assert.equal(JSON.stringify(panel.payload),before);assert.equal(calls.length,0);
+  assert.deepEqual(JSON.parse(JSON.stringify(wsCalls)),[{type:"deye_ems/tariff_catalog"}]);assert.equal(apiCalls.length,2);assert.equal(apiCalls[1].data.next_step_id,"tariff");
+  assert.doesNotMatch(JSON.stringify(panel.tariffCatalog),/must-not-retain|private_/);
+  for(const operator of tariffOperators)assert.match(panel.tariffEditorHtml(),new RegExp(operator.label));assert.doesNotMatch(panel.tariffEditorHtml(),/Stoen/);
+});
+test("tariff requires an explicit meter clock then preview and an unchecked confirmation before save",async()=>{
+  const {panel}=fixture(),{apiCalls,effects,wsCalls}=nativeTariff(panel);await openTariffPlan(panel);
+  assert.equal(panel.tariffDraft.clock_basis,"");tariffInput(panel,"profile_id","tauron_g13_2026");let count=apiCalls.length;await panel.submitTariff();assert.equal(apiCalls.length,count);assert.match(panel.tariffEditorHtml(),/potwierdź zegar/);
+  tariffInput(panel,"clock_basis","local");await panel.submitTariff();assert.equal(effects.writes,0);assert.equal(panel.tariffFlow.step_id,"tariff_confirm");assert.equal(panel.tariffDraft.confirm_tariff,false);assert.match(panel.tariffEditorHtml(),/święto/);
+  count=apiCalls.length;await panel.submitTariff();assert.equal(apiCalls.length,count);tariffInput(panel,"confirm_tariff",true);await panel.shadowRoot.getElementById("tariff-form").events.submit({preventDefault(){}});await flush();
+  assert.equal(effects.writes,1);assert.equal(panel.tariffOpen,false);assert.equal(panel.tariffFlow.type,"create_entry");assert.doesNotMatch(panel.shadowRoot.innerHTML,/Zamknij kreator/);assert.ok(wsCalls.every(call=>call.type!=="deye_ems/command"));assert.doesNotMatch(JSON.stringify(panel.tariffFlow),/must-not-retain/);
+});
+test("tariff cancellation at every stage deletes only the draft and never activates",async()=>{
+  for(const stage of ["operator","plan","confirm"]){const {panel}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,effects,wsCalls}=nativeTariff(panel);if(stage==="confirm")await openTariffConfirm(panel);else if(stage==="plan")await openTariffPlan(panel);else await panel.openTariff();
+    await panel.shadowRoot.getElementById("tariff-cancel").events.click();assert.equal(panel.tariffOpen,false);assert.equal(panel.tariffFlow,null);assert.equal(effects.writes,0);assert.equal(JSON.stringify(panel.payload),before);assert.equal(apiCalls.at(-1).method,"DELETE");assert.ok(wsCalls.every(call=>call.type==="deye_ems/tariff_catalog"));}
+});
+test("tariff drafts and focused meter-clock choice survive polling",async()=>{
+  const {panel}=fixture();nativeTariff(panel);await openTariffPlan(panel);tariffInput(panel,"profile_id","tauron_g13_2026");const input=tariffInput(panel,"clock_basis","fixed_cet");panel.shadowRoot.activeElement=input;
+  const html=panel.shadowRoot.innerHTML;await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);panel.shadowRoot.activeElement=null;panel.render();assert.equal(panel.shadowRoot.querySelector('[data-tariff-field="clock_basis"]').value,"fixed_cet");
+});
+test("tariff preview errors preserve selections without exposing provider bodies and consent is never prechecked",async()=>{
+  const {panel}=fixture();nativeTariff(panel,{confirm:()=>tariffPlanForm({base:"private-provider-body"})});await openTariffPlan(panel);tariffInput(panel,"profile_id","tauron_g13_2026");tariffInput(panel,"clock_basis","fixed_cet");await panel.submitTariff();
+  assert.equal(panel.tariffDraft.clock_basis,"fixed_cet");assert.match(panel.tariffEditorHtml(),/Ustawienia nie zostały zapisane/);assert.doesNotMatch(panel.tariffEditorHtml(),/private-provider-body/);
+  await panel.cancelTariff();nativeTariff(panel,{confirm:()=>{const f=tariffConfirmForm();f.data_schema[0].default=true;return f;}});await openTariffConfirm(panel);assert.equal(panel.tariffDraft.confirm_tariff,false);
+});
+test("tariff refuses unknown schemas clock values and foreign credentials",async()=>{
+  for(const change of [f=>{f.data_schema.push({name:"api_key",required:true,default:"private-secret",selector:{text:{}}});},f=>{f.data_schema[1].selector.select.options=["automatic_guess"];},f=>{f.data_schema[0].selector.select.multiple=true;}]){
+    const {panel}=fixture();nativeTariff(panel,{plan:()=>{const f=tariffPlanForm();change(f);return f;}});await panel.openTariff();await panel.submitTariff();assert.match(panel.tariffEditorHtml(),/Nie udało się/);assert.doesNotMatch(panel.tariffEditorHtml()+JSON.stringify(panel.tariffFlow),/private-secret|api_key|automatic_guess/);}
+});
+test("tariff needs observation and cannot save after mode changes externally",async()=>{
+  const {panel}=fixture(),{apiCalls,effects}=nativeTariff(panel);panel.payload.mode="active";await panel.openTariff();assert.equal(apiCalls.length,0);assert.match(panel.tariffEditorHtml(),/Zmiana taryfy wymaga obserwacji/);
+  panel.payload.mode="shadow";await panel.openTariff();panel.payload.mode="active";const count=apiCalls.length;await panel.submitTariff();assert.equal(apiCalls.length,count);assert.equal(effects.writes,0);
+});
+test("tariff commit cannot be cancelled but a late cancelled opening is cleaned up",async()=>{
+  const {panel}=fixture();let finish;nativeTariff(panel,{finish:()=>new Promise(resolve=>{finish=resolve;})});await openTariffConfirm(panel);tariffInput(panel,"confirm_tariff",true);const saving=panel.submitTariff();assert.equal(panel.tariffCommitting,true);await panel.cancelTariff();assert.equal(panel.tariffOpen,true);finish({type:"create_entry"});await saving;assert.equal(panel.tariffOpen,false);
+  const {panel:late}=fixture(),{apiCalls}=nativeTariff(late);let opened;const original=late._hass.callApi;late._hass.callApi=(method,route,data)=>method==="POST"&&route==="config/config_entries/options/flow"?new Promise(resolve=>{opened=resolve;}):original(method,route,data);
+  const opening=late.openTariff();await flush();await late.cancelTariff();opened({type:"menu",flow_id:"late-tariff-flow",step_id:"init",menu_options:["tariff"]});await opening;await flush();assert.equal(late.tariffOpen,false);assert.equal(apiCalls.at(-1).method,"DELETE");assert.match(apiCalls.at(-1).route,/late-tariff-flow$/);
+});
+test("tariff edits participate in unsaved protection and disconnect cleanup while catalog failure is optional",async()=>{
+  const {panel,reloads}=fixture(),{apiCalls}=nativeTariff(panel,{catalogError:true});await panel.openTariff();assert.equal(panel.tariffFlow.step_id,"tariff_operator");assert.equal(panel.hasUnsavedChanges(),true);assert.equal(panel.reloadInterface(),false);assert.equal(reloads(),0);
+  panel.disconnectedCallback();await flush();assert.equal(panel.tariffOpen,false);assert.ok(apiCalls.some(call=>call.method==="DELETE"));
+});
+function slotTarget(changes={}){return {start:"2026-11-10T21:00:00+01:00",end:"2026-11-11T06:00:00+01:00",zone:"low",tier:0,grid_charge_allowed:true,charge_target_soc_percent:76,reserve_soc_percent:45,projected_soc_start_percent:62,projected_soc_end_percent:76,projection_from:new Date(NOW).toISOString(),deadline:"2026-11-11T06:00:00+01:00",quality:"forecast",reason:"weekday",...changes};}
+test("actual tariff intervals show computed SoC and projection start without hardcoded morning targets",()=>{
+  const {panel}=fixture();calendarData(panel,{profile_id:"pge_g12_2026",operator_label:"PGE Dystrybucja",tariff:"G12"});panel.payload.data.plan.tariff_slot_targets=[slotTarget()];panel.render();
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/21:00.*06:00/);assert.match(html,/>76<\/td>/);assert.match(html,/62 → 76 \(od 10\.11, 22:00\)/);assert.match(html,/Strefa niższa/);assert.match(html,/Rezerwa/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML,/Modelowy cel przed 07:00|Modelowy cel przed szczytem/);
+});
+test("conservative slot targets never masquerade as forecast while protected and past targets stay missing",()=>{
+  const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({quality:"fallback",projected_soc_start_percent:0,projected_soc_end_percent:0}),slotTarget({tier:2,grid_charge_allowed:false,charge_target_soc_percent:90,quality:"unavailable"}),slotTarget({start:"2026-11-10T07:00:00+01:00",end:"2026-11-10T13:00:00+01:00",quality:"past",charge_target_soc_percent:0,reserve_soc_percent:0})];
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/76 \(zachowawczy\)/);assert.match(html,/brak pełnej prognozy/);assert.match(html,/Przedział miniony/);assert.doesNotMatch(html,/>0<\/td>|>90<\/td>|0 → 0/);
+});
+test("slot table rejects malformed intervals projections and values and escapes operator labels",()=>{
+  const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({zone_label:'<img src=x>',charge_target_soc_percent:101,reserve_soc_percent:null,projection_from:"2026-11-10T20:00:00+01:00"}),slotTarget({start:"bad",end:"bad"})];
+  let html=panel.tariffSlotTargetsHtml();assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|101|62 → 76|bad/);
+  panel.payload.data.updated_at=new Date(NOW-30001).toISOString();html=panel.tariffSlotTargetsHtml();assert.match(html,/Brak bieżącej tabeli/);assert.doesNotMatch(html,/76|21:00/);
+});
+test("generic model targets support multiple tariff deadlines and explicit virtual checkpoints",()=>{
+  const {panel}=fixture();panel.payload.data.plan.targets={tariff_3:{soc_percent:72,deadline:"2026-11-11T17:00:00+01:00"},tariff_1:{soc_percent:65,deadline:"2026-11-11T06:00:00+01:00"},tariff_2:{soc_percent:60,deadline:"2026-11-11T12:00:00+01:00",virtual_checkpoint:true}};
+  const html=panel.modelTargetsHtml();assert.equal((html.match(/<article>/g)||[]).length,3);assert.ok(html.indexOf("06:00")<html.indexOf("12:00"));assert.match(html,/nie jest granicą strefy operatora/);assert.doesNotMatch(html,/przed 07/);
+});
+test("post-save pending keeps STOP usable and cancellation sends only normal shadow command",async()=>{
+  for(const status of ["waiting","checking"]){const {panel,calls}=fixture();panel.payload.post_save_activation={status,reason:"waiting_for_measurements",issues:[{source:"voltage",reason:"stale"}]};panel.render();assert.equal(panel.shadowRoot.getElementById("mode").disabled,false);assert.match(panel.shadowRoot.innerHTML,/Zatrzymaj i obserwuj/);assert.match(panel.postSaveHtml(),/Napięcie baterii: odczyt jest za stary/);
+    panel._hass.callWS=async message=>{calls.push(message);return {...panel.payload,mode:"shadow",post_save_activation:{status:"cancelled",reason:"activation_cancelled",issues:[]}};};await panel.shadowRoot.getElementById("mode").events.click();assert.equal(calls.at(-1).mode,"shadow");assert.match(panel.postSaveHtml(),/anulowano/);}
+});
+test("blocked post-save reasons persist through polling with safe source labels and no activation loop",async()=>{
+  const {panel,calls}=fixture();panel.payload.post_save_activation={status:"blocked",reason:"activation_conditions_failed",issues:[{source:"soc",reason:"missing"},{source:"private-provider-body",reason:"private-error"}]};panel._hass.callWS=async message=>{calls.push(message);return panel.payload;};
+  for(let i=0;i<4;i++)await panel.refresh();assert.match(panel.postSaveHtml(),/Warunki automatycznego włączenia nie są spełnione/);assert.match(panel.postSaveHtml(),/SoC baterii: brak odczytu/);assert.doesNotMatch(panel.postSaveHtml(),/private-provider/);assert.ok(calls.every(call=>call.type==="deye_ems/status"));
+  panel.payload.data.updated_at=new Date(NOW-30001).toISOString();panel.render();assert.match(panel.postSaveHtml(),/Ostatni odczyt sprawdzania/);assert.match(panel.shadowRoot.innerHTML,/Brak aktualnego odczytu silnika/);
+});
+test("successful source hardware Solcast and tariff saves close dialogs and never retain a done-close button",async()=>{
+  const {panel:hardware}=fixture();nativeHardware(hardware);await hardware.openHardware();await hardware.submitHardware();hardwareInput(hardware,"confirm_model",true);await hardware.submitHardware();assert.equal(hardware.hardwareOpen,false);assert.doesNotMatch(hardware.shadowRoot.innerHTML,/Zamknij kreator/);
+  const {panel:sources}=fixture();nativeSources(sources);await sources.openSources();await sources.submitSources();await sources.submitSources();assert.equal(sources.sourceOpen,false);assert.doesNotMatch(sources.shadowRoot.innerHTML,/Zamknij kreator/);
+  const {panel:solcast}=fixture();nativeSolcast(solcast);await openManual(solcast);await solcast.submitSolcast();assert.equal(solcast.solcastOpen,false);assert.doesNotMatch(solcast.shadowRoot.innerHTML,/Zamknij kreator/);
+  const {panel:tariff}=fixture();nativeTariff(tariff);await openTariffConfirm(tariff);tariffInput(tariff,"confirm_tariff",true);await tariff.submitTariff();assert.equal(tariff.tariffOpen,false);assert.doesNotMatch(tariff.shadowRoot.innerHTML,/Zamknij kreator/);
+});
+
+test("clock change intervals distinguish the repeated Warsaw hour with actual UTC offsets",()=>{
+  const {panel}=fixture();const value=panel.tariffInterval({start:"2026-10-25T02:00:00+02:00",end:"2026-10-25T02:00:00+01:00"});
+  assert.match(value,/GMT\+2/);assert.match(value,/GMT\+1/);assert.equal((value.match(/02:00/g)||[]).length,2);
+});
+test("tariff contracts notices validity and document links are escaped and cannot become scripts",()=>{
+  const {panel}=fixture();const html=calendarData(panel,{operator_label:'<svg onload="attack()">',notice:'<script>private</script>',requirements:['Umowa prosumencka','<img src=x>'],valid_from:"2026-01-01",valid_until:"2026-12-31",source_url:"https://www.tauron-dystrybucja.pl/taryfa.pdf",within_validity:false});
+  assert.match(html,/Warunki profilu/);assert.match(html,/2026-01-01/);assert.match(html,/Dokument taryfowy/);assert.match(html,/&lt;svg/);assert.doesNotMatch(html,/<svg|<script>|<img/);assert.match(html,/nie potwierdza zgody na sterowanie/);
+});
+test("post-save conservative activation is explicit while an inconsistent active notice cannot claim control",()=>{
+  const {panel}=fixture();panel.payload.mode="active";panel.payload.post_save_activation={status:"active",reason:"activation_completed",plan_source:"own_conservative_fallback",plan_reason:"incomplete_48h_forecast",issues:[]};
+  assert.match(panel.postSaveHtml(),/planu zachowawczego/);assert.match(panel.postSaveHtml(),/nie jest prognozą zerowego zużycia/);
+  panel.payload.mode="shadow";assert.doesNotMatch(panel.postSaveHtml(),/włączono sterowanie/);assert.match(panel.postSaveHtml(),/wymaga odświeżenia/);
+});
+test("preview implements the tariff wizard and cancellable automatic start without network or real devices",async()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../preview/index.html"),"utf8"),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1],nodes=new Map(),timers=[];
+  const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{events:{},addEventListener(name,fn){this.events[name]=fn;},refresh(){return Promise.resolve();}});return nodes.get(id);}};
+  const context=vm.createContext({document,Date,structuredClone,console,setTimeout(fn){timers.push({fn,cancelled:false});return timers.length;},clearTimeout(id){if(timers[id-1])timers[id-1].cancelled=true;},fetch(){throw Error("Network forbidden");}});
+  vm.runInContext(script,context,{filename:"preview-inline.js"});const hass=vm.runInContext("previewHass",context);
+  const save=async()=>{const first=await hass.callApi("POST","config/config_entries/options/flow",{}),route="config/config_entries/options/flow/"+first.flow_id;let step=await hass.callApi("POST",route,{next_step_id:"tariff"});assert.equal(step.step_id,"tariff_operator");step=await hass.callApi("POST",route,{operator_id:"enea_operator"});assert.equal(step.step_id,"tariff_plan");step=await hass.callApi("POST",route,{profile_id:"demo_enea_operator",clock_basis:"local"});assert.equal(step.step_id,"tariff_confirm");step=await hass.callApi("POST",route,{confirm_tariff:true});assert.equal(step.type,"create_entry");};
+  await save();let state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.mode,"shadow");assert.equal(state.post_save_activation.status,"waiting");assert.equal(state.options.tariff_calendar.operator_id,"enea_operator");
+  await hass.callWS({command:"mode",mode:"shadow"});assert.equal(timers.at(-1).cancelled,true);state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.post_save_activation.status,"cancelled");
+  await save();timers.at(-1).fn();state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.mode,"active");assert.equal(state.post_save_activation.status,"active");assert.ok(state.data.plan.tariff_slot_targets.length>0);
+});
+
+test("six physical TOU plan entries stay separate from operator intervals and do not claim device acknowledgment",()=>{
+  const {panel,calls}=fixture();panel.payload.options.physical_tou={valid:true,rows:Array.from({length:6},(_,i)=>({slot:i+1,time:String(i*4).padStart(2,"0")+":00:00",zone:"low",tier:0,grid_charge_allowed:true,padding:i%2===1}))};panel.render();
+  const html=panel.physicalTariffHtml();assert.equal((html.match(/<tr>/g)||[]).length,7);assert.match(html,/Rzeczywiste strefy operatora są pokazane osobno/);assert.match(html,/Podział techniczny tej samej strefy/);assert.match(html,/nie potwierdzenie odczytu rejestrów/);assert.match(panel.shadowRoot.innerHTML.split('<details>')[1],/Plan wpisów TOU/);assert.equal(calls.length,0);
+});
+test("invalid incomplete or duplicate physical TOU entries cannot look like a complete program",()=>{
+  const {panel}=fixture();for(const program of [{valid:false,issue:"private-error-body",rows:[]},{valid:true,rows:[]},{valid:true,rows:Array.from({length:6},()=>({slot:1,time:"00:00:00",grid_charge_allowed:true}))},{valid:true,rows:Array.from({length:6},(_,i)=>({slot:i+1,time:'<img src=x>',grid_charge_allowed:true}))}]){panel.payload.options.physical_tou=program;const html=panel.physicalTariffHtml();assert.match(html,/Brak kompletnego, poprawnego planu/);assert.doesNotMatch(html,/<table>|<img|private-error-body/);}
+});
+
+test("post-save explains all dedicated tariff and grid-source blockers using controlled labels",()=>{
+  const {panel}=fixture();panel.payload.post_save_activation={status:"blocked",reason:"activation_conditions_failed",issues:[{source:"tariff",reason:"invalid_or_unsupported"},{source:"grid_setting",reason:"provider_unavailable"},{source:"battery_alarm",reason:"invalid"}]};
+  const html=panel.postSaveHtml();assert.match(html,/Operator i taryfa: niepoprawna lub nieobsługiwana konfiguracja/);assert.match(html,/Nastawa ładowania: źródło danych jest niedostępne/);assert.match(html,/Alarm baterii: nieprawidłowy odczyt/);
+});
+test("unavailable tariff notices and TOU-readback waits use helpful Polish messages",async()=>{
+  const {panel}=fixture();nativeTariff(panel,{plan:()=>({...tariffPlanForm(),description_placeholders:{tariff_notices:"G12x: unverified_region_schedule; G14: dynamic_feed_required"}})});await openTariffPlan(panel);
+  assert.match(panel.tariffEditorHtml(),/brak zweryfikowanego harmonogramu dla regionu/);assert.match(panel.tariffEditorHtml(),/wymaga zewnętrznego źródła/);assert.doesNotMatch(panel.tariffEditorHtml(),/unverified_region_schedule|dynamic_feed_required/);
+  panel.payload.mode="active";assert.match(panel.currentStatusText("waiting_tou_clock_readback"),/Oczekiwanie na odczyt godzin TOU/);
+});
+
+test("real backend numeric tariff tiers show allowed charge targets and never create protected targets",()=>{
+  const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({tier:0,grid_charge_allowed:true,charge_target_soc_percent:75}),slotTarget({tier:1,grid_charge_allowed:false,charge_target_soc_percent:91}),slotTarget({tier:2,grid_charge_allowed:false,charge_target_soc_percent:92})];
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/>75<\/td>/);assert.doesNotMatch(html,/>91<\/td>|>92<\/td>/);assert.equal((html.match(/>75<\/td>/g)||[]).length,1);
+});
+test("post-save pause failure remains a concrete blocker without claiming a physical stop",()=>{
+  const {panel}=fixture();panel.payload.post_save_activation={status:"blocked",reason:"configuration_pause_failed",issues:[]};
+  const html=panel.postSaveHtml();assert.match(html,/Nie potwierdzono wyłączenia ładowania przed przeładowaniem/);assert.match(html,/Sprawdź odczyty Deye/);assert.doesNotMatch(html,/fizyczne.*zatrzymano|włączono sterowanie/);
+});
+
+test("a calendar requiring contract or meter-clock confirmation explains the blocked runtime even within validity",()=>{
+  const {panel,calls}=fixture();for(const [issue,label] of [["tariff_contract_confirmation_required",/Brak potwierdzenia zgodności taryfy z umową/],["tariff_clock_confirmation_required",/Brak potwierdzonego zegara licznika/]]){
+    const html=calendarData(panel,{profile_id:"tauron_g13_2026",tariff:"G13",operator_label:"TAURON Dystrybucja",valid:false,issue,within_validity:true,runtime_allowed:true,preview_only:false});
+    assert.match(html,label);assert.match(html,/nie potwierdza zgody na sterowanie/);assert.equal(calls.length,0);
+  }
+});
+
+test("an all-cheap G11 interval can keep its virtual planning deadline without inventing an operator boundary",()=>{
+  const {panel}=fixture();panel.payload.data.plan.tariff_slot_targets=[slotTarget({start:"2026-11-10T00:00:00+01:00",end:"2026-11-11T00:00:00+01:00",zone:"flat",tier:0,deadline:"2026-11-11T07:00:00+01:00"})];
+  const html=panel.tariffSlotTargetsHtml();assert.match(html,/Strefa całodobowa/);assert.match(html,/11\.11, 07:00/);assert.match(html,/terminu planu pokazanego w tabeli/);assert.doesNotMatch(html,/dotyczy końca taniego przedziału/);
 });

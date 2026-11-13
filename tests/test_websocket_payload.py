@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
-from test_installable import C, load
+from test_installable import C, load, CALENDAR
+from test_websocket import POST_SAVE
 from test_runtime import Harness
 from test_single_phase_runtime import single_harness
 
@@ -20,6 +21,10 @@ def websocket_module():
         "websocket_api": SimpleNamespace(websocket_command=lambda _schema: identity,
                                           require_admin=identity, async_response=identity),
         "DATA_APPEARANCE": "test_appearance", "DATA_UPDATES": "test_updates",
+        "calendar_operators": CALENDAR.calendar_operators,
+        "calendar_profiles": CALENDAR.calendar_profiles,
+        "post_save_status": POST_SAVE.post_save_status,
+        "cancel_all_post_save": POST_SAVE.cancel_all_post_save,
     })
 
 
@@ -30,6 +35,7 @@ class PanelPayload(unittest.TestCase):
 
     def test_single_phase_hardware_limits_and_calendar_reach_real_payload(self):
         h = single_harness()
+        h.hass.data = {}
         expected = h.co.options
         payload = self.payload(h.co)
         for key in ("hardware_profile", "effective_hardware_limits", "tariff_calendar"):
@@ -43,6 +49,7 @@ class PanelPayload(unittest.TestCase):
 
     def test_custom_profile_and_existing_options_are_preserved(self):
         h = Harness(options={"inverter_max_power_kw": 9, "grid_import_limit_kw": 13.5})
+        h.hass.data = {}
         payload = self.payload(h.co)
         self.assertEqual(payload["options"]["hardware_profile"]["phases"], 3)
         self.assertEqual(payload["options"]["effective_hardware_limits"]["inverter_max_power_kw"], 9)

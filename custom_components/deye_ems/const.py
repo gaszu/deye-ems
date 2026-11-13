@@ -1,9 +1,14 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "2.0.4"
+VERSION = "2.1.0"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button", "update"]
 
 DEFAULT_OPTIONS = {
+    # Existing installations retain their original daily schedule until a
+    # separately confirmed operator/tariff selection in observation mode.
+    "tariff_profile": "legacy_g13",
+    "tariff_clock_basis": "local",
+    "tariff_contract_confirmed": False,
     # Existing entries keep their explicitly configured limits and mappings.
     "inverter_model": "custom",
     "inverter_phases": 3,

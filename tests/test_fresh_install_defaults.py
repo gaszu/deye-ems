@@ -70,7 +70,9 @@ class FreshInstallDefaults(unittest.IsolatedAsyncioTestCase):
         flow_class = boundary.Installation().flow()["DeyeEMSConfigFlow"]
         for supplied in ({}, {"entity_prefix": "another_inverter_"}):
             with self.subTest(supplied=supplied):
-                result = await flow_class().async_step_user(supplied)
+                flow = flow_class()
+                result = await flow.async_step_user(supplied)
+                result = await boundary.complete_initial_tariff(flow, result)
                 self.assertEqual(result["type"], "create_entry")
                 data = result["data"]
                 self.assertEqual({key: data["sources"][key] for key in UNASSIGNED_KEYS},
@@ -88,7 +90,9 @@ class FreshInstallDefaults(unittest.IsolatedAsyncioTestCase):
         flow_class = boundary.Installation().flow()["DeyeEMSConfigFlow"]
         for profile in ("yambms", "manual"):
             with self.subTest(profile=profile):
-                result = await flow_class().async_step_user({"battery_source_profile": profile})
+                flow = flow_class()
+                result = await flow.async_step_user({"battery_source_profile": profile})
+                result = await boundary.complete_initial_tariff(flow, result)
                 data = result["data"]
                 self.assertEqual(data["battery_source_profile"], profile)
                 expected = (YAM_BMS_SOURCES if profile == "yambms"

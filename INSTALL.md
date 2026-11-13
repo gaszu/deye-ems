@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.0.4
+# Instalacja i obsługa Deye EMS 2.1.0
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -12,14 +12,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.0.4**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.0**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.0.4.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.4/deye-ems-2.0.4.zip).
+1. Pobierz [deye-ems-2.1.0.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.0/deye-ems-2.1.0.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -30,10 +30,10 @@ Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com
 ## Pierwsza konfiguracja
 
 1. Wpisz minimalny bezpieczny SoC, pojemność baterii, moc PV, moc falownika łącznie i na fazę oraz osobne limity importu. Domyślne wartości produktu to m.in. 40%, 66 kWh, 12 kW łącznie i 5 kW na fazę; wymagają dopasowania do urządzeń.
-2. Pozostań w **shadow / obserwacja**. W tym trybie integracja pokazuje obliczenia bez sterowania wyjściami.
+2. Uzupełniaj konfigurację w **shadow / obserwacja**. W tym trybie integracja pokazuje obliczenia bez zwykłego sterowania ładowaniem.
 3. W **Konfiguruj → Encje pomiarowe i sterujące** sprawdź lub zastąp przykładowe przypisania. Każde wyjście musi wskazywać właściwą, istniejącą encję, a wyjścia muszą mieć unikalne przypisania.
 4. Skonfiguruj źródło prognozy PV i ewentualne dodatkowe profile zużycia.
-5. Sprawdź pomiary, ich jednostki, daty prognozy, wybrany cel i warunki konfiguracji. Dopiero potem osobno wybierz sterowanie. Zasady przejścia i powrotu opisuje [MIGRATION.md](MIGRATION.md).
+5. Wybierz operatora, taryfę oraz zegar zgodne z umową i licznikiem. Sprawdź podgląd, a następnie zatwierdź końcowy zapis. Silnik sam sprawdzi świeże pomiary, plan i zabezpieczenia przed włączeniem sterowania. Jeśli nie może go włączyć, pozostanie w obserwacji z podaną przyczyną. Zasady przejścia i powrotu: [MIGRATION.md](MIGRATION.md).
 
 Wymagane pomiary obejmują SoC i napięcie baterii, GRID/LOAD zgodnie z wybraną liczbą faz, moc baterii oraz odczyt nastawy prądu ładowania. Profile YamBMS i ręczny zachowują wymagania limitu i blokady BMS. Sterowanie wymaga zgodnych ustawień trybów falownika i mapowań TOU. Szczegółowe warunki opisuje [SPECIFICATION.md](SPECIFICATION.md). Integracja nie ustawia automatycznie wszystkich trybów sprzętowych.
 
@@ -53,9 +53,9 @@ Recorder HA dostarcza historię LOAD i liczników energii. Do stabilnego profilu
 4. Dobierz odstęp pobierania i limit konta. Każda instalacja wymaga osobnego zapytania, a wykrywanie oraz nieudane próby mogą również zużyć limit. Dwie instalacje odpytywane co 6 h oznaczają zwykle 8 zapytań na dobę, bez dodatkowych prób. Domyślny limit wynosi 10 na dobę UTC; dopasuj go do planu konta zgodnie z [dokumentacją Solcast](https://docs.solcast.com.au/docs/section/rooftop-sites-hobbyist).
 5. Podaj znane wykorzystanie bieżącej doby. Jeśli jest nieznane, pozostaw pełny limit i poczekaj na następną dobę UTC. Wartość ta nie obniża istniejącego rejestru, lecz może go podnieść.
 6. Dla prognozy całej instalacji pozostaw skalowanie 1:1. Moc kWp nie mnoży ponownie prognozy obliczonej dla instalacji w portalu. Mnożnik stały i 24 korekty godzinowe zmieniaj świadomie; osobny tryb profilu referencyjnego wymaga właściwej mocy odniesienia.
-7. Wybierz **Zapisz i włącz pobieranie API**. Zapis włącza klienta i kolejne pobrania mogą zużyć limit. Zaczekaj na nowy plan, sprawdź go i osobno włącz sterowanie.
+7. Wybierz **Zapisz i włącz pobieranie API**. Zapis włącza klienta i kolejne pobrania mogą zużyć limit. Kreator zamknie się, a silnik sprawdzi warunki automatycznego wznowienia. Obserwuj wynik przy trybie pracy u góry panelu.
 
-Otwarcie lub anulowanie kreatora, a także aktualizacja wersji, nie przełączają źródła. **Anuluj kreator** odrzuca niezapisany szkic. **Zamknij kreator** po zapisie nie cofa konfiguracji. Wyłączenie pobierania w panelu wymaga osobnego potwierdzenia i zachowuje klucz oraz kalibrację.
+Otwarcie lub anulowanie kreatora, a także aktualizacja wersji, nie przełączają źródła. **Anuluj kreator** odrzuca niezapisany szkic. Po zapisie kreator zamyka się automatycznie; wynik sprawdzania pozostaje widoczny w panelu. Wyłączenie pobierania w panelu wymaga osobnego potwierdzenia i zachowuje klucz oraz kalibrację.
 
 Zapisany klucz pozostaje ukryty; puste pole zachowuje dotychczasowy. Klucz wpisany w formularzu jest przechowywany nietrwale i czyszczony po zakończeniu lub zamknięciu. Panel statusu, plan, cache i diagnostyka nie udostępniają klucza.
 
@@ -69,7 +69,7 @@ Import nie zatrzymuje innej integracji. Przy zmianie klienta użytkownik osobno 
 
 ## Dodatkowe zużycia
 
-W panelu użyj **Dodaj odbiornik**, podaj nazwę, licznik energii Wh/kWh i opcjonalną moc W/kW. **Edytuj** zmienia konfigurację, **Usuń** usuwa kanał, a ON/OFF zachowuje jego dane i identyfikator. Zmiany wymagają obserwacji i nie wznawiają sterowania automatycznie.
+W panelu użyj **Dodaj odbiornik**, podaj nazwę, licznik energii Wh/kWh i opcjonalną moc W/kW. **Edytuj** zmienia konfigurację, **Usuń** usuwa kanał, a ON/OFF zachowuje jego dane i identyfikator. Zmiany wymagają obserwacji. Zapis zmienionych opcji uruchamia sprawdzenie warunków wznowienia; wynik jest widoczny u góry panelu.
 
 Kanały służą wyłącznie modelowaniu SoC. Nie sterują urządzeniami i nie są ponownie dodawane do bieżącego LOAD ani ograniczania importu. Przy niedostatecznej historii kanału model korzysta z całkowitego LOAD.
 
@@ -114,7 +114,7 @@ W wersji1.0.6 komunikat brzmi `Inverter modes do not match the EMS model`. Wersj
 
 Prefiks można wpisać przy dodawaniu integracji lub w **Deye EMS → Konfiguruj → Prefiks encji Deye**. Wpisz część nazwy bez domeny, np. `deye_dom_`. Daje to m.in. `sensor.deye_dom_load_power`, `select.deye_dom_system_work_mode` oraz `number.deye_dom_maximum_battery_grid_charge_current`. Końcowe podkreślenie jest uzupełniane automatycznie.
 
-Zmiana przypisań wymaga obserwacji. Kreator w istniejącej integracji pokazuje znalezione i brakujące encje, a następnie pełny formularz przypisań do sprawdzenia i ręcznej korekty. Dopiero zapis formularza zapisuje przypisania i prefiks. Anulowanie nie zmienia konfiguracji. Prefiks dotyczy wyłącznie encji falownika Deye: nie przepisuje nazw BMS, Solcast ani odbiorników. Prefiks pomaga dobrać nazwy; nie zmienia trybu fizycznego falownika ani nie dodaje obsługi Zero Export To CT. Po zmianie przypisań wznowienie sterowania wymaga jawnego działania użytkownika.
+Zmiana przypisań wymaga obserwacji. Kreator w istniejącej integracji pokazuje znalezione i brakujące encje, a następnie pełny formularz przypisań do sprawdzenia i ręcznej korekty. Dopiero zapis formularza zapisuje przypisania i prefiks. Anulowanie nie zmienia konfiguracji. Prefiks dotyczy wyłącznie encji falownika Deye: nie przepisuje nazw BMS, Solcast ani odbiorników. Prefiks pomaga dobrać nazwy; nie zmienia trybu fizycznego falownika ani nie dodaje obsługi Zero Export To CT. Po końcowym zapisie kreatora silnik sprawdza warunki automatycznego wznowienia; samo otwarcie, podgląd lub anulowanie nie uruchamiają sterowania.
 
 ## Dom pod LOAD, CWU między GRID a CT — wersja1.0.7
 
@@ -126,15 +126,30 @@ Moc odbiorów między CT a GRID = CT − GRID. Przykład: CT0W i GRID−2000W oz
 
 Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRID muszą mieścić się w10s. Wymagana jest zgodność sum i faz (tolerancja większa z300W i10% sumy) oraz nieujemny bilans odbiorów między CT a GRID (do200W tolerancji). Sterowanie nie zakłada bilansowania faz CT na podstawie przełącznika dotyczącego LOAD: zwiększenia prądu stosują zachowawczy model fazowy. Tryb wymagany w tej topologii to **Zero Export To CT**; EMS nie przełącza go sam.
 
-Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga ręcznego wznowienia. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** pozostaje zawsze widoczna na głównym ekranie i opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
+Zmiana topologii lub przypisań unieważnia stary plan i cache celu. Zapis kreatora lub zmienionych opcji, także selektora LOAD/CT w panelu, może wznowić sterowanie dopiero po ponownym sprawdzeniu warunków. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** pozostaje zawsze widoczna na głównym ekranie i opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
+
+## Operator, taryfa i automatyczny start po zapisie
+
+1. W **Operator i taryfa** otwórz wybór taryfy. Podczas sterowania najpierw jawnie przejdź do obserwacji.
+2. Wybierz operatora z listy pięciu OSD, a następnie taryfę zgodną z umową. Katalog opisuje 30 obsługiwanych profili i dwie pozycje zablokowane; brakujące reguły regionalne lub dynamiczne nie są zastępowane domysłem.
+3. Potwierdź zegar licznika. **Czas lokalny** uwzględnia zmianę lato/zima; **stały CET** pozostaje czasem zimowym. Nie dobieraj tego ustawienia na podstawie pory roku. Ustal je dla swojego układu pomiarowego. Zegary HA i falownika muszą być prawidłowe.
+4. Sprawdź podgląd dni roboczych, wolnych, sezonu i godzin. Zaznacz potwierdzenie zgodności z umową i wybierz **Zapisz potwierdzoną taryfę**. Anulowanie odrzuca szkic, a zmiana konfiguracji w tle unieważnia stary podgląd.
+5. Kreator zamknie się sam. Silnik HA oczekuje na nową konfigurację, pomiary i obliczenia, a następnie używa zwykłych zabezpieczeń aktywacji. Poprawny plan zachowawczy może być użyty jawnie bez udawania pełnej prognozy. Oczekiwanie i przyczyny blokady pozostają widoczne; przeglądarka nie musi być otwarta.
+6. Przycisk **Zatrzymaj i obserwuj** u góry panelu anuluje oczekujący start, również gdy bieżący tryb nadal jest obserwacją. Zapis źródeł, modelu i Solcast podlega tej samej zasadzie; samo zamknięcie albo anulowanie bez zapisu nie aktywuje EMS.
+
+Sprawdzanie po zapisie obejmuje wszystkie zmienione opcje wpisu integracji, także odbiorniki i parametry panelu. Motyw i widoczność menu bocznego są osobne: ich zapis, odczyty katalogu, podgląd, anulowanie oraz ręczny STOP nie inicjują automatycznej aktywacji.
+
+Przy przeładowaniu aktywnej konfiguracji silnik najpierw żąda wyłączenia Grid Charge i 0 A oraz wymaga poprawnych odczytów potwierdzających. Brak potwierdzenia blokuje przeładowanie i jest pokazywany jako błąd. Potwierdzenie nastaw nie jest pomiarem fizycznej reakcji urządzenia.
+
+Tabela taryfy rozdziela zgodę strefy, cel doładowania, stałą rezerwę i projekcję SoC. Projekcja bieżącego przedziału zaczyna się od podanej chwili. Wartości minione lub nieznane nie otrzymują sztucznego 0%. Dodatkowe wpisy TOU służą dopasowaniu do sześciu rejestrów falownika, a nie tworzeniu nowych stref OSD. [Źródła i warunki taryf](TARIFFS.md).
 
 ## Sprawdzanie aktualizacji — od 2.0.3
 
 EMS sprawdza najnowsze stabilne wydanie po uruchomieniu HA (około 30 s później), następnie co godzinę. Własna encja **Deye EMS — Nowe wydanie** przekazuje wynik do natywnej listy aktualizacji Home Assistanta bez funkcji instalowania. Sprawdzenie działa także po zamknięciu panelu i nie zależy od pracy regulatora. **Sprawdź aktualizacje** pozwala wywołać je wcześniej, z co najmniej 60 s przerwy i obsługą limitów GitHub.
 
-Marketplace ma odrębną listę wersji: repozytoria dodane z linku zwykle co 48 h, katalog co 6 h. Gdy administrator otworzy panel EMS i jest potwierdzone nowe wydanie, panel może sam odświeżyć metadane wyłącznie naszego repozytorium przez oficjalny protokół sklepu. Żądania są deduplikowane, mają ograniczone ponowienia i nie instalują plików. Brak uprawnień lub niedostępność sklepu nie blokuje sterowania. Przy zamkniętym panelu ten etap czeka na jego otwarcie; własna encja update nadal powiadamia o wydaniu. Starsza wersja EMS wymaga jednorazowego zainstalowania 2.0.4, aby uzyskać ten mechanizm.
+Marketplace ma odrębną listę wersji: repozytoria dodane z linku zwykle co 48 h, katalog co 6 h. Gdy administrator otworzy panel EMS i jest potwierdzone nowe wydanie, panel może sam odświeżyć metadane wyłącznie naszego repozytorium przez oficjalny protokół sklepu. Żądania są deduplikowane, mają ograniczone ponowienia i nie instalują plików. Brak uprawnień lub niedostępność sklepu nie blokuje sterowania. Przy zamkniętym panelu ten etap czeka na jego otwarcie; własna encja update nadal powiadamia o wydaniu. Starsza wersja EMS wymaga jednorazowego zainstalowania 2.1.0, aby uzyskać ten mechanizm.
 
-**Otwórz Marketplace** prowadzi do sklepu bieżącej instancji. Instalacja pozostaje jawną czynnością użytkownika. Przed nią zachowaj kopię ustawień i poprzednie wydanie, przejdź do obserwacji oraz potwierdź zatrzymanie doładowania. Po instalacji sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj pomiary, ustawienia i plan przed wznowieniem dotychczasowego trybu.
+**Otwórz Marketplace** prowadzi do sklepu bieżącej instancji. Instalacja pozostaje jawną czynnością użytkownika. Przed nią zachowaj kopię ustawień bez danych dostępu i poprzednie wydanie. Zachowaj istniejący tryb przy zwykłej aktualizacji; jeśli przechodzisz do obserwacji w celu zmiany konfiguracji, potwierdź odczyty wyłączenia doładowania. Po instalacji sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj pomiary, ustawienia i plan przed wznowieniem dotychczasowego trybu.
 
 Przycisk **Odśwież interfejs** pobiera nowszą wersję otwartej karty; przy niezapisanych formularzach jest zablokowany. Nie zastępuje restartu backendu. Samo sprawdzanie wersji nie zmienia trybu EMS i nie uruchamia restartu ani instalacji.
 
@@ -156,4 +171,4 @@ Encja jest wybierana wŹródłach i obsługiwana przez prefiksDeye. Limit obowi�
 
 Brak, restored, niepoprawna jednostka lub wartość encji blokują zmianę rezerwy i aktywację. Przy utracie odczytu w czasie pracy EMS zeruje ładowanie z sieci i wyłączaGC, nie obniżaTOU i zachowuje konserwatywną poprzednią granicę. Nie zmienia samej nastawy Battery low SOC. Wspierany odczyt0–85% zapewnia miejsce na5p.p. zapasu przy maksymalnej rezerwie90%.
 
-Wybór LOAD/CT jest dostępny bezpośrednio w panelu w sekcji **Pomiar i sterowanie**. Selektor konfiguruje model EMS, a odczyt fizycznego trybu falownika jest pokazany oddzielnie. Zapis wymaga obserwacji, nie zmienia sam nastawy trybu falownika i nie wznawia sterowania.
+Wybór LOAD/CT jest dostępny bezpośrednio w panelu w sekcji **Pomiar i sterowanie**. Selektor konfiguruje model EMS, a odczyt fizycznego trybu falownika jest pokazany oddzielnie. Zapis wymaga obserwacji i nie zmienia sam nastawy fizycznego trybu falownika. Zmienione opcje uruchamiają sprawdzanie warunków wznowienia; niezgodny tryb sprzętowy blokuje aktywację.
