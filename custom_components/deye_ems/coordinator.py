@@ -505,6 +505,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._grid_attempt(0, self._now().timestamp(), force=True)
             self._memory["mode"] = mode
             await self._save()
+            if mode == "active" and self._last_error == "restored_active_preflight_failed":
+                # An explicit, validated activation with a successful mode
+                # save supersedes only this historical startup diagnostic.
+                self._last_error = None
         await self.async_request_refresh()
 
     async def async_recalculate(self):

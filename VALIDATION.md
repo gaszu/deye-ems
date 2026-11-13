@@ -1,3 +1,13 @@
+# Wersja 2.0.4 — zgodność encji update i historyczny komunikat startowy
+
+**687 testów Python i 173 testy panelu PASS** w pełnym sprawdzeniu offline.
+
+- Pusty zestaw `UpdateEntityFeature` przechodzi kontrolę przynależności flag używaną przez Home Assistant 2026.11 przy dodawaniu encji. Encja nie uzyskuje prawa instalacji ani restartu.
+- Historyczny `restored_active_preflight_failed` znika dopiero po jawnej aktywacji, poprawnym preflight i zapisie trybu. Nieudany preflight lub zapis, wybór obserwacji i inne błędy zachowują diagnostykę.
+- Wersje panelu, podglądu i instalatora odpowiadają wydaniu 2.0.4. Nie zmieniono limitów, źródeł pomiarów, progów świeżości, firmware ani harmonogramu sterowania.
+
+Testy są syntetyczne. Dodanie encji, załadowaną wersję, ustawienia i działanie automatycznego sprawdzania należy dodatkowo potwierdzić w HA po instalacji.
+
 # Wersja 2.0.3 — limit Deye, natywne raporty i automatyczne sprawdzanie wydań
 
 **683 testy Python i 173 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Wynik nie oznacza fizycznego testu wszystkich urządzeń i firmware.
