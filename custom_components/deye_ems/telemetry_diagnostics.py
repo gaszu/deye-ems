@@ -71,10 +71,11 @@ def entity_platform(hass, entity_id):
         return None
 
 
-def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platform_lookup=None):
+def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platform_lookup=None, state_lookup=None):
     """Describe the authority's decisions, including aggregate coherence failures."""
     groups = groups or {}
     lookup = platform_lookup or entity_platform
+    lookup_state = state_lookup or hass.states.get
     reasons = {}
     for issue in issues:
         reasons.setdefault(issue["source"], issue["reason"])
@@ -82,7 +83,7 @@ def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platf
     for source, validation in checks.items():
         configured = sources.get(source)
         entity_id = configured if isinstance(configured, str) and len(configured) <= 255 and _ENTITY.fullmatch(configured) else None
-        state = hass.states.get(configured) if isinstance(configured, str) and configured else None
+        state = lookup_state(configured) if isinstance(configured, str) and configured else None
         attributes = getattr(state, "attributes", {})
         unit = attributes.get("unit_of_measurement")
         unit = unit if isinstance(unit, str) and unit in _UNITS else None
@@ -93,6 +94,10 @@ def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platf
             value = None
         reported = _reported(state)
         age = (now.timestamp() - reported.timestamp()) if reported is not None else None
+        original = getattr(state, "original", state)
+        ha_reported = _reported(original)
+        ha_age = now.timestamp() - ha_reported.timestamp() if ha_reported is not None else None
+        timestamp_source = "esphome_live" if getattr(state, "timestamp_source", None) == "esphome_live" else "home_assistant"
         if entity_id not in platforms:
             try:
                 platform = lookup(hass, entity_id) if entity_id else None
@@ -105,15 +110,21 @@ def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platf
             "last_reported": reported.isoformat() if reported is not None else None,
             "age_seconds": round(age, 1) if age is not None else None,
             "max_age_seconds": validation.get("age"), "valid": reason is None,
-            "reason": reason, "platform": platforms[entity_id]})
+            "reason": reason, "platform": platforms[entity_id],
+            "timestamp_source": timestamp_source,
+            "ha_last_reported": ha_reported.isoformat() if ha_reported is not None else None,
+            "ha_age_seconds": round(ha_age, 1) if ha_age is not None else None,
+            "stream_samples": 2 if timestamp_source == "esphome_live" else 0})
     for source, reason in reasons.items():
         if source in checks:
             continue
         row = {"source": source, "entity_id": None, "value": None, "unit": None,
             "expected_unit": None, "last_reported": None, "age_seconds": None,
-            "max_age_seconds": None, "valid": False, "reason": reason, "platform": None}
+            "max_age_seconds": None, "valid": False, "reason": reason, "platform": None,
+            "timestamp_source": "home_assistant", "ha_last_reported": None,
+            "ha_age_seconds": None, "stream_samples": 0}
         if reason == "time_skew" and source in groups:
-            reports = [_reported(hass.states.get(sources.get(key))) for key in groups[source] if sources.get(key)]
+            reports = [_reported(lookup_state(sources.get(key))) for key in groups[source] if sources.get(key)]
             if reports and all(report is not None for report in reports):
                 row["observed_time_skew_seconds"] = round(
                     max(report.timestamp() for report in reports) - min(report.timestamp() for report in reports), 1)
@@ -132,7 +143,7 @@ def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platf
                       and (row["platform"] == "esphome") == (provider == "esphome")]
             if not subset:
                 continue
-            message = ("ESPHome: sprawdź rzeczywiste odpytywanie falownika. Opcja force_update: true przy sensorach pomiarowych pozwala przekazywać również niezmienione wartości. Sam heartbeat nie jest świeżym pomiarem."
+            message = ("Deye EMS odczytuje również natywne raporty ESPHome, bez zmiany firmware. Potwierdzenie wymaga dwóch poprawnych pakietów zgodnych z wartością i jednostką HA. Sprawdź połączenie źródłowe i stan odbiornika w diagnostyce. Czas odbioru pakietu nie jest czasem wykonania pomiaru Modbus."
                 if provider == "esphome" else
                 "Sprawdź działanie integracji źródłowej i odstęp rzeczywistego odczytu urządzenia. EMS wymaga aktualnych pomiarów; samo odświeżenie znacznika czasu nie zastępuje odczytu.")
             hints.append({"provider": provider, "reason": reason, "sources": subset, "message": message})

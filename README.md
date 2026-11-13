@@ -4,7 +4,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.0.2
+## Instalacja wersji 2.0.3
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -17,22 +17,28 @@ Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcze
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.0.2** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v2.0.3** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**; włączenie sterowania wymaga osobnej czynności i poprawnej konfiguracji.
 
-Alternatywnie pobierz [deye-ems-2.0.2.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.2/deye-ems-2.0.2.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.0.2.md).
+Alternatywnie pobierz [deye-ems-2.0.3.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.3/deye-ems-2.0.3.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.0.3.md).
 
 ## Diagnostyka pomiarów
 
 Panel pokazuje nieprawidłowe źródła wraz z encją, odczytem, jednostką, czasem raportu, wiekiem i dopuszczalnym limitem. Prawidłowe źródła można rozwinąć. Wskazówki ESPHome są ograniczone do encji tej platformy; nie zmieniają progów bezpieczeństwa. Przy nieaktualnym całym stanie EMS szczegóły nie są przedstawiane jako bieżące.
 
+Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połączenie tylko do odczytu z urządzeniem ESPHome. Pomaga to przy identycznych wartościach, których kolejne raporty pomija integracja źródłowa HA. Wymagane są dwa poprawne pakiety zgodne z identyfikatorem urządzenia i encji oraz jednostką i wartością HA. Diagnostyka rozdziela czas raportu HA od wcześniejszego z dwóch czasów odbioru przez EMS. To dowód odbioru raportu, nie chwili pomiaru Modbus. Rozłączenie i zmiana przypisań kasują dowody. Utrata oryginalnego połączenia HA zamyka również klienta EMS. Firmware nie wymaga zmian; urządzenie musi mieć miejsce na dodatkowe połączenie API.
+
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.0.2 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.0.3 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
+
+Kreator dla wybranego falownika jednofazowego rozpoznaje istniejące alternatywne encje SoC, ładowania TOU oraz statusów alarmu i błędu urządzenia. Nie zastępuje własnych przypisań ani nie zapisuje propozycji bez potwierdzenia. Wybór modelu nie dodaje sensorów do urządzenia. Sterownik źródłowy musi udostępniać wymagane pomiary i zabezpieczenia.
+
+W profilu **Deye**, bez zewnętrznego BMS, źródłem limitu może być **Maximum Battery Charge Current** falownika; limit sieci wynosi 95% tej nastawy i podlega pozostałym ograniczeniom. Jeśli dostępny jest osobny prawidłowy odczyt CCL z Deye, również obowiązuje jego niższy limit. Istniejący, lecz niedostępny lub nieprawidłowy odczyt CCL nie jest omijany, a prawidłowe zero blokuje ładowanie. Profile YamBMS i ręczny zachowują wymagania wybranego BMS. Panel podaje źródło limitu, aby nastawa Deye nie była przedstawiana jako pomiar zgody BMS.
 
 Zmiana istniejącego modelu odbywa się w obserwacji, przez podgląd i osobne potwierdzenie. Aktualizacja z 1.x zachowuje profil własny i dotychczasowe ograniczenia; nie wybiera automatycznie nowego modelu ani nie zmienia topologii/rezerwy. Panel pokazuje wybrany sprzęt i ograniczenia skuteczne.
 
@@ -100,9 +106,13 @@ Model zakłada, że główny LOAD obejmuje modelowane odbiorniki. Użytkownik mu
 
 ## Panel, aktualizacje i testy
 
-Panel pokazuje tryb, cele, przepływy, plan i diagnostykę. W ustawieniach zaawansowanych pole **Motyw panelu** pozwala wybrać dowolny zainstalowany motyw HA albo dziedziczyć bieżący motyw profilu. Wygląd jest stosowany lokalnie w EMS, łącznie z tłem i kartami, bez zmiany innych dashboardów. Integracja tworzy własne encje sensor, binary_sensor, number, select i button.
+Panel pokazuje tryb, cele, przepływy, plan i diagnostykę. W ustawieniach zaawansowanych pole **Motyw panelu** pozwala wybrać dowolny zainstalowany motyw HA albo dziedziczyć bieżący motyw profilu. Wygląd jest stosowany lokalnie w EMS, łącznie z tłem i kartami, bez zmiany innych dashboardów. Integracja tworzy własne encje sensor, binary_sensor, number, select, button oraz diagnostyczną encję update „Nowe wydanie”.
 
-Sekcja **Wersja i aktualizacje** pokazuje wersję załadowaną przez HA oraz wersję interfejsu w otwartej karcie. **Sprawdź aktualizacje** ręcznie pobiera informację o najnowszym stabilnym wydaniu z publicznego GitHuba. Wynik wskazuje dostępne wydanie lub aktualność, a błąd pozostawia poprzedni wynik wyraźnie oznaczony jako nieaktualny. Przycisk **Otwórz Marketplace** prowadzi do sklepu tej samej instancji. Instalację i wymagany restart wykonuje się w HA; sprawdzenie wersji ich nie uruchamia i nie zmienia sterowania. Odczyty statusu nie odpytują GitHuba. Ostrzeżenie o różnicy wersji odróżnia starą kartę przeglądarki od nowszego interfejsu przy starszym załadowanym backendzie.
+Sekcja **Wersja i aktualizacje** pokazuje rzeczywiście załadowaną wersję HA i wersję otwartej karty. Od 2.0.3 EMS sprawdza stabilne wydania GitHub automatycznie: po uruchomieniu HA, z około 30 s opóźnieniem, a następnie co godzinę. Diagnostyczna encja **Deye EMS — Nowe wydanie** pokazuje dostępność w natywnej liście aktualizacji HA także przy zamkniętym panelu. Nie ma funkcji instalowania. Przycisk **Sprawdź aktualizacje** pozostaje dostępny, z 60 s przerwą i wspólną obsługą limitów GitHub. Błąd zachowuje wcześniejszy wynik jako nieaktualny. Harmonogram jest niezależny od silnika i nie zmienia sterowania; odczyty statusu nie odpytują GitHuba.
+
+Lista Marketplace ma osobną pamięć podręczną. Repozytorium dodane z linku jest zwykle sprawdzane co 48 h, katalog co 6 h — publikacja GitHub nie jest natychmiastowym sygnałem do wszystkich sklepów. Po otwarciu panelu EMS przez administratora nowsze, potwierdzone wydanie uruchamia ograniczoną synchronizację **samych metadanych naszego repozytorium** przez oficjalny protokół frontendowy Marketplace. Stary HACS jest wykrywany wyłącznie po odpowiedzi unknown_command. Zamknięty panel nie wysyła tego żądania; automatyczny sygnał encji update nadal działa w tle. Nie ma automatycznej instalacji, restartu ani odświeżania innych repozytoriów. Przed aktualizacją wykonaj kopię i zachowaj poprzednią paczkę; po instalacji sprawdź załadowaną wersję i wymagany restart.
+
+Źródła mechanizmu: [HACS — źródła danych i częstotliwości](https://www.hacs.dev/docs/faq/data_sources/), [Marketplace — publiczny protokół odświeżenia metadanych](https://github.com/home-assistant/core/blob/2026.11.1/homeassistant/components/marketplace/websocket/repository.py#L399).
 
 Sekcja **Układ LOAD** albo **Układ LOAD i CT** jest zawsze widoczna na głównym ekranie. Nazwa wynika z zapisanej konfiguracji, a obok pomiarów panel pokazuje odczytany tryb falownika oraz objaśnienia przepływów i wspólnej mocy. W układzie LOAD pobór odbiorów między GRID a CT jest nieobliczany; w układzie z CT wynika z bilansu CT−GRID. Brak aktualnych, poprawnych danych nie usuwa sekcji i nie jest zastępowany zerem.
 

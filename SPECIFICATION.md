@@ -1,4 +1,12 @@
-# Specyfikacja Deye EMS 2.0.0
+# Specyfikacja Deye EMS 2.0.3
+
+## Źródła i limity — rozszerzenie 2.0.3
+
+- W profilu Deye, gdy dedykowana encja CCL nie istnieje albo jej przypisanie wyłączono, limit baterii pochodzi z niezależnej nastawy maksymalnego prądu falownika. Limit sieci nadal wynosi 95% tej nastawy. Wymagane pozostają poprawne i świeże pomiary Deye oraz kontrola alarmów. Istniejący odczyt CCL jest wiążący: zero blokuje, a błąd nie przełącza na zastępstwo. YamBMS i profil ręczny zachowują wymagane źródła BMS. `battery_limit_source` rozróżnia nastawę Deye, CCL odczytany z Deye i zewnętrzny BMS.
+- Dla wybranego modelu 1F kreator może zaproponować istniejące encje `battery`, `time_of_use_<n>_charge_enable` oraz tekstowe statusy `device_alarm/device_fault`. Te ostatnie zezwalają na pracę tylko przy literalnym `OK`. Nie zmienia to firmware ani automatycznie zapisanych przypisań.
+- Dodatkowy klient ESPHome tylko do odczytu może dostarczyć dowód odbioru dwóch natywnych raportów zgodnych z identyfikatorem urządzenia, encją, wartością i jednostką HA. Czas dowodu jest wcześniejszym z czasów odbioru. Nie jest czasem pomiaru Modbus. Rozłączenie i zmiana źródeł kasują dowody; utrata oryginalnego klienta HA zamyka własny klient EMS. Nastawy sterujące i ich potwierdzenia nadal używają oryginalnych stanów HA.
+
+Poniższy opis 1.x zachowuje kontekst historyczny; powyższe rozszerzenie definiuje aktualne zachowanie profilu Deye bez dedykowanego CCL.
 
 ## Rozszerzenia linii 2.x
 

@@ -14,6 +14,7 @@ def _coordinator(hass):
 
 
 def _payload(coordinator, appearance=None, updates=None):
+    options = coordinator.options
     return {"entry_id": coordinator.entry.entry_id, "mode": coordinator.mode, "data": coordinator.data or {},
         "backend_version": VERSION,
         "updates": updates.status if updates is not None else {
@@ -21,10 +22,11 @@ def _payload(coordinator, appearance=None, updates=None):
             "retry_at": None, "reason": None, "release_url": None, "marketplace_url": "/marketplace", "stale": False},
         "appearance": appearance.appearance if appearance is not None else {"theme": ""},
         "effective_loads": coordinator.effective_loads, "loads_revision": coordinator.loads_revision,
-        "options": {**{k: coordinator.options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
-                    **{k: coordinator.options.get(k) for k in (
-                        "min_soc_lower_bound", "min_soc_bound_valid", "effective_min_soc_percent")}},
-        "sources": {**DEFAULT_SOURCES, **coordinator.options.get("sources", {})}}
+        "options": {**{k: options.get(k, v) for k, v in DEFAULT_OPTIONS.items()},
+                    **{k: options.get(k) for k in (
+                        "min_soc_lower_bound", "min_soc_bound_valid", "effective_min_soc_percent",
+                        "hardware_profile", "effective_hardware_limits", "tariff_calendar")}},
+        "sources": {**DEFAULT_SOURCES, **options.get("sources", {})}}
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/status"})

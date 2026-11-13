@@ -164,15 +164,17 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         static,panel = AsyncMock(),AsyncMock()
         appearance = SimpleNamespace(async_load=AsyncMock(), appearance={"theme": "synthetic-night"})
         appearance_factory = Mock(return_value=appearance)
-        updates = SimpleNamespace(status={"status": "not_checked"}, async_check=AsyncMock())
+        updates = SimpleNamespace(status={"status": "not_checked"}, async_check=AsyncMock(),
+            async_start=Mock(), async_stop=AsyncMock())
         updates_factory = Mock(return_value=updates)
-        h=SimpleNamespace(data={},http=SimpleNamespace(async_register_static_paths=static),
+        h=SimpleNamespace(data={},is_running=True,bus=SimpleNamespace(async_listen_once=Mock(return_value=Mock())),http=SimpleNamespace(async_register_static_paths=static),
             config_entries=SimpleNamespace(async_forward_entry_setups=AsyncMock(),
                 async_unload_platforms_or_raise=AsyncMock(),async_reload=AsyncMock()))
         m=load("__init__.py",{**C,"__name__":"offline_init","__file__":str(ROOT/"__init__.py"),
             "Path":Path,"Platform":lambda p:p,"DeyeEMSCoordinator":Coordinator,
             "AppearanceManager": appearance_factory, "DATA_APPEARANCE": "deye_ems_appearance",
             "UpdateManager": updates_factory, "DATA_UPDATES": "deye_ems_updates",
+            "EVENT_HOMEASSISTANT_STARTED": "homeassistant_started", "EVENT_HOMEASSISTANT_STOP": "homeassistant_stop",
             "StaticPathConfig":lambda *a:a,"async_register":Mock(),
             "frontend":SimpleNamespace(async_remove_panel=Mock()),
             "panel_custom":SimpleNamespace(async_register_panel=panel)})
@@ -186,6 +188,8 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         self.assertIs(h.data["deye_ems_appearance"], appearance)
         updates_factory.assert_called_once_with(h)
         updates.async_check.assert_not_awaited()
+        self.assertEqual(updates.async_start.call_count,2)
+        updates.async_stop.assert_awaited_once_with()
         self.assertIs(h.data["deye_ems_updates"], updates)
         self.assertEqual(panel.await_count,2)
         self.assertTrue(panel.await_args.kwargs["require_admin"])
@@ -252,6 +256,7 @@ class Installation(unittest.IsolatedAsyncioTestCase):
 
     async def test_phase_balancing_source_selector_accepts_switch_entities(self):
         flow = self.flow()["DeyeEMSOptionsFlow"]()
+        flow.hass = SimpleNamespace(states=SimpleNamespace(get=lambda _: None))
         flow.config_entry = SimpleNamespace(runtime_data=SimpleNamespace(mode="shadow"), options={}, data={})
         result = await flow.async_step_sources()
         domains = {marker.key: field["args"][0]["domain"]

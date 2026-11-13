@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.0.2
+# Instalacja i obsługa Deye EMS 2.0.3
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -12,14 +12,14 @@ Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.0.2**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.0.3**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.0.2.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.2/deye-ems-2.0.2.zip).
+1. Pobierz [deye-ems-2.0.3.zip](https://github.com/gaszu/deye-ems/releases/download/v2.0.3/deye-ems-2.0.3.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -35,7 +35,13 @@ Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com
 4. Skonfiguruj źródło prognozy PV i ewentualne dodatkowe profile zużycia.
 5. Sprawdź pomiary, ich jednostki, daty prognozy, wybrany cel i warunki konfiguracji. Dopiero potem osobno wybierz sterowanie. Zasady przejścia i powrotu opisuje [MIGRATION.md](MIGRATION.md).
 
-Wymagane pomiary obejmują SoC i napięcie tego samego BMS, dopuszczony prąd i blokadę BMS, GRID/LOAD łącznie i na trzech fazach, moc baterii oraz odczyt nastawy prądu ładowania. Sterowanie wymaga zgodnych ustawień trybów falownika i mapowań TOU. Szczegółowe warunki opisuje [SPECIFICATION.md](SPECIFICATION.md). Integracja nie ustawia automatycznie wszystkich trybów sprzętowych.
+Wymagane pomiary obejmują SoC i napięcie baterii, GRID/LOAD zgodnie z wybraną liczbą faz, moc baterii oraz odczyt nastawy prądu ładowania. Profile YamBMS i ręczny zachowują wymagania limitu i blokady BMS. Sterowanie wymaga zgodnych ustawień trybów falownika i mapowań TOU. Szczegółowe warunki opisuje [SPECIFICATION.md](SPECIFICATION.md). Integracja nie ustawia automatycznie wszystkich trybów sprzętowych.
+
+Dla wybranego falownika jednofazowego i profilu baterii „Deye” formularz źródeł może zaproponować istniejące w HA encje `sensor.<prefiks>_battery`, `switch.<prefiks>_time_of_use_<n>_charge_enable` oraz `sensor.<prefiks>_device_alarm` i `sensor.<prefiks>_device_fault`. Są to nazwy używane przez [Lewa-Reka dla baterii 1P](https://github.com/Lewa-Reka/esphome-deye-inverter/blob/v0.13.0/pv_inverter/packages/deye_hybrid_1p/battery.yaml), [ładowania w slotach 1P](https://github.com/Lewa-Reka/esphome-deye-inverter/blob/v0.13.0/pv_inverter/packages/deye_hybrid_1p/tou.yaml) i [alarmów falownika 1P](https://github.com/Lewa-Reka/esphome-deye-inverter/blob/v0.13.0/pv_inverter/packages/deye_hybrid_1p/device.yaml). Propozycja dotyczy tylko brakującego domyślnego przypisania; własne encje i puste wyłączenia pozostają zachowane. Samo otwarcie formularza lub aktualizacja nie zmienia zapisanych źródeł.
+
+Źródłowy sterownik 1P może nie publikować bieżącego limitu ładowania BMS (CCL). Gdy encja CCL nie istnieje albo jej przypisanie jest świadomie wyłączone, profil „Deye” korzysta z 95% maksymalnego prądu ładowania odczytanego z ustawień Deye. Jeśli CCL jest dostępny, jego niższa wartość dodatkowo ogranicza ładowanie. Błędny lub niedostępny odczyt istniejącej encji nie uruchamia przejścia na sam limit Deye, a CCL równy 0 A blokuje ładowanie. Profile YamBMS i ręczny nie korzystają z tego zastępstwa. Alarm i błąd baterii nadal wymagają poprawnych źródeł; prawidłowy model i sam odczyt SoC nie wystarczą do aktywacji.
+
+W jednofazowym profilu Deye sensory `device_alarm` i `device_fault` opisują stan całego falownika. Tylko prawidłowy stan `OK` potwierdza brak problemu. Opis błędu, `Error`, `N/A`, brak lub niedostępność odczytu blokują sterowanie; wymagane pozostają także żywe pomiary i pozostałe zabezpieczenia EMS.
 
 Recorder HA dostarcza historię LOAD i liczników energii. Do stabilnego profilu potrzebne są porównywalne obserwacje poszczególnych godzin; brak wystarczającej historii uruchamia jawny fallback. Zweryfikuj, że główny LOAD obejmuje odbiorniki używane w modelu.
 
@@ -122,13 +128,15 @@ Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRI
 
 Zmiana topologii lub przypisań unieważnia stary plan i cache celu oraz wymaga ręcznego wznowienia. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** pozostaje zawsze widoczna na głównym ekranie i opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
 
-## Sprawdzanie aktualizacji — od 1.0.17
+## Sprawdzanie aktualizacji — od 2.0.3
 
-W głównym panelu wybierz **Sprawdź aktualizacje** w sekcji **Wersja i aktualizacje**. Informacja dotyczy najnowszego stabilnego wydania publicznego, a wersja HA wskazuje rzeczywiście załadowany kod. Sama instalacja nowych plików może jeszcze wymagać restartu HA. Sprawdzenie jest ręczne, z co najmniej 60 s przerwy między próbami, i nie zmienia trybu EMS.
+EMS sprawdza najnowsze stabilne wydanie po uruchomieniu HA (około 30 s później), następnie co godzinę. Własna encja **Deye EMS — Nowe wydanie** przekazuje wynik do natywnej listy aktualizacji Home Assistanta bez funkcji instalowania. Sprawdzenie działa także po zamknięciu panelu i nie zależy od pracy regulatora. **Sprawdź aktualizacje** pozwala wywołać je wcześniej, z co najmniej 60 s przerwy i obsługą limitów GitHub.
 
-**Otwórz Marketplace** prowadzi do sklepu bieżącej instancji. Jeśli sklep pokazuje tylko stare wydanie, otwórz menu repozytorium Deye EMS i wybierz odświeżenie informacji. Przed aktualizacją zachowaj kopię ustawień i paczkę poprzedniej wersji, przejdź do obserwacji i potwierdź zatrzymanie doładowania z sieci. Po instalacji sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj pomiary, ustawienia i plan przed wznowieniem wcześniejszego trybu.
+Marketplace ma odrębną listę wersji: repozytoria dodane z linku zwykle co 48 h, katalog co 6 h. Gdy administrator otworzy panel EMS i jest potwierdzone nowe wydanie, panel może sam odświeżyć metadane wyłącznie naszego repozytorium przez oficjalny protokół sklepu. Żądania są deduplikowane, mają ograniczone ponowienia i nie instalują plików. Brak uprawnień lub niedostępność sklepu nie blokuje sterowania. Przy zamkniętym panelu ten etap czeka na jego otwarcie; własna encja update nadal powiadamia o wydaniu. Starsza wersja EMS wymaga jednorazowego zainstalowania 2.0.3, aby uzyskać ten mechanizm.
 
-Przycisk **Odśwież interfejs** służy do pobrania nowszej wersji otwartej karty; jest blokowany przy niezapisanych formularzach. Nie zastępuje restartu backendu, jeśli HA nadal ma załadowaną starszą wersję. Karta otwarta jeszcze przed instalacją 1.0.17 wymaga jednorazowego pełnego odświeżenia, aby wyświetlić nową sekcję.
+**Otwórz Marketplace** prowadzi do sklepu bieżącej instancji. Instalacja pozostaje jawną czynnością użytkownika. Przed nią zachowaj kopię ustawień i poprzednie wydanie, przejdź do obserwacji oraz potwierdź zatrzymanie doładowania. Po instalacji sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj pomiary, ustawienia i plan przed wznowieniem dotychczasowego trybu.
+
+Przycisk **Odśwież interfejs** pobiera nowszą wersję otwartej karty; przy niezapisanych formularzach jest zablokowany. Nie zastępuje restartu backendu. Samo sprawdzanie wersji nie zmienia trybu EMS i nie uruchamia restartu ani instalacji.
 
 ## Automatyczna moc ładowania — od 1.0.15
 

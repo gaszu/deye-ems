@@ -1,4 +1,4 @@
-"""Offline manual-release checks: bounded HTTP and no controller authority."""
+"""Offline release checks: bounded HTTP and no controller authority."""
 import ast
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -179,7 +179,7 @@ class Updates(unittest.IsolatedAsyncioTestCase):
         status["latest_version"] = "999.0.0"
         self.assertEqual(manager.status["latest_version"], "1.0.18")
 
-    async def test_ha_lifecycle_tracks_only_the_explicit_manual_request(self):
+    async def test_manual_check_uses_ha_task_tracking_without_starting_a_scheduler(self):
         module = load_updates()
         tracked = []
         class Hass:

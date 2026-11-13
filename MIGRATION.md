@@ -1,5 +1,11 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.0.3
+
+Zachowaj kopię ustawień bez danych dostępu i poprzedni ZIP. Aktualizacja zachowuje przypisania, rezerwę, topologię, limity i tryb pracy. Nowe propozycje źródeł jednofazowych zapisujesz oddzielnie w kreatorze w obserwacji. W profilu Deye bez dedykowanego CCL źródłem limitu staje się niezależna nastawa Deye; YamBMS i źródła ręczne zachowują wymagania. Sprawdź opis źródła limitu i alarmy przed włączeniem sterowania.
+
+Po restarcie sprawdź załadowaną wersję, oryginalne ustawienia i diagnostykę raportów. Dodatkowy klient ESPHome nie zmienia firmware. Powrót: obserwacja, poprzedni ZIP, kontrola konfiguracji, restart i weryfikacja. Jeśli zmieniono źródła na nowe jednofazowe statusy tekstowe, starszy kod może ich nie obsługiwać — przywróć również zgodną kopię przypisań i osobno sprawdź możliwość sterowania.
+
 ## Przejście na 2.0.0
 
 Instalacja plików nie zmienia przypisań, odbiorników, Solcast, pojemności, SoC, limitów, topologii ani zapisanego trybu pracy. Stare wpisy pozostają profilem własnym trójfazowym. Nowy model/fazy wybierasz osobno w obserwacji; podgląd wymaga potwierdzenia i nie uruchamia automatycznie sterowania. Jednofazowe nowe instalacje nie wymagają pomiarów native L2/L3; sprawdź jednak encje swojego firmware i pomiar CT, jeśli jest używany.

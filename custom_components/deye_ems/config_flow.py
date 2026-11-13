@@ -95,6 +95,28 @@ def _battery_profile_sources(profile, prefix):
     return {key: mapping.get(key, "") for key in BATTERY_SOURCE_KEYS}
 
 
+def _single_phase_source_suggestions(values, prefix, phases, profile, get_state):
+    """Suggest only existing 1P aliases for missing generated Deye defaults.
+
+    This is a form proposal, never a migration or a runtime fallback. Keep
+    manual IDs, explicit empty fields and separate battery profiles untouched.
+    """
+    if phases != 1 or profile != "deye":
+        return {}
+    try:
+        prefix, generated = _deye_prefix_sources(prefix)
+    except ValueError:
+        return {}
+    candidates = {"soc": f"sensor.{prefix}battery",
+                  "battery_alarm": f"sensor.{prefix}device_alarm",
+                  "battery_fault": f"sensor.{prefix}device_fault"}
+    candidates.update({f"tou_gc_{slot}": f"switch.{prefix}time_of_use_{slot}_charge_enable"
+                       for slot in range(1, 7)})
+    return {key: entity for key, entity in candidates.items()
+            if values.get(key) == generated.get(key)
+            and get_state(values[key]) is None and get_state(entity) is not None}
+
+
 def _battery_profile_selector():
     return selector.SelectSelector(selector.SelectSelectorConfig(options=[
         {"value": "deye", "label": "Deye — dane baterii z falownika"},
@@ -163,6 +185,10 @@ class DeyeEMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 prefix, mapping = _deye_prefix_sources(user_input.get("entity_prefix", "deye_inverter_"))
                 profile = user_input.get("battery_source_profile", "deye")
                 mapping.update(_battery_profile_sources(profile, prefix))
+                hass = getattr(self, "hass", None)
+                if hass is not None:
+                    mapping.update(_single_phase_source_suggestions(
+                        mapping, prefix, draft["inverter_phases"], profile, hass.states.get))
                 bound = _flow_reserve_bound(self, {**DEFAULT_SOURCES, **mapping})
                 if user_input.get("min_soc_percent", 40) < (bound if bound is not None else 40):
                     errors["min_soc_percent"] = "reserve_below_low_soc"
@@ -525,17 +551,24 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
                 options["entity_prefix"] = self._source_prefix_draft
                 options["battery_source_profile"] = self._battery_profile_draft
             return self.async_create_entry(title="", data=options)
+        selected = {**DEFAULT_OPTIONS, **self.config_entry.data, **self.config_entry.options}
+        profile = getattr(self, "_battery_profile_draft", self._battery_profile())
+        prefix = getattr(self, "_source_prefix_draft", self._entity_prefix())
+        suggestions = _single_phase_source_suggestions(
+            values, prefix, selected["inverter_phases"], profile, self.hass.states.get)
+        values.update(suggestions)
         fields = {}
         for key, entity in values.items():
             domain = "binary_sensor" if key in ("battery_alarm", "battery_fault") else "number" if key in ("grid_current_number", "max_charge_current_number", "battery_low_soc") or key.startswith("tou_soc_") else "switch" if key.startswith("tou_gc_") or key in ("solar_sell", "tou_enabled", "asymmetric_phase_feeding") else "time" if key.startswith("tou_time_") else "select" if key in ("energy_priority", "work_mode") else "sensor"
+            if key in ("battery_alarm", "battery_fault") and selected["inverter_phases"] == 1 and profile == "deye":
+                domain = ["binary_sensor", "sensor"]
             marker = (vol.Optional(key, description={"suggested_value": entity})
                       if entity else vol.Optional(key))
             fields[marker] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=domain))
         draft = getattr(self, "_source_mapping_draft", {})
-        proposed = [entity for entity in draft.values() if entity]
+        proposed = [values[key] for key in draft if values.get(key)]
         missing = [entity for entity in proposed if self.hass.states.get(entity) is None]
-        profile = getattr(self, "_battery_profile_draft", self._battery_profile())
         profile_label = {"deye": "Deye", "yambms": "YamBMS", "manual": "ręczny"}[profile]
         profile_note = ("Wybrany profil proponuje nowe przypisania baterii. "
                         if profile != self._battery_profile() and profile != "manual"
@@ -545,5 +578,25 @@ class DeyeEMSOptionsFlow(config_entries.OptionsFlow):
                    + f" Profil baterii: {profile_label}. " + profile_note
                    + "Sprawdź i popraw przypisania przed zapisaniem. Istnienie encji nie potwierdza zgodności trybu ani pomiarów."
                    if hasattr(self, "_source_prefix_draft") else "Ręczny wybór encji. Prefiks Deye ustawisz w osobnej pozycji menu konfiguracji.")
+        if suggestions:
+            preview += " Propozycje istniejących encji dla falownika jednofazowego: " + ", ".join(suggestions.values()) + ". Zapisz dopiero po sprawdzeniu przypisań."
+        if selected["inverter_phases"] == 1 and profile == "deye":
+            missing_ccl = not values.get("bms_charge_current") or self.hass.states.get(values["bms_charge_current"]) is None
+            if missing_ccl:
+                preview += (" Brak encji bieżącego limitu BMS (bms_charge_current): profil Deye korzysta wtedy z 95% "
+                    "maksymalnego prądu ładowania odczytanego z ustawień Deye. Dotyczy to również świadomie wyłączonego przypisania CCL.")
+            else:
+                preview += " Przypisany bieżący limit BMS dodatkowo ogranicza limit Deye −5%, gdy jest od niego niższy."
+            preview += (" Istniejąca encja CCL z błędnym lub niedostępnym odczytem nie pozwala przejść na sam limit Deye; "
+                "CCL równy 0 A blokuje ładowanie.")
+            if any(values.get(key, "").startswith("sensor.") for key in ("battery_alarm", "battery_fault")):
+                preview += (" W profilu jednofazowym sensorowe źródła alarmu i błędu opisują cały falownik. "
+                    "Tylko stan OK jest poprawnym potwierdzeniem braku problemu; błąd, alarm, N/A lub brak odczytu blokuje sterowanie.")
+            missing_flags = [key for key in ("battery_alarm", "battery_fault")
+                             if not values.get(key) or self.hass.states.get(values[key]) is None]
+            if missing_flags:
+                preview += (" Brak źródeł alarmu lub błędu baterii: " + ", ".join(missing_flags) + ". "
+                    "Sterownik jednofazowy może ich nie publikować. Te zabezpieczenia nadal obowiązują; "
+                    "brak poprawnych odczytów alarmu i błędu blokuje sterowanie.")
         return self.async_show_form(step_id="sources", data_schema=vol.Schema(fields),
                                     description_placeholders={"prefix_preview": preview})
