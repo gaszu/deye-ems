@@ -1,0 +1,32 @@
+name: Validate integration
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate HACS catalog requirements
+        uses: hacs/action@main
+        with:
+          category: integration
+          comment: false
+
+  hassfest:
+    name: Hassfest validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate Home Assistant integration
+        uses: home-assistant/actions/hassfest@master

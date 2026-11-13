@@ -8,6 +8,7 @@ on:
       - 'tests/**'
       - 'build_release.py'
       - '.github/workflows/release.yml'
+      - '.github/workflows/validate.yml'
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validation:
+    uses: ./.github/workflows/validate.yml
   release:
+    needs: validation
     if: github.repository == 'gaszu/ha-deye-ems' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

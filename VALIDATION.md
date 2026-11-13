@@ -1,3 +1,9 @@
+# Wersja 1.0.19 — przygotowanie katalogowe
+
+- Wymagane kontrole katalogowe HACS i hassfest są uruchamiane bez pomijania sprawdzeń. Workflow wydania czeka na ich sukces przed utworzeniem nowego GitHub Release.
+- Dodano lokalne, oryginalne ikony baterii i słońca w rozmiarach 256 i 512 px, z wariantem jasnym i ciemnym. Manifest ma kolejność wymaganą przez hassfest.
+- Zmiany dotyczą opakowania i metadanych. Silnik i regulator zachowują kod z 1.0.18; ustawienia produkcyjne pozostają konfigurowane przez użytkownika.
+
 # Wersja 1.0.18 — stan doładowania i diagnostyka oczekiwania
 
 - **506 testów Python i 112 testów panelu PASS.** Dziewięć nowych testów backendu obejmuje pierwszy start, zwykły termin korekty, stabilność pomiarów, oczekujący odczyt, blokady ponowień, granicę okna, stan GC i kontrolowane przyczyny błędów pomiarów.
