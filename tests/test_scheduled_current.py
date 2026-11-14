@@ -1,4 +1,4 @@
-"""Half-hour decisions, hysteresis, recovery and live runtime boundaries."""
+"""Rolling decisions, hysteresis, recovery and live runtime boundaries."""
 from copy import deepcopy
 import unittest
 
@@ -22,20 +22,22 @@ class ScheduledCurrent(unittest.TestCase):
         result = calculate_grid_charge(g)
         self.assertTrue(result["write"])
         self.assertEqual(result["next_a"], 55)
-        self.assertEqual(result["reason"], "scheduled_setpoint")
+        self.assertEqual(result["reason"], "initial_charge_start")
 
-    def test_only_first_minute_of_each_half_hour_and_one_possible_command(self):
+    def test_rolling_interval_has_no_half_hour_or_first_minute_restriction(self):
         t = snapshot()["now_ts"]
-        for delta, ready in ((0, True), (59.99, True), (60, False), (1799, False), (1800, True)):
-            self.assertEqual(dispatch_ready(t+delta, None, None), ready)
-        self.assertFalse(dispatch_ready(t+10, t, None))
-        self.assertFalse(dispatch_ready(t+1800, t+1790, None))
-        self.assertFalse(dispatch_ready(t, t+1, None))
+        for delta in (0, 59.99, 60, 599, 600, 1799, 1800):
+            self.assertTrue(dispatch_ready(t+delta, None, None, None))
+        self.assertFalse(dispatch_ready(t+599, t, None, t))
+        self.assertTrue(dispatch_ready(t+600, t, None, t))
+        self.assertFalse(dispatch_ready(t+1800, t+1790, None, t))
+        self.assertFalse(dispatch_ready(t, t+1, None, None))
 
-    def test_no_ordinary_change_outside_schedule(self):
+    def test_ordinary_change_does_not_wait_for_a_wall_clock_boundary(self):
         g = snapshot()
         g["now_ts"] += 600
-        self.assertFalse(calculate_grid_charge(g)["write"])
+        g["current_policy"]["observed_at"] = g["now_ts"]
+        self.assertTrue(calculate_grid_charge(g)["write"])
 
     def test_deadband_is_ten_amps_after_quantization_and_headroom(self):
         g = snapshot(current_a=50, last_attempt_a=50, last_attempt_ts=1,

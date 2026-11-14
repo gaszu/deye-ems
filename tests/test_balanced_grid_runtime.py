@@ -117,6 +117,21 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(action == "turn_on" for _, action, _ in h.calls))
         h.advance(10)
         h.set("grid_current_number", 37, "A")
+        def observe_policy():
+            inputs = h.co._read_inputs(h.now)
+            h.co._memory["current_policy"] = runtime.update_policy(
+                h.co._grid_input(inputs, h.now, 85, False), h.co._memory["current_policy"])
+        observe_policy()
+        settled = await drive(h)
+        self.assertTrue(settled["setting_settled"])
+        self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "off")
+        for _ in range(11):
+            h.advance(10)
+            observe_policy()
+            await drive(h)
+            self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "off")
+        h.advance(10)
+        observe_policy()
         await drive(h)
         self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "on")
 

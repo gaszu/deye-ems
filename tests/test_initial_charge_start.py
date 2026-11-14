@@ -134,7 +134,7 @@ class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))
         self.assertEqual(h.current_calls(), [])
 
-    async def test_legacy_zero_does_not_autogrant_on_active_restore_but_explicit_activation_can(self):
+    async def test_legacy_zero_and_explicit_activation_cannot_bypass_rolling_interval(self):
         h = setup()
         legacy_zero(h)
         await h.co._save()
@@ -146,6 +146,10 @@ class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))
         h.co._memory["mode"] = "shadow"
         await h.co.async_set_mode("active")
+        self.assertEqual(h.current_calls(), [])
+        h.advance(170)  # 300 before restart +130 observed +170 =600 since legacy upper bound.
+        stable(h)
+        await h.tick()
         self.assertTrue(h.current_calls())
         self.assertTrue(h.store.saved["initial_charge_window"]["spent"])
         h.advance(10)
@@ -192,7 +196,7 @@ class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
                 self.assertNotEqual(h.co._memory["initial_charge_window"].get("spent"), True)
 
     async def test_corrupt_future_or_wrong_scope_marker_fails_closed(self):
-        for change in ("future", "deadline", "bad_type"):
+        for change in ("future", "deadline", "bad_type", "nonnumeric_time"):
             with self.subTest(change=change):
                 h = setup()
                 record = {"version": 1, "deadline": h.co._window(h.now)[3].isoformat(),
@@ -201,8 +205,10 @@ class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
                     record["at"] += 1
                 elif change == "deadline":
                     record["deadline"] = (h.now+timedelta(days=2)).isoformat()
-                else:
+                elif change == "bad_type":
                     record["spent"] = "false"
+                else:
+                    record["at"] = "1"
                 h.co._memory["initial_charge_window"] = record
                 self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))
                 self.assertEqual(h.current_calls(), [])

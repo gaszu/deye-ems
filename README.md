@@ -4,7 +4,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.1.3
+## Instalacja wersji 2.1.4
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -12,17 +12,17 @@ Domyślny profil baterii odczytuje dane z Deye. YamBMS jest opcją; można też 
 
 Czysta instalacja nie ma skonfigurowanych dodatkowych odbiorników. Pompę ciepła, CWU czy klimatyzację dodaje się samodzielnie w panelu. Sekcja „Źródła danych” pozwala ustawić prefiks encji Deye oraz sprawdzić i zapisać przypisania w obserwacji.
 
-Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcześniejszy termin korekty zamiast ogólnego komunikatu o :00/:30. Termin zależy od aktualnych warunków i nie gwarantuje rozpoczęcia ładowania. Limity, rezerwa SoC i sterowanie pozostają zachowane.
+Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcześniejszy termin korekty z uwzględnieniem minimalnego odstępu między zwykłymi dodatnimi nastawami. Termin zależy od aktualnych warunków i nie gwarantuje rozpoczęcia ładowania. Limity, rezerwa SoC i sterowanie pozostają zachowane.
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.1.3** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v2.1.4** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
 
-Alternatywnie pobierz [deye-ems-2.1.3.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.3/deye-ems-2.1.3.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.3.md).
+Alternatywnie pobierz [deye-ems-2.1.4.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.4/deye-ems-2.1.4.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.4.md).
 
 ## Plan baterii w kartach
 
@@ -44,7 +44,7 @@ Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połącze
 
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.3 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.4 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
 
@@ -104,7 +104,7 @@ Silnik tworzy deterministyczną projekcję bilansu energii na 48 h. Zimą wyznac
 
 Regulator uwzględnia świeżość i jednostki pomiarów, GRID/LOAD łącznie i na fazach, napięcie baterii oraz ograniczenia BMS i falownika. Model rozkładu fazowego zależy od potwierdzonych ustawień urządzenia; brak potwierdzenia wybiera wariant zachowawczy. Limity importu i mocy konwersji są kontrolowane osobno. EMS nie przełącza automatycznie trybów falownika.
 
-Zwykłe nastawy prądu są wyliczane bez rampy20A i wysyłane o :00/:30, w pierwszej minucie bloku. Korekta wymaga10A, nastawa jest zaokrąglana do5A w granicach bezpieczeństwa. Bezpieczny start z zera może użyć1–4A. Od 1.0.17 pierwszy start w tanim oknie może odbyć się w dowolnej minucie po120s stabilnych obserwacji; uprawnienie jest trwałe i jednorazowe dla całego okna. Po osiągnięciu celu ponowny start wymaga spadku SoC o2p.p., a po ograniczeniu wymagane są120s stabilnych obserwacji i dopuszczony termin zapisu. Zwiększenia muszą zmieścić się w aktualnym zapasie GRID oraz limitach LOAD, falownika i BMS. Ochrony i zakończenie ładowania mogą wymagać natychmiastowej redukcji. Restart ani opóźniony odczyt nie kasują przerwy między możliwymi wysłanymi poleceniami. Próba polecenia jest zapisywana przed usługą; przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
+Od 2.1.4 zwykłe dodatnie nastawy prądu mogą zostać wysłane nie wcześniej niż po 600 s od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Dotyczy to startu z zera oraz korekt; nie trzeba trafić w pierwszą minutę :00/:30. Regulator wylicza prąd bez rampy 20 A, zaokrągla nastawę do 5 A i wymaga korekty co najmniej 10 A. Bezpieczny start z zera może użyć 1–4 A. Redukcje ochronne i wyłączenie działają od razu i nie odnawiają ani nie przesuwają historii zwykłych dodatnich nastaw. Jednorazowe uprawnienie pierwszego startu w tanim oknie pozostaje trwałe; nie jest zwracane po zerowaniu i nie omija odstępu 600 s. Po ograniczeniu wymagane są 120 s ciągłych poprawnych obserwacji, a po osiągnięciu celu także dotychczasowa histereza SoC. Nadal obowiązują 120 s od ostatniego możliwego polecenia i 60 s od pewnego niewysłania. Bieżący odczyt nastawy, GRID/LOAD, BMS, potrzeba ładowania i pozostałe ograniczenia są ponownie sprawdzane bezpośrednio przed usługą. Restart ani niejednoznaczny wynik nie kasują historii; brak wiarygodnej historii blokuje dodatnią nastawę. Podany termin jest najwcześniejszą możliwością, nie obietnicą polecenia. Przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
 
 Od wersji 1.0.13 EMS odczytuje ogólny **Maximum Battery Charge Current** Deye i wyznacza `floor(0,95 × prąd Deye)`. Oddzielna encja **Maximum Battery Grid Charge Current** jest nastawą sterowaną przez EMS; nie służy do wyznaczania własnego limitu. Dawny stały parametr 108 A nie uczestniczy już w obliczeniach i jego encja number jest wyłączana bez usuwania historii. Nowy sensor i panel pokazują automatyczny limit. Brak poprawnego odczytu blokuje ładowanie zamiast przywracać 108 A.
 
@@ -114,7 +114,7 @@ Od wersji 1.0.15 prognoza nie używa ręcznego „Modelowego limitu ładowania�
 
 Dawna wartość `charge_max_kw` pozostaje zachowana w zapisanej konfiguracji dla możliwości powrotu, ale nie wpływa na obliczenia. Jej encja number jest wyłączana przez integrację z zachowaniem historii. Parametr modelowego rozładowania pozostaje osobny.
 
-Od 1.0.16 również bieżący regulator odejmuje oszacowaną nadwyżkę PV/lokalnego DC od potrzebnego tempa doładowania z sieci. Używa rzeczywistej mocy baterii i natywnego portu GRID, po uwzględnieniu zasilania domu; nie odejmuje całej produkcji PV ani importu CT. Szacunek jest zachowawczy, z tolerancją 200 W, i nie jest dokładnym licznikiem udziału źródeł. Panel pokazuje go obok pozostałej potrzeby ładowania po stronie baterii. Pokrycie całej potrzeby przez PV wyłącza doładowanie sieciowe bez oznaczania celu SoC jako osiągniętego. Zwykłe korekty zachowują terminy :00/:30, a ograniczenia i wyłączenie ładowania działają natychmiastowo. Przy SoC poniżej rezerwy maksymalizowane jest bezpieczne ładowanie łączne, z PV pomniejszającym udział sieci.
+Od 1.0.16 również bieżący regulator odejmuje oszacowaną nadwyżkę PV/lokalnego DC od potrzebnego tempa doładowania z sieci. Używa rzeczywistej mocy baterii i natywnego portu GRID, po uwzględnieniu zasilania domu; nie odejmuje całej produkcji PV ani importu CT. Szacunek jest zachowawczy, z tolerancją 200 W, i nie jest dokładnym licznikiem udziału źródeł. Panel pokazuje go obok pozostałej potrzeby ładowania po stronie baterii. Pokrycie całej potrzeby przez PV wyłącza doładowanie sieciowe bez oznaczania celu SoC jako osiągniętego. Zwykłe dodatnie korekty zachowują co najmniej 600 s odstępu, a ograniczenia i wyłączenie ładowania działają natychmiastowo. Przy SoC poniżej rezerwy maksymalizowane jest bezpieczne ładowanie łączne, z PV pomniejszającym udział sieci.
 
 Chronione okno wyłącza doładowanie baterii z sieci; nie oznacza twardego zerowania CT. Przy dużym odbiorniku między CT a GRID falownik może pokrywać część jego zużycia w granicach dostępnej mocy PV/baterii i rezerwy SoC, a pozostała moc płynie bezpośrednio z sieci. Moc falownika jest wspólna z LOAD. Taki import CT nie jest sam w sobie ładowaniem baterii ani przekroczeniem mocy portu GRID.
 

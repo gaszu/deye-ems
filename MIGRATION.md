@@ -1,5 +1,13 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.4
+
+Aktualizacja zastępuje bramkę pierwszej minuty :00/:30 kroczącym minimum 600 s między możliwie wysłanymi zwykłymi dodatnimi nastawami. Dotyczy startu z zera i niezerowych korekt. Redukcje ochronne oraz wyłączenie pozostają natychmiastowe. Uprawnienie pierwszego startu nie jest zwracane ani używane do ominięcia odstępu; aktualne pomiary, odczyt nastawy, stabilność, taryfa, plan i ograniczenia nadal są wymagane.
+
+Zachowaj prywatną kopię ustawień i runtime bez danych dostępu oraz ZIP 2.1.3. Nie usuwaj rejestru poleceń, aby wymusić ładowanie. Przy nieznanej lub niejednoznacznej historii dodatkowe polecenie pozostaje zablokowane; przygotowana próba po awarii jest traktowana zachowawczo jako możliwie wysłana. Po instalacji sprawdź konfigurację, wymagany restart, załadowaną wersję silnika i panelu, oryginalne ustawienia oraz rzeczywisty tryb. Najwcześniejszy termin w panelu nie jest obietnicą uruchomienia; usługę, nastawę i fizyczny przepływ sprawdzaj osobno.
+
+**Powrót do 2.1.3:** zachowaj wpis konfiguracji i runtime, zainstaluj poprzedni ZIP, sprawdź konfigurację i uruchom HA ponownie. Przywrócony zostaje starszy harmonogram :00/:30, więc może powrócić oczekiwanie po przegapionym terminie. Zweryfikuj historię poleceń, źródła, pomiary, plan i tryb przed wznowieniem dotychczasowej pracy. Nie kasuj historii ani nie zmieniaj zabezpieczeń w celu ominięcia blokady.
+
 ## Przejście na 2.1.3
 
 Aktualizacja poprawia wyłącznie sposób datowania natywnych raportów ESPHome i odpowiadający mu opis diagnostyki. Najnowszy raport wyznacza wiek bieżącej wartości; starszy raport nadal osobno potwierdza poprawną parę z jednej sesji. Dotychczasowe limity wieku, zgodności czasowej i warunki wznowienia pozostają skuteczne. Po rozłączeniu, zmianie przypisania lub przerwie w raportach przekraczającej limit wieku wymagana jest nowa para; świeży odbiór nie dowodzi chwili pomiaru Modbus ani reakcji falownika.

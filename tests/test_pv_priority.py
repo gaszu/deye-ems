@@ -200,7 +200,7 @@ class PVPriority(unittest.TestCase):
         self.assertTrue(blocked["write"])
         self.assertEqual(blocked["reason"], "window_or_policy_blocked")
 
-    def test_partial_pv_correction_keeps_schedule_and_covering_need_does_not_latch_soc(self):
+    def test_partial_pv_correction_keeps_rolling_interval_and_covering_need_does_not_latch_soc(self):
         from test_scheduled_current import snapshot as scheduled_snapshot
         from test_scheduled_current import calculate_grid_charge as scheduled_calculate, update_policy
         g = scheduled_snapshot(capacity_kwh=100, soc=50, target_soc=69,
@@ -213,7 +213,12 @@ class PVPriority(unittest.TestCase):
         on_boundary = scheduled_calculate(g)
         self.assertTrue(on_boundary["write"])
         self.assertEqual(on_boundary["next_a"], 35)
+        # A pure proposal does not write the journal. Represent the possible
+        # dispatch explicitly before checking the next ordinary opportunity.
+        g.update(ordinary_last_positive_possible_ts=g["now_ts"],
+                 ordinary_last_possible_ts=g["now_ts"], last_attempt_ts=g["now_ts"], last_attempt_a=35)
         g["now_ts"] += 120
+        g["current_policy"]["observed_at"] = g["now_ts"]
         held = scheduled_calculate(g)
         self.assertFalse(held["write"])
         self.assertEqual(held["reason"], "scheduled_hold")
