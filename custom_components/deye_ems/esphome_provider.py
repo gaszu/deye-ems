@@ -484,8 +484,11 @@ class ESPHomeProviderAdapter:
                 return False
         proof = self._collector.effective_report(entity_id, state, now, validation)
         reported = proof.get("reported_at") if isinstance(proof, Mapping) else None
+        confirmed = proof.get("confirmed_at") if isinstance(proof, Mapping) else None
         if (isinstance(reported, datetime) and reported.tzinfo is not None
-                and after < reported <= now and (now - reported).total_seconds() <= validation["age"]):
+                and isinstance(confirmed, datetime) and confirmed.tzinfo is not None
+                and after < confirmed <= reported <= now
+                and (now - confirmed).total_seconds() <= validation["age"]):
             self._gated_after.pop(entity_id, None)
             return False
         return True

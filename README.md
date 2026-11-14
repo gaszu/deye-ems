@@ -4,7 +4,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.1.2
+## Instalacja wersji 2.1.3
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -17,12 +17,12 @@ Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcze
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.1.2** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v2.1.3** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
 
-Alternatywnie pobierz [deye-ems-2.1.2.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.2/deye-ems-2.1.2.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.2.md).
+Alternatywnie pobierz [deye-ems-2.1.3.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.3/deye-ems-2.1.3.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.3.md).
 
 ## Plan baterii w kartach
 
@@ -40,11 +40,11 @@ Ustawienia szczegółowe pozostają rozwinięte podczas odświeżania danych i z
 
 Panel pokazuje nieprawidłowe źródła wraz z encją, odczytem, jednostką, czasem raportu, wiekiem i dopuszczalnym limitem. Prawidłowe źródła można rozwinąć. Wskazówki ESPHome są ograniczone do encji tej platformy; nie zmieniają progów bezpieczeństwa. Przy nieaktualnym całym stanie EMS szczegóły nie są przedstawiane jako bieżące.
 
-Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połączenie tylko do odczytu z urządzeniem ESPHome. Pomaga to przy identycznych wartościach, których kolejne raporty pomija integracja źródłowa HA. Wymagane są dwa poprawne pakiety zgodne z identyfikatorem urządzenia i encji oraz jednostką i wartością HA. Diagnostyka rozdziela czas raportu HA od wcześniejszego z dwóch czasów odbioru przez EMS. To dowód odbioru raportu, nie chwili pomiaru Modbus. Rozłączenie i zmiana przypisań kasują dowody. Utrata oryginalnego połączenia HA zamyka również klienta EMS. Firmware nie wymaga zmian; urządzenie musi mieć miejsce na dodatkowe połączenie API.
+Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połączenie tylko do odczytu z urządzeniem ESPHome. Pomaga to przy identycznych wartościach, których kolejne raporty pomija integracja źródłowa HA. Wymagane są dwa poprawne pakiety z jednej sesji i aktualnego przypisania urządzenia, encji oraz jednostki; najnowszy musi zgadzać się z wartością HA. Od 2.1.3 świeżość danych i zgodność czasowa korzystają z odbioru najnowszego raportu (`reported_at`), a wcześniejszy odbiór potwierdzający parę (`confirmed_at`) jest sprawdzany osobno. Oba pakiety muszą mieścić się w niezmienionym limicie wieku źródła: 30 s dla mocy i 120 s dla napięcia. Przerwa przekraczająca limit, cofnięcie czasu, nowe połączenie lub zmiana przypisania wymagają nowej poprawnej pary. Diagnostyka nadal odróżnia znacznik HA od odbioru przez EMS. To dowód odbioru raportu, nie chwili pomiaru Modbus. Rozłączenie i zmiana przypisań kasują dowody. Utrata oryginalnego połączenia HA zamyka również klienta EMS. Firmware nie wymaga zmian; urządzenie musi mieć miejsce na dodatkowe połączenie API.
 
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.2 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.3 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
 

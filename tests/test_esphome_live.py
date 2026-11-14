@@ -147,7 +147,7 @@ class LiveReports(unittest.IsolatedAsyncioTestCase):
         self.fixtures.append(fixture)
         return fixture
 
-    async def test_initial_snapshot_never_grants_freshness_two_reports_use_older_receipt(self):
+    async def test_initial_snapshot_never_grants_freshness_two_reports_date_latest_value(self):
         f = self.fixture()
         await f.configure()
         first_at = f.now
@@ -155,10 +155,11 @@ class LiveReports(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(f.report())
         f.now += timedelta(seconds=5)
         f.emit()
-        self.assertEqual(f.report(), {"reported_at": first_at, "source": "esphome_live", "samples": 2})
+        self.assertEqual(f.report(), {"reported_at": f.now, "confirmed_at": first_at,
+                                     "source": "esphome_live", "samples": 2})
         self.assertEqual(f.clients[0].subscribes, 1)
 
-    async def test_unchanged_real_reports_advance_conservative_receipt_without_state_write(self):
+    async def test_unchanged_real_reports_date_latest_receipt_without_state_write(self):
         f = self.fixture()
         await f.configure()
         state = f.ha_state()
@@ -170,9 +171,59 @@ class LiveReports(unittest.IsolatedAsyncioTestCase):
         f.now += timedelta(seconds=5)
         f.emit()
         report = f.report(state)
-        self.assertEqual(report["reported_at"], second_at)
+        self.assertEqual(report["reported_at"], f.now)
+        self.assertEqual(report["confirmed_at"], second_at)
         self.assertEqual(state.last_reported, old_stamp)
         self.assertEqual(state.state, "54.0")
+
+    async def test_both_power_receipts_expire_at_unchanged_thirty_second_limit(self):
+        f = self.fixture()
+        f.validation["age"] = 30
+        await f.configure()
+        f.emit()
+        f.now += timedelta(seconds=10.5)
+        f.emit()
+        f.now += timedelta(seconds=19.5)
+        self.assertIsNotNone(f.report())
+        f.now += timedelta(microseconds=1)
+        self.assertIsNone(f.report())
+        # A recent latest packet cannot disguise the expired confirmation.
+        self.assertEqual(f.cache.status["ready_entity_count"], 0)
+
+    async def test_gap_or_backwards_clock_requires_two_new_packet_callbacks(self):
+        for elapsed in (30.000001, -1):
+            with self.subTest(elapsed=elapsed):
+                f = self.fixture()
+                f.validation["age"] = 30
+                await f.configure()
+                f.emit(); f.emit()
+                self.assertIsNotNone(f.report())
+                f.now += timedelta(seconds=elapsed)
+                f.emit()
+                self.assertIsNone(f.report())
+                f.now += timedelta(seconds=1)
+                f.emit()
+                self.assertIsNotNone(f.report())
+
+    async def test_distinct_packet_callbacks_can_share_actual_receipt_timestamp(self):
+        f = self.fixture()
+        await f.configure()
+        f.emit()
+        self.assertIsNone(f.report())
+        f.emit()
+        proof = f.report()
+        self.assertEqual(proof["confirmed_at"], f.now)
+        self.assertEqual(proof["reported_at"], f.now)
+
+    async def test_invalid_or_missing_age_cannot_grant_proof(self):
+        f = self.fixture()
+        await f.configure()
+        for age in (None, 0, -1, True, "30", float("nan"), float("inf")):
+            with self.subTest(age=age):
+                f.emit(); f.emit()
+                self.assertIsNone(f.report(validation={**f.validation, "age": age}))
+        f.emit(); f.emit()
+        self.assertIsNotNone(f.report())
 
     async def test_invalid_missing_nan_and_out_of_range_reset_pair(self):
         f = self.fixture()

@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-2";
-const PANEL_VERSION = "2.1.2";
+const PANEL_TAG = "deye-ems-panel-2-1-3";
+const PANEL_VERSION = "2.1.3";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -236,7 +236,7 @@ class DeyeEMSPanel extends HTMLElement {
     const statuses={ready:coherent&&connected>0&&verified>0?"Odbiór raportów działa.":"Oczekiwanie na potwierdzenie odbioru raportów.",warming_up:"Oczekiwanie na kolejne zgodne raporty.",connecting:"Łączenie ze źródłem ESPHome.",not_applicable:"Dla tych przypisań nie jest używany dodatkowy odbiór ESPHome; obowiązują znaczniki HA.",unavailable:"Dodatkowy odbiór ESPHome jest niedostępny; obowiązują pierwotne kontrole znaczników HA."};
     const status=Object.hasOwn(statuses,stream.status)?statuses[stream.status]:"Brak potwierdzonego statusu odbioru raportów.";
     return heading+'<p role="status">'+esc(status)+'</p><p>Połączenia: '+num(connected,0)+' / '+num(providers,0)+' · przypisane źródła: '+num(bindings,0)+' · źródła z potwierdzonym odbiorem: '+num(verified,0)+'.</p>'+
-      '<p class="legend">EMS korzysta z dodatkowego połączenia tylko do odczytu, używając konfiguracji ESPHome zapisanej w HA. Nie wymaga zmian firmware ani nie zapisuje stanów encji. Pierwszy stan po połączeniu może pochodzić z pamięci urządzenia i nie wystarcza do potwierdzenia; potrzebne są dwa kolejne zgodne raporty. EMS używa zachowawczo starszego czasu ich odbioru. Czas oznacza odbiór raportu przez EMS, nie czas odczytu Modbus. Odbiór raportów sam nie włącza sterowania.</p></div>';
+      '<p class="legend">EMS korzysta z dodatkowego połączenia tylko do odczytu, używając konfiguracji ESPHome zapisanej w HA. Nie wymaga zmian firmware ani nie zapisuje stanów encji. Pierwszy stan po połączeniu może pochodzić z pamięci urządzenia i nie wystarcza do potwierdzenia; potrzebne są dwa poprawne raporty z tej samej sesji i aktualnego przypisania. Najnowszy raport musi zgadzać się z wartością HA. Świeżość danych i zgodność czasowa używają czasu odbioru najnowszego raportu. Starszy czas potwierdzenia pary jest sprawdzany oddzielnie. Oba raporty muszą być świeże w dotychczasowym limicie źródła: 30 s dla mocy i 120 s dla napięcia. Czas oznacza odbiór raportu przez EMS, nie czas odczytu Modbus. Odbiór raportów sam nie włącza sterowania.</p></div>';
   }
   telemetryDiagnosticStage(){
     return [this.snapshotFresh(),this.payload?.data?.inputs?.telemetry_valid,this.telemetryExpanded,

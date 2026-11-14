@@ -1,3 +1,14 @@
+# Wersja 2.1.3 — datowanie aktualnych raportów ESPHome
+
+**813 testów Python i 222 testy panelu PASS** w pełnym sprawdzeniu offline.
+
+- Dwa poprawne raporty jednej sesji: bieżącą wartość datuje najnowszy odbiór, wcześniejszy `confirmed_at` zachowuje osobną walidację wieku i zdarzenia. Testy rozróżniają odbiór od oryginalnego znacznika HA oraz od chwili akwizycji Modbus.
+- Kontrole odrzucenia niepełnej lub starej pary, przerwy przekraczającej limit, cofnięcia zegara i błędnych znaczników pozostają wymagane; po rozłączeniu lub zmianie przypisania dowód powstaje od nowa.
+- Regulator, planer, taryfy i progi nie są zmieniane tą poprawką. Zachowano brak wartości zamiast podstawiania zera lub starych odczytów.
+- Wersje silnika, panelu i podglądu są zgodne z 2.1.3. Renderowanie i style panelu pozostają identyczne z 2.1.2; zmieniony jest wyłącznie opis czasu raportów. Dotychczasowy syntetyczny obraz podglądu jest przypisany do wersji 2.1.2.
+
+Zakres: rozdzielenie najnowszego odbioru wartości (`reported_at`) od wcześniejszego potwierdzenia pary (`confirmed_at`) oraz zgodny opis panelu. Wymaganie dwóch poprawnych raportów jednej sesji, dotychczasowe limity wieku i zgodności czasowej, unieważnianie dowodów oraz walidacja po zdarzeniu pozostają wymagane. Testy używają danych syntetycznych; nie stanowią fizycznego testu ładowania ani pomiaru chwili akwizycji Modbus. Historia wcześniejszych wydań poniżej opisuje ich ówczesne zachowanie.
+
 # Wersja 2.1.2 — spójny nagłówek i działania aktualizacji
 
 **222 istniejące testy panelu i 18 testów instalowalności PASS** w sprawdzeniu offline. Samodzielny ZIP jest budowany przez build_release.py i porównywany ze źródłami.

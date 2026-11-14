@@ -22,8 +22,8 @@ class Bus:
 
 
 class NativeFixture:
-    def __init__(self):
-        self.h = Harness()
+    def __init__(self, *, options=None):
+        self.h = Harness(options=options)
         self.entry = Entry()
         self.clients = []
         self.backoff = Backoff()
@@ -89,8 +89,8 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
         for fixture in self.fixtures:
             await fixture.h.co.async_shutdown()
 
-    async def fixture(self):
-        fixture = NativeFixture()
+    async def fixture(self, **kwargs):
+        fixture = NativeFixture(**kwargs)
         self.fixtures.append(fixture)
         await fixture.start()
         return fixture
@@ -104,7 +104,6 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
         f.emit("voltage")
         self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
-        first = h.now
         h.now += timedelta(seconds=1)
         f.emit("voltage")
         inputs = h.co._read_inputs(h.now)
@@ -112,8 +111,8 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(inputs["voltage"], 54)
         row = next(row for row in inputs["telemetry_details"] if row["source"] == "voltage")
         self.assertEqual((row["timestamp_source"], row["age_seconds"], row["ha_age_seconds"], row["stream_samples"]),
-                         ("esphome_live", 1, 176, 2))
-        self.assertEqual(h.co._state("voltage").last_reported, first)
+                         ("esphome_live", 0, 176, 2))
+        self.assertEqual(h.co._state("voltage").last_reported, h.now)
         self.assertIs(h.states[h.co._sources["voltage"]], original)
         self.assertEqual(original.last_reported, original_stamp)
         self.assertEqual(h.calls, [])
@@ -184,6 +183,124 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
         row = next(row for row in inputs["telemetry_details"] if row["source"] == "charge_power")
         self.assertEqual((row["observed_time_skew_seconds"], row["max_time_skew_seconds"]), (15, 10))
         self.assertEqual(h.calls, [])
+
+    async def test_mixed_changing_ha_and_constant_native_powers_need_120_stable_seconds(self):
+        for older_epoch in (True, False):
+            with self.subTest(older_epoch=older_epoch):
+                f = await self.fixture(options={"topology": "load_with_external_ct"})
+                h = f.h
+                h.now = h.now.replace(minute=7)
+                h.advance(0)
+                h.set("work_mode", "Zero Export To CT")
+                h.set("battery_power", 0, "W")
+                h.set("ct_grid_power", 2400, "W")
+                for phase in (1, 2, 3):
+                    h.set(f"ct_grid_l{phase}_power", 800, "W")
+                await h.tick()  # Observe the CT context before explicit activation.
+                h.active()
+                h.co._memory["current_policy"] = {}
+                start = h.now
+                for key, check in h.co._native_stream_checks().items():
+                    old = h.states[h.co._sources[key]]
+                    h.set(key, float(old.state), check["unit"], age=175)
+
+                actual_report = f.cache.effective_report
+
+                def report(*args):
+                    proof = actual_report(*args)
+                    # Reproduce the previous epoch selection with the same
+                    # real packets, values, lifecycle and freshness checks.
+                    return {**proof, "reported_at": proof["confirmed_at"]} if proof and older_epoch else proof
+
+                with patch.object(f.cache, "effective_report", side_effect=report):
+                    first_healthy = None
+                    for cycle in range(17):
+                        h.now = start + timedelta(seconds=cycle*10.5)
+                        h.set("grid_power", 1800+3*cycle, "W")
+                        for phase in (1, 2, 3):
+                            h.set(f"grid_l{phase}_power", 600+cycle, "W")
+                        for key in h.co._native_stream_checks():
+                            f.emit(key)
+                        data = await h.tick()
+                        if data["inputs"]["telemetry_valid"] and first_healthy is None:
+                            first_healthy = h.now
+                        if older_epoch:
+                            self.assertFalse(data["inputs"]["telemetry_valid"])
+                            self.assertEqual(h.current_calls(), [])
+                        elif first_healthy is None or (h.now-first_healthy).total_seconds() < 120:
+                            self.assertFalse(any(amps > 0 for amps in h.current_calls()))
+                        else:
+                            self.assertTrue(data["inputs"]["telemetry_valid"])
+                            self.assertTrue(any(amps > 0 for amps in h.current_calls()))
+                            self.assertGreaterEqual(h.now.timestamp()-h.co._memory["current_policy"]["safe_since"], 120)
+                    if not older_epoch:
+                        self.assertIsNotNone(first_healthy)
+                        self.assertTrue(any(amps > 0 for amps in h.current_calls()))
+
+    async def test_real_native_gap_and_ct_skew_still_block_telemetry(self):
+        f = await self.fixture(options={"topology": "load_with_external_ct"})
+        h = f.h
+        h.set("work_mode", "Zero Export To CT")
+        h.set("ct_grid_power", 2400, "W")
+        for phase in (1, 2, 3):
+            h.set(f"ct_grid_l{phase}_power", 800, "W")
+        for key, check in h.co._native_stream_checks().items():
+            old = h.states[h.co._sources[key]]
+            h.set(key, float(old.state), check["unit"], age=175)
+            f.emit_twice(key)
+        self.assertTrue(h.co._read_inputs(h.now)["telemetry_valid"])
+        h.now += timedelta(seconds=10, microseconds=1)
+        for key in h.co._native_stream_checks():
+            if key != "ct_grid_l3_power":
+                f.emit(key)
+        data = h.co._read_inputs(h.now)
+        self.assertFalse(data["telemetry_valid"])
+        self.assertEqual(data["topology_error"], "invalid_ct_grid_balance")
+        # After a report gap, one matching packet cannot revive the old pair.
+        h.now += timedelta(seconds=31)
+        for key in h.co._native_stream_checks():
+            f.emit(key)
+        self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
+        for key in h.co._native_stream_checks():
+            f.emit(key)
+        self.assertTrue(h.co._read_inputs(h.now)["telemetry_valid"])
+        self.assertEqual(h.calls, [])
+
+    async def test_native_value_mismatch_does_not_freshen_old_ha_power(self):
+        f = await self.fixture()
+        h = f.h
+        h.set("battery_power", -500, "W", age=100)
+        f.emit("battery_power", -500)
+        h.now += timedelta(seconds=1)
+        f.emit("battery_power", 2500)  # A new value must not date the old PV credit.
+        inputs = h.co._read_inputs(h.now)
+        self.assertFalse(inputs["telemetry_valid"])
+        self.assertIsNone(inputs["battery_power"])
+        h.set("battery_power", 2500, "W", age=100)
+        f.emit("battery_power", 2500)
+        self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
+        f.emit("battery_power", 2500)
+        self.assertTrue(h.co._read_inputs(h.now)["telemetry_valid"])
+        self.assertEqual(h.calls, [])
+
+    async def test_native_confirmation_structure_is_checked_without_rewriting_ha(self):
+        f = await self.fixture()
+        h = f.h
+        h.set("voltage", 54, "V", age=175)
+        original = h.states[h.co._sources["voltage"]]
+        good = {"reported_at": h.now, "confirmed_at": h.now-timedelta(seconds=1),
+                "source": "esphome_live", "samples": 2}
+        for confirmation in (None, h.now+timedelta(seconds=1), h.now-timedelta(seconds=121)):
+            with self.subTest(confirmation=confirmation):
+                with patch.object(f.adapter, "effective_report", return_value={**good, "confirmed_at": confirmation}):
+                    self.assertIs(h.co._state("voltage"), original)
+                    self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
+        with patch.object(f.adapter, "effective_report", return_value=good):
+            self.assertEqual(h.co._state("voltage").last_reported, h.now)
+            h.set("voltage", 54, "V")
+            current = h.states[h.co._sources["voltage"]]
+            self.assertIs(h.co._state("voltage"), current)
+        self.assertEqual(original.last_reported, h.now-timedelta(seconds=175))
 
     async def test_number_setpoint_readback_never_uses_native_sensor_receipt(self):
         f = await self.fixture()
