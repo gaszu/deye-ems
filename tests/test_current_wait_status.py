@@ -10,7 +10,7 @@ from test_runtime import Harness, runtime
 class CurrentWaitStatus(unittest.TestCase):
     def sample(self, *, elapsed=120, started=False, **changes):
         g = snapshot()
-        g["now_ts"] += 420  # 22:07, outside the ordinary half-hour window.
+        g["now_ts"] += 420  # 22:07 proves that no wall-clock boundary is needed.
         g["initial_window_started"] = started
         g["current_policy"].update(initial_started=started, stopped=False,
             safe_since=g["now_ts"]-elapsed, observed_at=g["now_ts"])
@@ -26,11 +26,11 @@ class CurrentWaitStatus(unittest.TestCase):
         g = self.sample()
         self.assertEqual(runtime.describe_current_wait(g)["current_hold_reason"], "initial_start")
 
-    def test_spent_permission_uses_next_half_hour(self):
+    def test_spent_permission_can_resume_when_rolling_clocks_are_ready(self):
         g = self.sample(started=True)
         status = runtime.describe_current_wait(g)
-        self.assertEqual(status["current_hold_reason"], "scheduled_regular")
-        self.assertEqual(datetime.fromisoformat(status["next_current_change_at"]).minute, 30)
+        self.assertEqual(status["current_hold_reason"], "ready")
+        self.assertEqual(datetime.fromisoformat(status["next_current_change_at"]).timestamp(), g["now_ts"])
         recovering = runtime.describe_current_wait(self.sample(started=True, elapsed=60))
         self.assertEqual(recovering["current_hold_reason"], "waiting_stable_measurements")
         self.assertEqual(recovering["recovery_remaining_s"], 60)
@@ -57,6 +57,7 @@ class CurrentWaitStatus(unittest.TestCase):
 
     def test_no_prediction_across_protected_tariff_deadline(self):
         g = self.sample(started=True)
+        g["ordinary_last_positive_possible_ts"] = g["now_ts"]-500
         g["policy_deadline"] = datetime.fromtimestamp(g["now_ts"]+60, runtime._TZ).isoformat()
         g["current_policy"]["deadline"] = g["policy_deadline"]
         self.assertIsNone(runtime.describe_current_wait(g)["next_current_change_at"])

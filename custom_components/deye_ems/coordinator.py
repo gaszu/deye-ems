@@ -258,10 +258,18 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 self._memory["initial_charge_window"] = {"version": 1,
                     "deadline": dispatch["positive_deadline"], "at": at,
                     "id": dispatch.get("id"), "spent": True}
-        if dispatch.get("outcome") == "prepared" and self._dispatch_history(self._now())["known"]:
+        recovery = self._dispatch_history(self._now())
+        if dispatch.get("outcome") == "prepared" and recovery["known"]:
             # A crash may have happened after a slow Store and actual dispatch.
             # An unfinished write-ahead record cannot grant an early retry.
             dispatch.update(outcome="uncertain", possible_at=self._now().timestamp())
+            ordinary_at = recovery.get("ordinary_positive_at")
+            if recovery.get("ordinary_kind") != "safety":
+                ordinary_at = self._now().timestamp()
+            self._set_ordinary_positive_history(dispatch,
+                known=recovery.get("ordinary_positive_known") is True,
+                kind=recovery.get("ordinary_kind", "legacy"), at=ordinary_at,
+                previous=recovery.get("ordinary_positive_at"))
         # A restart does not grant authority over another controller, nor does
         # a restored active mode allow writes with unavailable telemetry.
         if self.mode == "active" and self._post_save_status().get("status") in ("waiting", "checking"):
@@ -1205,6 +1213,70 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 state.state in _BAD for entity_id in writable):
             raise ValueError("Every writable source must exist and have a unique mapping")
 
+    @staticmethod
+    def _set_ordinary_positive_history(state, *, known, kind, at, previous):
+        """Keep the ordinary clock in the same write-ahead record as all writes.
+
+        The optional field is ignored by older releases. Their new writes drop
+        it, while their PREPARED recovery is detected by the bound witness.
+        """
+        state["ordinary_positive_history"] = {
+            "version": 1, "known": known, "kind": kind,
+            "possible_at": at, "previous_possible_at": previous,
+            "witness": {key: state.get(key) for key in
+                        ("id", "attempt_at", "possible_at", "possible_a", "outcome")}}
+
+    def _ordinary_positive_history(self, state, now):
+        if "ordinary_positive_history" not in state:
+            # A valid legacy zero can be later than a positive command. Using
+            # the latest ANY command is a conservative migration upper bound.
+            return {"known": True, "at": state["possible_at"], "kind": "legacy"}
+        record = state["ordinary_positive_history"]
+        def time(value):
+            return value is None or (isinstance(value, (int, float)) and not isinstance(value, bool)
+                                     and math.isfinite(value) and 0 <= value <= now.timestamp())
+        if (not isinstance(record, dict) or type(record.get("version")) is not int or record["version"] != 1
+                or not isinstance(record.get("known"), bool)
+                or record.get("kind") not in ("ordinary", "safety", "legacy")
+                or any(key not in record or not time(record[key]) for key in
+                       ("possible_at", "previous_possible_at"))):
+            return {"known": False}
+        witness = record.get("witness")
+        if (not isinstance(witness, dict) or not isinstance(witness.get("id"), str) or not witness["id"]
+                or witness.get("outcome") not in ("prepared", "accepted", "uncertain", "not_sent")
+                or witness.get("attempt_at") is None or not time(witness.get("attempt_at"))
+                or "possible_at" not in witness or not time(witness["possible_at"])
+                or "possible_a" not in witness
+                or (witness["possible_at"] is None) != (witness["possible_a"] is None)
+                or witness["possible_a"] is not None and
+                    (not isinstance(witness["possible_a"], (int, float)) or isinstance(witness["possible_a"], bool)
+                     or not math.isfinite(witness["possible_a"]) or not 0 <= witness["possible_a"] <= 1000)):
+            return {"known": False}
+        at, previous = record["possible_at"], record["previous_possible_at"]
+        if (at is not None and (witness["possible_at"] is None or at > witness["possible_at"])
+                or previous is not None and (at is None or previous > at)):
+            return {"known": False}
+        if record["known"] and (
+                record["kind"] == "ordinary" and witness["outcome"] != "not_sent" and
+                    (at != witness["possible_at"] or witness["possible_a"] is None or witness["possible_a"] <= 0)
+                or record["kind"] == "safety" and at != previous
+                or record["kind"] == "legacy" and at != witness["possible_at"]):
+            return {"known": False}
+        current = {key: state.get(key) for key in witness}
+        if current != witness:
+            # 2.1.3 can recover a newer PREPARED record without removing extra
+            # fields. Its later ANY clock must replace the old ordinary clock.
+            recovered_by_older_release = (
+                witness["outcome"] == "prepared" and state.get("outcome") == "uncertain"
+                and state.get("id") == witness["id"] and state.get("attempt_at") == witness["attempt_at"]
+                and state.get("possible_a") == witness["possible_a"]
+                and state.get("possible_at") is not None and witness["possible_at"] is not None
+                and state["possible_at"] >= witness["possible_at"])
+            if not recovered_by_older_release:
+                return {"known": False}
+            return {"known": record["known"], "at": state["possible_at"], "kind": "legacy"}
+        return {"known": record["known"], "at": at, "previous_at": previous, "kind": record["kind"]}
+
     def _dispatch_history(self, now, *, own_attempt=None):
         """Keep the last possible command separate from register readback ACK."""
         epoch = now.timestamp()
@@ -1215,12 +1287,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if state == {}:
             old = self._memory["ledger"].get(self._sources["grid_current_number"], {})
             if old == {}:
-                return {"known": True, "possible_at": None, "possible_a": None, "upper_a": None, "not_sent_at": None}
+                return {"known": True, "possible_at": None, "possible_a": None, "upper_a": None, "not_sent_at": None,
+                        "ordinary_positive_known": True, "ordinary_positive_at": None, "ordinary_kind": "legacy"}
             at, amps = (old.get("at"), old.get("a")) if isinstance(old, dict) else (None, None)
             if (isinstance(old, dict) and at is not None and valid_time(at)
                     and isinstance(amps, (int, float)) and not isinstance(amps, bool)
                     and math.isfinite(amps) and 0 <= amps <= 1000):
-                return {"known": True, "possible_at": at, "possible_a": amps, "upper_a": amps, "not_sent_at": None}
+                return {"known": True, "possible_at": at, "possible_a": amps, "upper_a": amps, "not_sent_at": None,
+                        "ordinary_positive_known": True, "ordinary_positive_at": at, "ordinary_kind": "legacy"}
             return {"known": False}
         if not isinstance(state, dict) or state.get("outcome") not in ("prepared", "accepted", "uncertain", "not_sent"):
             return {"known": False}
@@ -1239,19 +1313,24 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 (not isinstance(upper, (int, float)) or isinstance(upper, bool)
                  or not math.isfinite(upper) or not amps <= upper <= 1000)):
             return {"known": False}
+        ordinary = self._ordinary_positive_history(state, now)
         if (own_attempt is not None and state.get("id") == own_attempt["id"]
                 and state["outcome"] == "prepared" and at == state["attempt_at"]):
             at, amps = state.get("previous_possible_at"), state.get("previous_possible_a")
             upper = state.get("previous_upper_a", amps)
+            if ordinary.get("known") is True and "previous_at" in ordinary:
+                ordinary["at"] = ordinary.get("previous_at")
         return {"known": True, "possible_at": at, "possible_a": amps, "upper_a": upper,
-                "not_sent_at": state["not_sent_at"]}
+                "not_sent_at": state["not_sent_at"], "ordinary_positive_known": ordinary.get("known") is True,
+                "ordinary_positive_at": ordinary.get("at"), "ordinary_kind": ordinary.get("kind")}
 
     def _initial_record_valid(self, record, now):
         if (not isinstance(record, dict) or record.get("version") != 1
                 or not isinstance(record.get("deadline"), str)
                 or not isinstance(record.get("id"), str) or not record["id"]
                 or not isinstance(record.get("spent"), bool)
-                or _number(record.get("at")) is None
+                or not isinstance(record.get("at"), (int, float)) or isinstance(record.get("at"), bool)
+                or not math.isfinite(record["at"])
                 or not 0 <= record["at"] <= now.timestamp()):
             return False
         try:
@@ -1308,17 +1387,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return True
 
     def _ordinary_dispatch_ready(self, now, *, own_attempt=None):
+        marker = self._memory.get("initial_charge_window")
+        if marker != {} and not self._initial_record_valid(marker, now):
+            return False
         history = self._dispatch_history(now, own_attempt=own_attempt)
         if not history["known"]:
             return False
-        if dispatch_ready(now.timestamp(), history.get("possible_at"), history.get("not_sent_at")):
-            return True
-        inputs = self._read_inputs(now)
-        target, emergency, _ = self._target(now)
-        g = self._grid_input(inputs, now, target, emergency)
-        return (initial_dispatch_ready(g) and (own_attempt is None or
-                own_attempt.get("initial_permission") is True and
-                own_attempt.get("initial_deadline") == g["policy_deadline"]))
+        return (history.get("ordinary_positive_known") is True and
+                dispatch_ready(now.timestamp(), history.get("possible_at"), history.get("not_sent_at"),
+                               history.get("ordinary_positive_at")))
 
     async def _service(self, entity_id, action, value=None):
         if (self._soc_lower_bound() is None and entity_id != self._sources["grid_current_number"]
@@ -1405,7 +1482,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             starting["current_a"] = 0
             start_cap = calculate_grid_charge_increase_cap(starting)["increase_cap_a"]
             pending = starting["pending_current_a"]
-            if not (entity_id == self._sources[f"tou_gc_{active_slot}"] and self._slot_charge_eligible(now, active_slot)
+            if not (starting["ordinary_history_known"] and self._current_policy_stable(now) and
+                    entity_id == self._sources[f"tou_gc_{active_slot}"] and self._slot_charge_eligible(now, active_slot)
                     and allowed and self._hardware_modes_ok() and self._clocks_ok(now) and inputs["soc_valid"]
                     and inputs["soc"] < target and
                     live_need > 0 and requested <= rounded_need and
@@ -1482,6 +1560,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "initial_deadline": current_attempt.get("initial_deadline"),
                 "positive_deadline": current_attempt.get("positive_deadline"),
                 "not_sent_at": previous.get("not_sent_at")}
+            self._set_ordinary_positive_history(self._memory["grid_dispatch"],
+                known=previous.get("known") is True and previous.get("ordinary_positive_known") is True,
+                kind="ordinary" if current_attempt["ordinary"] else "safety",
+                at=now_ts if current_attempt["ordinary"] else previous.get("ordinary_positive_at"),
+                previous=previous.get("ordinary_positive_at"))
             current_attempt.update(prepared=True, prepared_at=now_ts)
         self._memory["ledger"][entity_id] = {"at": now_ts, "a": value, "action": action}
         try:
@@ -1545,6 +1628,13 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                              unconfirmed_upper_a=context["previous"].get("upper_a"), not_sent_at=self._now().timestamp())
             else:
                 state.update(possible_at=context["dispatch_at"], possible_a=value)
+            previous_ordinary = context["previous"].get("ordinary_positive_at")
+            self._set_ordinary_positive_history(state,
+                known=context["previous"].get("known") is True and
+                      context["previous"].get("ordinary_positive_known") is True,
+                kind="ordinary" if context["ordinary"] else "safety",
+                at=context["dispatch_at"] if context["ordinary"] and context["outcome"] != "not_sent"
+                   else previous_ordinary, previous=previous_ordinary)
             try:
                 await self._save()
             except Exception:
@@ -1687,6 +1777,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         charging = (gc is not None and gc.state == "on" and not gc.attributes.get("restored", False)
                     and gc_report is not None and gc_report <= now.timestamp() and inputs["telemetry_valid"])
         initial_started = self._initial_window_started(now)
+        marker = self._memory.get("initial_charge_window")
+        marker_valid = marker == {} or self._initial_record_valid(marker, now)
         policy = {**self._memory["current_policy"], "initial_started": initial_started}
         remaining = (deadline.timestamp() - now.timestamp()) / 3600
         if self._real_tariff():
@@ -1701,8 +1793,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "policy_deadline": deadline.isoformat(),
                 "current_policy": policy, "initial_window_started": initial_started,
                 "hardware_ok": self._hardware_modes_ok() and self._tariff_control_ok(now),
-                "ordinary_history_known": history["known"],
+                "ordinary_history_known": history["known"] and history.get("ordinary_positive_known") is True and marker_valid,
                 "ordinary_last_possible_ts": history.get("possible_at"),
+                "ordinary_last_positive_possible_ts": history.get("ordinary_positive_at"),
                 "ordinary_last_not_sent_ts": history.get("not_sent_at"),
                 "pending_current_a": None if confirmed else history.get("upper_a"),
                 "grid_charge_active": bool(charging),
@@ -1869,19 +1962,23 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         pending_a = observed_grid["pending_current_a"]
         potential_hard_safe = pending_a is None or pending_a <= cap["hard_current_cap_a"]
         potential_plan_safe = pending_a is None or pending_a <= cap["cap_a"]
-        ready = (ready and observed_need > 0 and control.get("next_a", 0) <= observed_rounded_need
+        ready = (ready and observed_grid["ordinary_history_known"] and
+                 observed_need > 0 and control.get("next_a", 0) <= observed_rounded_need
                  and cap["grid_within_limits"] and observed["soc_valid"]
                  and not self._memory["current_policy"].get("stopped", True)
                  and potential_hard_safe and potential_plan_safe
                  and observed["soc"] < target and observed["current_a"] is not None
                  and 0 < observed["current_a"] <= cap["hard_current_cap_a"]
                  and 0 < control.get("next_a", 0) <= cap["cap_a"])
+        readback_ready = ready
+        ready = ready and self._current_policy_stable(self._now())
         pending_reduction = self._pending_reduction_ok(
             observed, self._now(), control.get("next_a", 0), cap)
         # A safe current ramp must not pulse an already enabled charger OFF for
         # ten seconds every thirty seconds. Initial enabling still requires the
         # exact requested setting to settle; continuing is a separate decision.
-        continuing = (active_gc is not None and active_gc.state == "on" and permitted and observed_need > 0 and
+        continuing = (observed_grid["ordinary_history_known"] and
+                      active_gc is not None and active_gc.state == "on" and permitted and observed_need > 0 and
                       not self._memory["current_policy"].get("stopped", True) and
                       potential_hard_safe and
                       observed["telemetry_valid"] and observed["soc_valid"] and
@@ -1894,12 +1991,12 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                       self._hardware_modes_ok() and self._clocks_ok(self._now()))
         for slot in range(1, 7):
             await self._gc(slot, bool((ready or continuing) and permitted and slot == active_slot and self._slot_charge_eligible(self._now(), slot)))
-        control["setting_settled"] = bool(ready)
+        control["setting_settled"] = bool(readback_ready)
         control["reduction_pending"] = pending_reduction
         control["actual_battery_w"] = observed["battery_power"]
         control["read_setting_a"] = observed["current_a"]
         control.update(describe_current_wait(observed_grid))
-        if permitted and control.get("next_a", 0) > 0 and not ready:
+        if permitted and control.get("next_a", 0) > 0 and not readback_ready:
             control["runtime_reason"] = "waiting_setting_readback"
 
     async def _recorder_statistics(self, now, load_entity, pc_entity):

@@ -1,3 +1,14 @@
+# Wersja 2.1.4 — kroczący odstęp zwykłych dodatnich nastaw
+
+**827 testów Python i 222 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Niezależny przegląd bezpieczeństwa zakończony bez blokerów.
+
+- Kroczące 600 s obejmuje start z zera i niezerowe zwykłe dodatnie korekty; przypadki tuż przed i po upływie odstępu oraz poza :00/:30 są rozdzielone od natychmiastowych redukcji ochronnych i zerowania.
+- Trwała historia zachowuje możliwe wysłania po awarii i niepewnym wyniku oraz wcześniejszy dowód przy pewnym niewysłaniu. Nieznane lub uszkodzone dane nie tworzą fikcyjnej zgody; jednorazowe uprawnienie startu nie omija 600 s i nie jest zwracane przez zero.
+- Kontrola ostatniej chwili po zapisie próby nadal wymaga poprawnego odczytu nastawy, zgody GC, pomiarów, potrzeby ładowania i dotychczasowych ograniczeń. Zachowano stabilizację 120 s, przerwy 120/60 s oraz limity świeżości i zgodności czasowej.
+- Panel korzysta z terminu backendu, w tym niepółgodzinnego przykładu, i nie obiecuje wysłania co 10 minut. Style, wygląd, obsługa formularzy oraz niezwiązane limity API pozostają zachowane.
+
+Zakres obejmuje minimum 600 s między zwykłymi dodatnimi nastawami, trwałą historię ich prób, zgodny opis panelu i metadane wydania. Redukcje ochronne, zerowanie, świeżość i zgodność czasowa, stabilizacja, odczyt nastawy, BMS oraz dotychczasowe przerwy po możliwej lub pewnej niewysłanej próbie pozostają wymagane. Publiczne testy i przykłady są syntetyczne; nie dowodzą przyjęcia polecenia, odczytu rejestru ani fizycznego ładowania konkretnej instalacji. Historia wcześniejszych wydań poniżej opisuje ich ówczesną politykę.
+
 # Wersja 2.1.3 — datowanie aktualnych raportów ESPHome
 
 **813 testów Python i 222 testy panelu PASS** w pełnym sprawdzeniu offline.

@@ -1,8 +1,9 @@
-"""Half-hour setting decisions; the existing instantaneous safety path stays first.
+"""Rolling setting decisions; the existing instantaneous safety path stays first.
 
 The coordinator owns durable policy state. No service calls or physical ACKs here.
 The old pure controller remains a regression-tested safety/cap calculation; its
-600-second ramp is bypassed by the explicit ordinary-policy callback.
+stepped ramp is bypassed by the explicit ordinary-policy callback. Every
+ordinary positive attempt shares a durable rolling 600-second interval.
 """
 from __future__ import annotations
 
@@ -11,8 +12,7 @@ from datetime import datetime
 
 from .grid_control import calculate_grid_charge as _base, calculate_grid_charge_increase_cap
 
-SLOT_SECONDS = 1800
-DISPATCH_WINDOW_SECONDS = 60
+ORDINARY_INTERVAL_SECONDS = 600
 RECOVERY_SECONDS = 120
 DEADBAND_A = 10
 QUANTUM_A = 5
@@ -23,20 +23,15 @@ def _finite(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def dispatch_ready(now, possible, not_sent):
-    """First minute of :00/:30; one possible dispatch per block, safety included.
-
-    UTC half-hours also align to local half-hours in Europe/Warsaw, including DST.
-    Missed slots are skipped. Failed/uncertain sends cannot create a burst.
-    """
+def dispatch_ready(now, possible, not_sent, positive):
+    """Every ordinary start/correction shares the same durable rolling clocks."""
     if not _finite(now) or now <= 0:
         return False
     if any(at is not None and (not _finite(at) or not 0 <= at <= now)
-           for at in (possible, not_sent)):
+           for at in (possible, not_sent, positive)):
         return False
-    slot = math.floor(now / SLOT_SECONDS) * SLOT_SECONDS
-    return (now - slot < DISPATCH_WINDOW_SECONDS
-            and (possible is None or possible < slot and now - possible >= RECOVERY_SECONDS)
+    return ((positive is None or now - positive >= ORDINARY_INTERVAL_SECONDS)
+            and (possible is None or now - possible >= RECOVERY_SECONDS)
             and (not_sent is None or now - not_sent >= 60))
 
 
@@ -59,6 +54,10 @@ def initial_dispatch_ready(g):
         return False
     pending = g.get("pending_current_a")
     if pending is not None and (not _finite(pending) or pending != 0):
+        return False
+    if ("ordinary_last_positive_possible_ts" not in g or not dispatch_ready(
+            now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"),
+            g["ordinary_last_positive_possible_ts"])):
         return False
     since, observed = policy.get("safe_since"), policy.get("observed_at")
     if (not _finite(since) or not 0 <= since <= now - RECOVERY_SECONDS
@@ -121,9 +120,11 @@ def update_policy(g, previous):
 def _ordinary(g, result):
     result.update(write=False, next_a=g["current_a"])
     now = g["now_ts"]
-    scheduled = dispatch_ready(now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"))
+    scheduled = ("ordinary_last_positive_possible_ts" in g and dispatch_ready(
+        now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"),
+        g["ordinary_last_positive_possible_ts"]))
     initial = initial_dispatch_ready(g)
-    if not scheduled and not initial:
+    if not scheduled:
         result["reason"] = "scheduled_hold"
         return result
     policy = g.get("current_policy", {})
@@ -155,7 +156,7 @@ def _ordinary(g, result):
         result["reason"] = "scheduled_deadband"
         return result
     result.update(next_a=candidate, write=True,
-                  reason="initial_charge_start" if initial and not scheduled else
+                  reason="initial_charge_start" if initial else
                          "scheduled_retry" if unconfirmed else "scheduled_setpoint")
     return result
 
@@ -216,7 +217,8 @@ def describe_current_wait(g):
     status["recovery_remaining_s"] = math.ceil(recovery)
     eligible = max(now, since+RECOVERY_SECONDS)
     retry = now
-    for key, delay in (("ordinary_last_possible_ts", RECOVERY_SECONDS),
+    for key, delay in (("ordinary_last_positive_possible_ts", ORDINARY_INTERVAL_SECONDS),
+                       ("ordinary_last_possible_ts", RECOVERY_SECONDS),
                        ("ordinary_last_not_sent_ts", 60)):
         if key not in g:
             status["current_hold_reason"] = "waiting_readback"
@@ -238,21 +240,9 @@ def describe_current_wait(g):
     initial = (g.get("current_a") == 0 and policy.get("initial_started", False) is False
                and policy.get("stopped", True) is False and policy.get("deadline") == g["policy_deadline"])
     candidate = eligible
-    if not initial:
-        slot = math.floor(now/SLOT_SECONDS)*SLOT_SECONDS
-        possible = g.get("ordinary_last_possible_ts")
-        for _ in range(50):
-            candidate = max(slot, eligible)
-            if candidate < slot+DISPATCH_WINDOW_SECONDS and (possible is None or possible < slot):
-                break
-            slot += SLOT_SECONDS
-        status["current_hold_reason"] = "waiting_stable_measurements" if recovery > 0 else "scheduled_regular"
-    else:
-        status["current_hold_reason"] = ("waiting_stable_measurements" if recovery > 0 else
-                                         "waiting_retry" if retry > now else "initial_start")
+    status["current_hold_reason"] = ("waiting_stable_measurements" if recovery > 0 else
+                                     "waiting_retry" if retry > now else "initial_start" if initial else "ready")
     if candidate >= deadline.timestamp():
         return status
-    if not initial and candidate <= now:
-        status["current_hold_reason"] = "ready"
     status["next_current_change_at"] = datetime.fromtimestamp(candidate, deadline.tzinfo).isoformat()
     return status

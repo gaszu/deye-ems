@@ -1,6 +1,6 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "2.1.3"
+VERSION = "2.1.4"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button", "update"]
 
 DEFAULT_OPTIONS = {

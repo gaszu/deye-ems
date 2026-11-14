@@ -59,14 +59,14 @@ class SparseGridRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(grid(h)["ordinary_last_possible_ts"])
         self.assertEqual(h.co._memory["grid_dispatch"]["outcome"], "not_sent")
 
-    async def test_transport_failure_is_uncertain_and_blocks_ordinary_until_next_half_hour(self):
+    async def test_transport_failure_is_uncertain_and_blocks_ordinary_for_600_seconds(self):
         h = setup()
         h.fail_service = True
         self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))
         self.assertEqual(h.co._memory["grid_dispatch"]["outcome"], "uncertain")
         self.assertEqual(grid(h)["pending_current_a"], 20)
         h.fail_service = False
-        h.advance(1799)
+        h.advance(599)
         self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))
         h.advance(1)
         h.co._memory["current_policy"].update(safe_since=h.now.timestamp()-120, observed_at=h.now.timestamp())
@@ -79,7 +79,7 @@ class SparseGridRuntime(unittest.IsolatedAsyncioTestCase):
         h.advance(590)
         self.assertTrue(await h.co._grid_attempt(0, h.now.timestamp(), force=True))
         self.assertEqual(h.current_calls(), [20, 0])
-        h.advance(1209)
+        h.advance(119)
         self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))
         h.advance(1)
         h.co._memory["current_policy"].update(safe_since=h.now.timestamp()-120, observed_at=h.now.timestamp())
@@ -193,8 +193,9 @@ class SparseGridRuntime(unittest.IsolatedAsyncioTestCase):
         await h.tick()
         self.assertEqual(h.current_calls(), [8])
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "off")
-        h.advance(10)
-        await h.tick()
+        for _ in range(12):
+            h.advance(10)
+            await h.tick()
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "on")
 
     async def test_pending_higher_command_survives_uncertain_and_not_sent_cancel_until_fresh_ack(self):
