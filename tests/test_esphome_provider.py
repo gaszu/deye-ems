@@ -388,9 +388,24 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.drain()
         self.now += timedelta(seconds=5)
         old_ha_stamp = self.ha_state.last_reported
-        self.collector.proof = {"reported_at": self.now - timedelta(seconds=1), "samples": 2}
+        self.collector.proof = {"reported_at": self.now - timedelta(seconds=1),
+                                "confirmed_at": self.now - timedelta(seconds=1), "samples": 2}
         self.assertFalse(self.adapter.source_invalid("sensor.battery_voltage"))
         self.assertEqual(self.ha_state.last_reported, old_ha_stamp)
+
+    async def test_both_native_packets_must_follow_event_gate(self):
+        self.bus.fire_registry(action="update", entity_id="sensor.battery_voltage", changes={})
+        await self.drain()
+        event_at = self.now
+        self.now += timedelta(seconds=5)
+        for confirmed in (None, event_at-timedelta(seconds=1), event_at,
+                          self.now+timedelta(seconds=1)):
+            with self.subTest(confirmed=confirmed):
+                self.collector.proof = {"reported_at": self.now, "confirmed_at": confirmed, "samples": 2}
+                self.assertTrue(self.adapter.source_invalid("sensor.battery_voltage"))
+        self.collector.proof = {"reported_at": self.now,
+                                "confirmed_at": event_at+timedelta(seconds=1), "samples": 2}
+        self.assertFalse(self.adapter.source_invalid("sensor.battery_voltage"))
 
     async def test_unrelated_registry_change_has_no_effect(self):
         self.bus.fire_registry(action="update", entity_id="sensor.unrelated", changes={})
@@ -466,7 +481,8 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             client.callback(packet)
             proof = adapter.effective_report("sensor.battery_voltage", self.ha_state, self.now, CHECK)
             self.assertEqual(proof["samples"], 2)
-            self.assertEqual(proof["reported_at"], self.now - timedelta(seconds=5))
+            self.assertEqual(proof["reported_at"], self.now)
+            self.assertEqual(proof["confirmed_at"], self.now - timedelta(seconds=5))
             self.assertEqual(self.ha_state.last_reported, old_stamp)
             # HA may still mark the config entry LOADED while its native API
             # link has just failed. The owned observer must not mask that loss

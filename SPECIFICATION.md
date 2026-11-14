@@ -1,4 +1,10 @@
-# Specyfikacja Deye EMS 2.1.2
+# Specyfikacja Deye EMS 2.1.3
+
+## Datowanie natywnych raportów — 2.1.3
+
+- Dwie poprawne wiadomości z tego samego połączenia i aktualnego przypisania nadal są wymagane. Najnowsza musi odpowiadać bieżącej wartości HA, urządzeniu, encji i jednostce; oba odbiory muszą mieścić się w dotychczasowym limicie wieku źródła.
+- `reported_at` oznacza najnowszy rzeczywisty odbiór i służy do świeżości wartości oraz istniejącej kontroli zgodności czasowej. `confirmed_at` oznacza wcześniejszy odbiór pary i pozostaje osobno walidowany: `confirmed_at <= reported_at <= now`, świeżość obu oraz wymagane przejście obu raportów po zdarzeniu unieważniającym. Natywny znacznik jest używany tylko wtedy, gdy jest późniejszy od poprawnego znacznika HA. Nie tworzy się sztucznych znaczników ani nie zmienia limitów 30 s mocy, 120 s napięcia i 10 s rozbieżności grupy mocy.
+- Przerwa ponad dopuszczalny wiek, cofnięcie zegara, rozłączenie lub zmiana źródła unieważniają parę. Znaczniki są czasami odbioru przez EMS, a nie chwilą akwizycji Modbus. Pomiary, nastawy i ich potwierdzenia nadal przechodzą dotychczasowe kontrole.
 
 ## Wygląd panelu — 2.1.2
 
@@ -36,7 +42,7 @@ Poniższe sekcje opisują zachowane mechanizmy i historię ich wprowadzania; now
 
 - W profilu Deye, gdy dedykowana encja CCL nie istnieje albo jej przypisanie wyłączono, limit baterii pochodzi z niezależnej nastawy maksymalnego prądu falownika. Limit sieci nadal wynosi 95% tej nastawy. Wymagane pozostają poprawne i świeże pomiary Deye oraz kontrola alarmów. Istniejący odczyt CCL jest wiążący: zero blokuje, a błąd nie przełącza na zastępstwo. YamBMS i profil ręczny zachowują wymagane źródła BMS. `battery_limit_source` rozróżnia nastawę Deye, CCL odczytany z Deye i zewnętrzny BMS.
 - Dla wybranego modelu 1F kreator może zaproponować istniejące encje `battery`, `time_of_use_<n>_charge_enable` oraz tekstowe statusy `device_alarm/device_fault`. Te ostatnie zezwalają na pracę tylko przy literalnym `OK`. Nie zmienia to firmware ani automatycznie zapisanych przypisań.
-- Dodatkowy klient ESPHome tylko do odczytu może dostarczyć dowód odbioru dwóch natywnych raportów zgodnych z identyfikatorem urządzenia, encją, wartością i jednostką HA. Czas dowodu jest wcześniejszym z czasów odbioru. Nie jest czasem pomiaru Modbus. Rozłączenie i zmiana źródeł kasują dowody; utrata oryginalnego klienta HA zamyka własny klient EMS. Nastawy sterujące i ich potwierdzenia nadal używają oryginalnych stanów HA.
+- Dodatkowy klient ESPHome tylko do odczytu może dostarczyć dowód odbioru dwóch poprawnych natywnych raportów z tej samej sesji i aktualnego przypisania urządzenia, encji i jednostki; najnowszy musi odpowiadać bieżącej wartości HA. Od 2.1.3 aktualną wartość datuje najnowszy odbiór, a wcześniejszy odbiór potwierdzający parę jest walidowany oddzielnie. Oba muszą być świeże według dotychczasowych limitów. Żaden nie jest czasem pomiaru Modbus. Rozłączenie i zmiana źródeł kasują dowody; utrata oryginalnego klienta HA zamyka własny klient EMS. Nastawy sterujące i ich potwierdzenia nadal używają oryginalnych stanów HA.
 
 Poniższy opis 1.x zachowuje kontekst historyczny; powyższe rozszerzenie definiuje aktualne zachowanie profilu Deye bez dedykowanego CCL.
 

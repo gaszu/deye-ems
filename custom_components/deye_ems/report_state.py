@@ -1,8 +1,10 @@
 """Read-only view of proven native report receipt, never an HA state update.
 
 Original HA availability, units, numeric values and timestamp validity remain
-mandatory. Only a later two-packet native receipt can supplement an old HA
-last_reported. This is not the time of the Modbus measurement acquisition.
+mandatory. Only a later matching native packet, confirmed by another fresh
+packet in the same connection, can supplement an old HA last_reported. Its
+receipt dates the value, separately from the earlier confirmation receipt.
+Neither is the time of the Modbus measurement acquisition.
 """
 from dataclasses import dataclass
 from datetime import datetime
@@ -57,8 +59,14 @@ def effective_state(entity_id, original, provider, now, validation, *, number, s
         # A provider lifecycle failure cannot establish fresh communication.
         return ReportedState(original, provider_unavailable=True)
     receipt = proof.get("reported_at") if isinstance(proof, dict) else None
+    confirmed = proof.get("confirmed_at") if isinstance(proof, dict) else None
+    age = number(validation.get("age"))
     if (not isinstance(receipt, datetime) or receipt.tzinfo is None
+            or not isinstance(confirmed, datetime) or confirmed.tzinfo is None
+            or age is None or age <= 0
             or proof.get("source") != "esphome_live" or proof.get("samples") != 2
-            or not reported < receipt.timestamp() <= now.timestamp()):
+            or not confirmed <= receipt <= now
+            or not 0 <= (now-confirmed).total_seconds() <= age
+            or not reported < receipt.timestamp()):
         return original
     return ReportedState(original, receipt=receipt)

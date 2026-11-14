@@ -1,5 +1,13 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.3
+
+Aktualizacja poprawia wyłącznie sposób datowania natywnych raportów ESPHome i odpowiadający mu opis diagnostyki. Najnowszy raport wyznacza wiek bieżącej wartości; starszy raport nadal osobno potwierdza poprawną parę z jednej sesji. Dotychczasowe limity wieku, zgodności czasowej i warunki wznowienia pozostają skuteczne. Po rozłączeniu, zmianie przypisania lub przerwie w raportach przekraczającej limit wieku wymagana jest nowa para; świeży odbiór nie dowodzi chwili pomiaru Modbus ani reakcji falownika.
+
+Zachowaj prywatną kopię ustawień bez danych dostępu oraz ZIP 2.1.2. Aktualizacja zachowuje źródła, taryfę, rezerwę, limity i zapisany tryb. Po instalacji sprawdź konfigurację, wymagany restart, rzeczywiście załadowaną wersję silnika i panelu, oryginalne ustawienia oraz diagnostykę raportów. Potrzebę ładowania, zgodę regulatora, przyjęcie polecenia, nastawę i fizyczny przepływ sprawdzaj osobno.
+
+**Powrót do 2.1.2:** zachowaj wpis konfiguracji i runtime, zainstaluj poprzedni ZIP, sprawdź konfigurację i uruchom HA ponownie. Konfiguracja pozostaje zgodna. Starsza wersja ponownie używa wcześniejszego czasu odbioru również do datowania wartości, więc może wrócić opisana blokada świeżości. Zweryfikuj źródła, pomiary, plan i tryb; nie wymuszaj sterowania przy niespełnionych warunkach.
+
 ## Przejście na 2.1.2
 
 Aktualizacja ujednolica kartę sterowania i odnośniki aktualizacji oraz przenosi opis panelu, układ LOAD/CT, sprzęt i aktualizacje do istniejących ustawień zaawansowanych. Zachowaj kopię ustawień bez danych dostępu oraz ZIP 2.1.1. Po instalacji sprawdź konfigurację, wymagany restart, załadowaną wersję silnika i panelu, przypisania, ustawienia oraz dotychczasowy tryb.

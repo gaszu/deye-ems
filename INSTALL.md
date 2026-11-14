@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.2
+# Instalacja i obsługa Deye EMS 2.1.3
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -6,20 +6,22 @@ W sekcji „Przyłącze sieciowe” wpisz dozwolony import całej instalacji ora
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i nie wymaga EMHASS ani zewnętrznego solvera. Użytkownik wybiera źródła danych i parametry właściwe dla swojej instalacji.
 
+Wersja 2.1.3 poprawia datowanie natywnych raportów ESPHome. Nadal wymaga dwóch poprawnych raportów w tej samej sesji i aktualnym przypisaniu. Do świeżości bieżącej wartości używa najnowszego odbioru, a starsze potwierdzenie pary sprawdza oddzielnie; oba muszą mieścić się w dotychczasowym limicie. Są to czasy odbioru przez EMS, nie chwila pomiaru Modbus. Aktualizacja nie wymaga zmiany firmware ani przypisań.
+
 ## Marketplace
 
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.2**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.3**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.2.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.2/deye-ems-2.1.2.zip).
+1. Pobierz [deye-ems-2.1.3.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.3/deye-ems-2.1.3.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 

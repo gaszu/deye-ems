@@ -1,8 +1,9 @@
 """Read-only ESPHome report evidence. No device commands or HA state writes.
 
 Native sensor messages do not contain acquisition timestamps. Two distinct
-packets in one verified connection provide conservative *receipt* evidence,
-using the earlier receipt of the last two, never a fabricated device timestamp.
+packets in one verified connection establish communication. Both must remain
+fresh; the latest matching packet dates the current value, while the earlier
+receipt dates its confirmation. Neither is a device acquisition timestamp.
 Optional SDK imports occur only after real provider bindings are configured.
 """
 from __future__ import annotations
@@ -298,7 +299,13 @@ class LiveReportCache:
             self._samples.pop(binding.entity_id, None)
             return
         pair = self._samples.setdefault(binding.entity_id, deque(maxlen=2))
-        if pair and at < pair[-1].received_at:
+        age = _number(binding.validation.get("age"), packet=True)
+        if age is None or age <= 0:
+            pair.clear()
+            return
+        if pair and not 0 <= (at-pair[-1].received_at).total_seconds() <= age:
+            # A clock rollback or a real report gap requires two new packets.
+            # Separate callbacks can share a timestamp on a coarse host clock.
             pair.clear()
         pair.append(_Sample(at, value))
 
@@ -386,9 +393,15 @@ class LiveReportCache:
             return None
         if not isinstance(now, datetime) or now.tzinfo is None:
             return None
-        if any(sample.received_at > now for sample in pair):
+        ages = [_number(check.get("age"), packet=True) for check in (validation, binding.validation)]
+        if any(age is None or age <= 0 for age in ages):
             return None
-        return {"reported_at": pair[0].received_at, "source": "esphome_live", "samples": 2}
+        age = min(ages)
+        if (pair[0].received_at > pair[-1].received_at
+                or any(not 0 <= (now-sample.received_at).total_seconds() <= age for sample in pair)):
+            return None
+        return {"reported_at": pair[-1].received_at, "confirmed_at": pair[0].received_at,
+                "source": "esphome_live", "samples": 2}
 
     async def async_close(self):
         self.invalidate_all("closed")
