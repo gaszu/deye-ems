@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-7";
-const PANEL_VERSION = "2.1.7";
+const PANEL_TAG = "deye-ems-panel-2-1-8";
+const PANEL_VERSION = "2.1.8";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -740,6 +740,16 @@ class DeyeEMSPanel extends HTMLElement {
     select?.addEventListener("change",()=>{this.appearanceDraft=select.value;this.appearanceError="";this.render();});
     this.shadowRoot.getElementById("appearance-save")?.addEventListener("click",()=>this.saveAppearance());
   }
+  solcastForecastHtml(){
+    const solcast=this.payload?.data?.solcast||{},summary=solcast.forecast_summary||{};
+    const date=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(Date.now()));
+    const valid=this.snapshotFresh()&&summary.date===date;
+    const card=(label,key)=>{const row=summary[key]||{},ok=valid&&row.complete===true;
+      const value=k=>ok&&typeof row[k]==="number"&&Number.isFinite(row[k])&&row[k]>=0?row[k]:null;
+      return '<article><span class="label">'+label+'</span><strong>'+num(value("p50_kwh"),1)+' <small>kWh</small></strong><p class="legend">P10: '+num(value("p10_kwh"),1)+' kWh'+(value("p50_kwh")===null?' · Brak pełnego pokrycia prognozą':'')+'</p></article>';};
+    const source=solcast.status==="ha_entities"?'Encje HA':solcast.status==="cached"?'Datowany cache Solcast':'Solcast API';
+    return '<section aria-label="Prognoza Solcast"><h3>Prognoza Solcast</h3><div class="grid">'+card('Dziś','today')+card('Pozostało dziś','remaining_today')+card('Jutro','tomorrow')+'</div><p class="legend">'+esc(source)+' · Dzień prognozy: '+(valid?esc(summary.date):'—')+' · Europe/Warsaw. P50: prognoza typowa; P10: wariant ostrożny.</p><p class="legend">Odczyt prognozy: '+(valid?esc(time(summary.as_of)):'—')+' · Ostatnie pobranie API: '+(valid&&summary.source_updated_at?esc(time(summary.source_updated_at)):'brak znacznika źródła')+'. Pozostało dziś obejmuje wyłącznie czas od odczytu prognozy. To prognoza, nie zmierzona produkcja.</p></section>';
+  }
   solcastUsageHtml(){
     const solcast=this.payload?.data?.solcast||{},quota=solcast.quota||{},utc=quota.utc||{};
     const today=new Date(Date.now()).toISOString().slice(0,10),day=utc.day;
@@ -1414,7 +1424,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<section><h2>Prognoza modelu</h2>'+this.modelTargetsHtml()+
       (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':this.unavailablePlanHtml())+
       '</section>'+
-      this.pvPriorityHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
+      this.pvPriorityHtml()+this.solcastForecastHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
       '<section aria-label="O panelu"><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div></section>'+
       this.topologyHtml()+this.hardwareHtml()+this.updatesHtml()+ 
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+

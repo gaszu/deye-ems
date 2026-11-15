@@ -1,6 +1,6 @@
 # Przejście z innego EMS i powrót z kopii
 
-## Przejście na 2.1.7
+## Przejście na 2.1.8
 
 Wydanie poprawia wyłącznie mylący podpis czterech dostępnych taryf TAURON. Nie wymaga zmiany ustawień ani ponownego wyboru taryfy. Zachowaj kopię bez danych dostępu i ZIP 2.1.6, sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj załadowaną wersję, dotychczasowy tryb oraz ustawienia. Powrót do 2.1.6 przywraca poprzedni podpis; reguły silnika pozostają takie same.
 
@@ -140,3 +140,7 @@ Falownik może zachować ostatnie nastawy i harmonogram podczas restartu HA. Wy�
 3. Pełne przywrócenie kopii cofa również niezwiązane zmiany i restartuje HA. Operator powinien świadomie wybrać ten zakres odtwarzania.
 4. Przywróć wymagane pomiary i usługi poprzedniego EMS, a potem jego jedynego wykonawcę i nadzór. Pozostaw Deye EMS w obserwacji.
 5. Sprawdź odczyty nastaw i rzeczywiste przepływy. Konflikt nie uruchamia poprzedniego regulatora automatycznie.
+
+## Podgląd prognoz 2.1.8
+
+Zachowaj kopię ustawień bez danych dostępu i poprzedni ZIP 2.1.7, sprawdź konfigurację przed restartem i dotychczasowy tryb po starcie. Wydanie nie zmienia źródeł ani limitów. Wyłączenie osobnego Solcast jest oddzielną czynnością; nie wyłączaj jedynego źródła encji HA przed przejściem na API EMS.

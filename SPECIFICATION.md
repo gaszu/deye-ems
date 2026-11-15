@@ -1,6 +1,6 @@
-# Specyfikacja Deye EMS 2.1.7
+# Specyfikacja Deye EMS 2.1.8
 
-## Podpis wyboru taryfy — 2.1.7
+## Podpis wyboru taryfy — 2.1.8
 
 Dostępne cztery taryfy TAURON nie są opisywane jako niedostępne do sterowania. Korekta dotyczy wyłącznie podpisu formularza; reguły wyboru, zegary, cele, tryb i zabezpieczenia pozostają jak w 2.1.6.
 
@@ -174,3 +174,9 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - W prognozie bez osobnego przyszłego profilu gałęzi CT pełny dom jest traktowany zachowawczo jako obciążenie portu; może to obniżyć modelową dostępność ładowania. Bieżący regulator korzysta z oddzielnych rzeczywistych pomiarów.
 - Wymagany prąd i prognozowana energia używają aktualnego napięcia baterii oraz osobno sprawności konwersji AC/DC i magazynowania. Od 1.0.15 stały `charge_max_kw` jest ignorowany. Planer otrzymuje `battery_charge_max_a = min(Deye Max A Charge, BMS)` oraz `grid_current_max_a = min(floor(0,95 × Deye Max A Charge), BMS, zakres nastawy GRID)`. Wspólna moc PV i sieci nie przekracza `battery_charge_max_a × napięcie / 1000` ani mocy falownika. Sieć dodatkowo mieści się w własnym limicie prądowym, budżecie pozostałym po PV oraz przewidywanym zapasie mocy przyłącza i falownika. Limity prądowe i napięcie są odczytywane po wolnych odczytach historii/PV. Brak lub błąd danych daje brak poprawnej projekcji; prawidłowe zero lub blokada BMS daje zerowe ładowanie. Regulator wykonawczy zachowuje niezależne bieżące kontrole limitów sumarycznych i fazowych, bez stałego ograniczenia 5,3 kW.
 - Zwykłe dodatnie nastawy zachowują co najmniej 600 s odstępu zgodnie z 2.1.4; histereza SoC pozostaje. Nowe twarde limity są sprawdzane także po zapisie rejestru próby, bezpośrednio przed poleceniem; redukcje ochronne nie czekają na harmonogram.
+
+## Podgląd prognozy Solcast
+
+Panel pokazuje prognozę Solcast P50/P10 na dziś, pozostałą część dnia i jutro, datę w Europe/Warsaw oraz czas odczytu i dostępny znacznik pobrania API. Odróżnia API EMS, datowany cache i encje HA. Brak pełnego pokrycia pozostaje nieznany; nie zastępuje się go zerem. Widok nie wykonuje dodatkowych zapytań API i nie zmienia planowania ani sterowania. Niepełne pokrycie 48 godzin nadal blokuje użycie takiego zestawu przez planer, nawet gdy krótsze podsumowanie da się pokazać.
+
+Przy bezpośrednim pobieraniu przez EMS wyłącz osobną integrację Solcast w HA, aby nie dublować zapytań. Instancje korzystające z encji HA wymagają najpierw konfiguracji i weryfikacji API EMS.

@@ -1,4 +1,8 @@
-# Wersja 2.1.7 — podpis dostępnych taryf TAURON
+# Wersja 2.1.8 — podgląd prognozy Solcast
+
+879 testów Python i 234 testy panelu PASS. Podsumowanie integruje moc kW do kWh, uwzględnia część bieżącego okresu i lokalne dni 23/25-godzinne. Brak pokrycia jest nieznany. Odczyt panelu nie wykonuje HTTP.
+
+# Wersja 2.1.8 — podpis dostępnych taryf TAURON
 
 **876 testów Python i 233 testy panelu PASS** w końcowym pełnym sprawdzeniu offline; 14 testów formularza taryfy PASS. Regresja sprawdza, że dostępne cztery taryfy TAURON nie trafiają do informacji o pozycjach niedostępnych do sterowania. Pozostałe zasady wyboru i sterowania pozostają jak w 2.1.6; wcześniejsze wyniki poniżej są historyczne.
 
