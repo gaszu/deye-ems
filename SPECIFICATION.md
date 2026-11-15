@@ -1,4 +1,8 @@
-# Specyfikacja Deye EMS 2.1.6
+# Specyfikacja Deye EMS 2.1.7
+
+## Podpis wyboru taryfy — 2.1.7
+
+Dostępne cztery taryfy TAURON nie są opisywane jako niedostępne do sterowania. Korekta dotyczy wyłącznie podpisu formularza; reguły wyboru, zegary, cele, tryb i zabezpieczenia pozostają jak w 2.1.6.
 
 ## Stały szablon TOU i wybór TAURON — 2.1.6
 

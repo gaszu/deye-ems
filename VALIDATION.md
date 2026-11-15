@@ -1,3 +1,7 @@
+# Wersja 2.1.7 — podpis dostępnych taryf TAURON
+
+**876 testów Python i 233 testy panelu PASS** w końcowym pełnym sprawdzeniu offline; 14 testów formularza taryfy PASS. Regresja sprawdza, że dostępne cztery taryfy TAURON nie trafiają do informacji o pozycjach niedostępnych do sterowania. Pozostałe zasady wyboru i sterowania pozostają jak w 2.1.6; wcześniejsze wyniki poniżej są historyczne.
+
 # Wersja 2.1.6 — stały szablon TOU i cztery taryfy TAURON
 
 **875 testów Python i 233 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Niezależny przegląd bezpieczeństwa i podgląd wizualny na danych syntetycznych PASS: sześć niedzielnych kart, wyłącznie cztery taryfy TAURON oraz poprawne datowane cele poniedziałek 16:00 i wtorek 07:00.
