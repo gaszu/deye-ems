@@ -62,7 +62,7 @@ class ScheduledCurrent(unittest.TestCase):
         result = calculate_grid_charge(g)
         self.assertTrue(result["safety"])
         self.assertTrue(result["write"])
-        self.assertEqual(result["next_a"], 59)
+        self.assertEqual(result["next_a"], 55)
         g["telemetry_valid"] = False
         self.assertEqual(calculate_grid_charge(g)["next_a"], 0)
 

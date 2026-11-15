@@ -1,5 +1,13 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.5
+
+Aktualizacja poprawia łańcuch ochronnych redukcji i jego oczekiwanie na odczyt. Opóźniony stan HA nie może podnieść wcześniejszego niższego żądania; dodatnia redukcja jest zaokrąglana w dół do 5 A, z dopuszczeniem całkowitej nastawy 1–4 A, zaokrąglonej w dół przy limicie poniżej 5 A. Ponowienie tej samej przyjętej redukcji nie odnawia maksymalnego 30 s oczekiwania. Wymagane surowsze zero zachowuje pierwszeństwo. Zwykły odstęp 600 s, stabilizacja 120 s, BMS, zgoda GC i walidacja pomiarów pozostają skuteczne.
+
+Zachowaj prywatną kopię ustawień i runtime bez danych dostępu oraz ZIP 2.1.4. Po instalacji sprawdź konfigurację, wymagany restart, rzeczywiście załadowaną wersję silnika i panelu, oryginalne ustawienia oraz tryb pracy. Prywatny ślad `data.command_diagnostics` obejmuje ostatnie 20 prób i liczniki w RAM od bieżącego uruchomienia; restart zeruje go i nie odtwarza wcześniejszych poleceń. Zapisz potrzebną diagnostykę prywatnie przed restartem. Przyjęcie usługi, odczyt nastawy i fizyczny przepływ sprawdzaj oddzielnie. Nie wyciągaj liczby zapisów z samego wykresu encji HA i nie publikuj eksportu danych instalacji.
+
+**Powrót do 2.1.4:** zachowaj wpis i runtime, zainstaluj poprzedni ZIP, sprawdź konfigurację i uruchom HA ponownie. Wróci poprzednia obsługa ochronnej redukcji; nowy ślad diagnostyczny może być niedostępny w starszej wersji, więc zachowaj potrzebny eksport prywatnie przed powrotem. Zweryfikuj źródła, nastawy, pomiary, plan i tryb. Nie usuwaj historii poleceń ani nie zmieniaj ograniczeń w celu wymuszenia ładowania.
+
 ## Przejście na 2.1.4
 
 Aktualizacja zastępuje bramkę pierwszej minuty :00/:30 kroczącym minimum 600 s między możliwie wysłanymi zwykłymi dodatnimi nastawami. Dotyczy startu z zera i niezerowych korekt. Redukcje ochronne oraz wyłączenie pozostają natychmiastowe. Uprawnienie pierwszego startu nie jest zwracane ani używane do ominięcia odstępu; aktualne pomiary, odczyt nastawy, stabilność, taryfa, plan i ograniczenia nadal są wymagane.

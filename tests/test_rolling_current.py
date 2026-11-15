@@ -261,7 +261,7 @@ class RollingRuntime(unittest.IsolatedAsyncioTestCase):
                 await h.tick()
                 self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "off")
                 self.assertFalse(any(action == "turn_on" for _, action, _ in h.calls))
-                self.assertEqual(h.current_calls(), [20])
+                self.assertEqual(h.current_calls(), [20, 0])
 
     async def test_positive_register_and_old_ledger_cannot_enable_gc_before_120_stable_seconds(self):
         h = setup()

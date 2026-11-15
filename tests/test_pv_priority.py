@@ -108,7 +108,7 @@ class PVPriority(unittest.TestCase):
         result = calculate_grid_charge(g)
         self.assertEqual(result["battery_charge_excess_a"], 12)
         self.assertEqual(result["cap_a"], 68)
-        self.assertEqual(result["next_a"], 68)
+        self.assertEqual(result["next_a"], 65)
         self.assertTrue(result["safety"])
         self.assertTrue(result["write"])
         self.assertEqual(result["reason"], "battery_charge_headroom")

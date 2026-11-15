@@ -191,7 +191,7 @@ class SparseGridRuntime(unittest.IsolatedAsyncioTestCase):
         for i, power in enumerate((3674, 3673, 3673), 1):
             h.set(f"grid_l{i}_power", power, "W")
         await h.tick()
-        self.assertEqual(h.current_calls(), [8])
+        self.assertEqual(h.current_calls(), [5])
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "off")
         for _ in range(12):
             h.advance(10)
