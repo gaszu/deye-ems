@@ -43,9 +43,8 @@ spec.loader.exec_module(TARIFF_SETTINGS)
 async def complete_initial_tariff(flow, result):
     """Complete the real mandatory tariff wizard, preserving prior assertions."""
     flow._tariff_time = lambda: datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
-    if result.get("type") != "form" or result.get("step_id") != "tariff_operator":
+    if result.get("type") != "form" or result.get("step_id") != "tariff_plan":
         return result
-    result = await flow.async_step_tariff_operator({"operator_id": "tauron_dystrybucja"})
     assert result.get("step_id") == "tariff_plan", result
     result = await flow.async_step_tariff_plan({"profile_id": "tauron_g13_2026", "clock_basis": "local"})
     assert result.get("step_id") == "tariff_confirm", result
@@ -93,7 +92,8 @@ class Installation(unittest.IsolatedAsyncioTestCase):
             "datetime": datetime, "timezone": timezone,
             **{name:getattr(CALENDAR, name) for name in ("calendar_operators", "calendar_profiles", "describe_calendar")},
             **{name:getattr(TARIFF_SETTINGS, name) for name in
-                ("selected_tariff", "tariff_revision", "validate_tariff_draft", "tariff_preview")},
+                ("selected_tariff", "tariff_revision", "validate_tariff_draft", "tariff_preview",
+                 "selectable_tariffs", "validate_tariff_change")},
             **{name: getattr(MODELS, name) for name in
                 ("HARDWARE_KEYS", "applied_limits", "hardware_profile", "model_choices", "model_selection")},
             "reserve_bound_from_state": SOC_POLICY.reserve_bound_from_state,

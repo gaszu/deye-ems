@@ -27,6 +27,8 @@ async def preview(flow, operator="tauron_dystrybucja", profile="tauron_g13_2026"
     if result.get("type") == "abort":
         return result
     result = await flow.async_step_tariff_operator({"operator_id": operator})
+    if result.get("errors"):
+        return result
     if result.get("step_id") != "tariff_plan":
         return result
     return await flow.async_step_tariff_plan({"profile_id": profile, "clock_basis": clock})
@@ -62,7 +64,7 @@ class TariffWizard(unittest.IsolatedAsyncioTestCase):
     async def test_operator_profile_mismatch_is_rejected(self):
         flow = options_flow()
         result = await preview(flow, operator="enea_operator")
-        self.assertEqual(result["errors"]["base"], "tariff_operator_mismatch")
+        self.assertEqual(result["errors"]["base"], "tariff_selection_restricted")
 
     async def test_missing_clock_is_not_assumed_local(self):
         flow = options_flow()
@@ -74,17 +76,17 @@ class TariffWizard(unittest.IsolatedAsyncioTestCase):
     async def test_blocked_official_profile_is_not_saved(self):
         flow = options_flow()
         result = await preview(flow, operator="pge_dystrybucja", profile="pge_g12e_2026")
-        self.assertEqual(result["errors"]["base"], "tariff_profile_unavailable")
+        self.assertEqual(result["errors"]["base"], "tariff_selection_restricted")
         self.assertNotIn("tariff_profile", flow.config_entry.options)
 
-    async def test_only_requested_five_operators_are_offered_for_new_install(self):
+    async def test_only_four_tauron_profiles_and_explicit_clock_for_new_install(self):
         flow = fixture.Installation().flow()["DeyeEMSConfigFlow"]()
         form = await flow.async_step_user({"min_soc_percent": 40})
-        self.assertEqual(form["step_id"], "tariff_operator")
+        self.assertEqual(form["step_id"], "tariff_plan")
         schema = next(iter(form["data_schema"].values()))
         rows = schema["args"][0]["options"]
-        self.assertEqual({row["value"] for row in rows}, {"pge_dystrybucja", "tauron_dystrybucja",
-            "enea_operator", "energa_operator", "pge_energetyka_kolejowa"})
+        self.assertEqual({row["value"] for row in rows}, set(TARIFF_SETTINGS.SELECTABLE_TARIFF_PROFILES))
+        self.assertEqual({marker.key for marker in form["data_schema"]}, {"profile_id", "clock_basis"})
 
     async def test_changed_sources_invalidates_confirmation(self):
         flow = options_flow()

@@ -36,7 +36,8 @@ import math
 from zoneinfo import ZoneInfo
 
 if __package__:
-    from .tariff_calendar import calendar_context, describe_calendar, intervals_between
+    from .tariff_calendar import (calendar_context, describe_calendar, intervals_between,
+        STABLE_TAURON_PROFILES, stable_tou_template, stable_tou_intervals)
 
 
 DEFAULTS = {
@@ -602,6 +603,11 @@ def physical_tariff_tou(now, options):
     if context.get("valid") is not True:
         return dict(valid=False, issue=context.get("issue") or "invalid_tariff", rows=[])
     try:
+        profile_id = options.get("tariff_profile", "legacy_g13")
+        if profile_id in STABLE_TAURON_PROFILES:
+            return dict(valid=True, issue=None,
+                **stable_tou_template(now, profile_id, options.get("tariff_clock_basis", "local")),
+                **tariff_identity(options, context))
         day = describe_calendar(now, options.get("tariff_profile", "legacy_g13"),
                                 options.get("tariff_clock_basis", "local"))["today"]
         rows = []
@@ -682,10 +688,16 @@ def _tariff_cache(record, item, now, cfg, identity):
 
 
 def tariff_slot_targets(now, options, plan, soc, reserve):
-    """Logical operator rows, with nullable forecasts and separate charge goals."""
+    """Dated slot rows with nullable forecasts and existing, shared plan goals."""
     try:
         calendar = describe_calendar(now, options.get("tariff_profile", "legacy_g13"),
                                      options.get("tariff_clock_basis", "local"))
+        intervals = [*calendar["today"], *calendar["tomorrow"]]
+        if options.get("tariff_profile") in STABLE_TAURON_PROFILES:
+            intervals = [row for day in (calendar["today"], calendar["tomorrow"]) if day
+                for row in stable_tou_intervals(_time(day[0]["start"], now.tzinfo),
+                    _time(day[-1]["end"], now.tzinfo), options["tariff_profile"],
+                    options.get("tariff_clock_basis", "local"))]
     except (ValueError, TypeError, KeyError):
         return []
     targets = sorted((t for t in plan.get("targets", {}).values() if isinstance(t, dict)),
@@ -703,7 +715,7 @@ def tariff_slot_targets(now, options, plan, soc, reserve):
                 return row["soc_start_percent"] + (row["soc_percent"] - row["soc_start_percent"]) * (at-a)/(b-a)
         return None
     result = []
-    for interval in [*calendar["today"], *calendar["tomorrow"]]:
+    for interval in intervals:
         start, end = _time(interval["start"], now.tzinfo).timestamp(), _time(interval["end"], now.tzinfo).timestamp()
         past = end <= now.timestamp()
         begin = max(now.timestamp(), start)
@@ -712,7 +724,8 @@ def tariff_slot_targets(now, options, plan, soc, reserve):
         if start <= now.timestamp() < end and soc is None:
             a = b = None
         fallback = plan.get("quality") != "valid"
-        result.append(dict(start=interval["start"], end=interval["end"], zone=interval["zone"],
+        result.append(dict(**{key: interval[key] for key in ("slot", "slot_time") if key in interval},
+            start=interval["start"], end=interval["end"], zone=interval["zone"],
             tier=interval.get("tier"), grid_charge_allowed=interval["grid_charge_allowed"],
             charge_target_soc_percent=(selected.get("soc_percent") if selected and not past
                                        and interval["grid_charge_allowed"] else None),

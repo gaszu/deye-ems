@@ -23,7 +23,7 @@ class InverterModelFlows(unittest.IsolatedAsyncioTestCase):
     async def test_empty_hardware_submission_still_requires_tariff_before_install_intent(self):
         flow = boundary.Installation().flow()["DeyeEMSConfigFlow"]()
         result = await flow.async_step_user({})
-        self.assertEqual(result.get("step_id"), "tariff_operator")
+        self.assertEqual(result.get("step_id"), "tariff_plan")
         result = await boundary.complete_initial_tariff(flow, result)
         self.assertEqual(result["type"], "create_entry")
         self.assertEqual(result["data"]["inverter_model"], "custom")
@@ -40,7 +40,7 @@ class InverterModelFlows(unittest.IsolatedAsyncioTestCase):
         self.assertIn("SUN-5K-SG04LP1-EU", form["description_placeholders"]["model_preview"])
         self.assertEqual((await flow.async_step_user_inverter_confirm({"confirm_model": False}))["type"], "form")
         result = await flow.async_step_user_inverter_confirm({"confirm_model": True})
-        self.assertEqual(result.get("step_id"), "tariff_operator")
+        self.assertEqual(result.get("step_id"), "tariff_plan")
         result = await boundary.complete_initial_tariff(flow, result)
         data = result["data"]
         self.assertEqual(data["inverter_phases"], 1)

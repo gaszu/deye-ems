@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, Mock
 ROOT = Path(__file__).resolve().parents[1] / "custom_components/deye_ems"
 CONSTANTS = {}
 exec((ROOT / "const.py").read_text(encoding="utf-8"), CONSTANTS)
-from test_installable import CALENDAR
+from test_installable import CALENDAR, TARIFF_SETTINGS
 _post_spec = importlib.util.spec_from_file_location("offline_ws_post_save", ROOT / "post_save.py")
 POST_SAVE = importlib.util.module_from_spec(_post_spec)
 _post_spec.loader.exec_module(POST_SAVE)
@@ -116,6 +116,7 @@ def load_module():
         "DATA_UPDATES": "deye_ems_updates",
         "calendar_operators": CALENDAR.calendar_operators,
         "calendar_profiles": CALENDAR.calendar_profiles,
+        "selectable_tariffs": TARIFF_SETTINGS.selectable_tariffs,
         "post_save_status": POST_SAVE.post_save_status,
         "cancel_all_post_save": POST_SAVE.cancel_all_post_save,
         "vol": SimpleNamespace(
@@ -426,7 +427,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module["async_register"](Hass())
         self.assertEqual(api.registered, [module["status"], module["command"], module["tariff_catalog"]])
 
-    async def test_tariff_catalog_admin_reads_only_embedded_five_operator_rules(self):
+    async def test_tariff_catalog_admin_reads_only_four_selectable_tauron_rules(self):
         module, _ = load_module()
         hass, connection = Hass(), Connection(SimpleNamespace(is_admin=True))
         module["tariff_catalog"](hass, connection, {"id": 15, "type": "deye_ems/tariff_catalog"})
@@ -434,9 +435,9 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         result = connection.results[0][1]
         self.assertEqual(result["backend_version"], CONSTANTS["VERSION"])
         self.assertEqual({row["operator_id"] for row in result["operators"]},
-            {"custom", "pge_dystrybucja", "tauron_dystrybucja", "enea_operator",
-             "energa_operator", "pge_energetyka_kolejowa"})
-        self.assertTrue(any(row["profile_id"] == "tauron_g13_2026" for row in result["profiles"]))
+            {"tauron_dystrybucja"})
+        self.assertEqual({row["profile_id"] for row in result["profiles"]},
+                         set(TARIFF_SETTINGS.SELECTABLE_TARIFF_PROFILES))
         self.assertNotIn("stoen", json.dumps(result).lower())
         self.assertEqual(hass.data, {})
 

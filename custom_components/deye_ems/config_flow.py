@@ -22,7 +22,7 @@ from .inverter_models import (HARDWARE_KEYS, applied_limits, hardware_profile,
                               model_choices, model_selection)
 from .tariff_calendar import calendar_operators, calendar_profiles, describe_calendar
 from .tariff_settings import (selected_tariff, tariff_revision, validate_tariff_draft,
-                              tariff_preview)
+                              tariff_preview, selectable_tariffs, validate_tariff_change)
 
 
 def _hardware_fields(values):
@@ -204,27 +204,14 @@ class TariffFlowMixin:
             return self.async_abort(reason="stop_before_mapping")
         if not hasattr(self, "_tariff_entry_revision"):
             self._tariff_entry_revision = tariff_revision(self._tariff_values())
-        operators = [row for row in calendar_operators()
-                     if self._tariff_is_options or row["operator_id"] != "custom"]
-        errors = {}
-        if user_input is not None:
-            operator_id = user_input.get("operator_id")
-            if operator_id not in {row["operator_id"] for row in operators}:
-                errors["operator_id"] = "invalid_tariff_operator"
-            else:
-                self._tariff_operator_draft = operator_id
-                self._tariff_selection_draft = None
-                return await self.async_step_tariff_plan()
-        marker = vol.Required("operator_id")
-        if self._tariff_is_options:
-            try:
-                current = selected_tariff(calendar_profiles(), self._tariff_values()["tariff_profile"])
-                marker = vol.Required("operator_id", default=current["operator_id"])
-            except ValueError:
-                pass  # A damaged/removed profile must still be repairable.
-        return self.async_show_form(step_id="tariff_operator", errors=errors,
-            data_schema=vol.Schema({marker: selector.SelectSelector(selector.SelectSelectorConfig(
-                options=[{"value": row["operator_id"], "label": row["label"]} for row in operators]))}))
+        # Keep the old entry step callable, but opening it never selects/saves
+        # a profile. Only the explicit, confirmed plan draft can change options.
+        self._tariff_operator_draft = "tauron_dystrybucja"
+        self._tariff_selection_draft = None
+        result = await self.async_step_tariff_plan()
+        if user_input is not None and user_input.get("operator_id") not in (None, "tauron_dystrybucja"):
+            result["errors"] = {"base": "tariff_selection_restricted"}
+        return result
 
     async def async_step_tariff_plan(self, user_input=None):
         if self._tariff_locked():
@@ -233,7 +220,7 @@ class TariffFlowMixin:
         if operator is None:
             return await self.async_step_tariff_operator()
         profiles = calendar_profiles(operator)
-        offered = [row for row in profiles if row["runtime_allowed"] is True and row["supported"] is True]
+        offered = selectable_tariffs(profiles)
         errors = {}
         if user_input is not None:
             try:
@@ -250,7 +237,8 @@ class TariffFlowMixin:
         except ValueError:
             same_operator = False
         profile_marker, clock_marker = vol.Required("profile_id"), vol.Required("clock_basis")
-        if self._tariff_is_options and same_operator:
+        if (self._tariff_is_options and same_operator
+                and current["tariff_profile"] in {row["profile_id"] for row in offered}):
             profile_marker = vol.Required("profile_id", default=current["tariff_profile"])
             clock_marker = vol.Required("clock_basis", default=current["tariff_clock_basis"])
         if user_input is not None:
@@ -261,13 +249,11 @@ class TariffFlowMixin:
         clocks = [{"value": "local", "label": "Czas lokalny Polski — automatyczna zmiana lato/zima"}]
         if operator != "custom":
             clocks.append({"value": "fixed_cet", "label": "Stały czas zimowy CET — bez zmiany zegara licznika"})
-        blocked = [row["tariff"] + ": " + str(row.get("blocked_reason") or "brak zweryfikowanego harmonogramu")
-                   for row in profiles if row not in offered]
         return self.async_show_form(step_id="tariff_plan", errors=errors, data_schema=vol.Schema({
             profile_marker: selector.SelectSelector(selector.SelectSelectorConfig(options=[
                 {"value": row["profile_id"], "label": row["label"]} for row in offered])),
             clock_marker: selector.SelectSelector(selector.SelectSelectorConfig(options=clocks))}),
-            description_placeholders={"tariff_notices": "\n".join(blocked) if blocked else ""})
+            description_placeholders={"tariff_notices": "TAURON Dystrybucja — G11, G13, G12w, G12."})
 
     async def async_step_tariff_confirm(self, user_input=None):
         if self._tariff_locked():
@@ -368,6 +354,8 @@ class DeyeEMSOptionsFlow(TariffFlowMixin, config_entries.OptionsFlow):
         # HA does not notify options listeners for an identical dictionary.
         # A confirmed Save is still a new, explicitly authorized activation
         # intent; draft edits and cancellation never reach this boundary.
+        previous = self._tariff_values()
+        validate_tariff_change(previous, {**previous, **data})
         return super().async_create_entry(data={**dict(data),
             "_configuration_save_id": uuid4().hex}, **kwargs)
     def _mapping_locked(self):

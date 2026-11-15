@@ -1581,7 +1581,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             program = self._tou_program(now)
             expected = next((row["time"] for row in program.get("rows", [])
                              if self._sources[f"tou_time_{row['slot']}"] == entity_id), None)
-            if value != expected or any((state := self._state(f"tou_gc_{i}")) is None or state.state != "off"
+            if value != expected or not self._tou_zero_readback(inputs, now) or any((state := self._state(f"tou_gc_{i}")) is None or state.state != "off"
                     or state.attributes.get("restored", False) for i in range(1, 7)):
                 self._last_error = "last_moment_tariff_program_guard"
                 return False
@@ -1988,6 +1988,38 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 10 <= now.timestamp() - at and report is not None and report >= at and
                 inputs["current_a"] is not None and abs(inputs["current_a"] - requested) < .01)
 
+    def _tou_zero_readback(self, inputs, now):
+        """HA zero after the last possible intent, with live communication.
+
+        Settings may stay latched for hours. Their report must follow our last
+        possible zero/attempt, while power telemetry independently stays fresh.
+        This is an HA setting observation, never a physical battery ACK.
+        """
+        if (not inputs["telemetry_valid"] or self._measurement("grid_current_number", now,
+                unit="A", low=0, high=1000) != 0):
+            return False
+        state = self._state("grid_current_number")
+        report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        history = self._dispatch_history(now)
+        possible_at = history.get("possible_at")
+        if (history.get("known") is not True or history.get("ordinary_positive_known") is not True
+                or history.get("possible_a") != 0 or possible_at is None or report is None or report < possible_at):
+            return False
+        ledger = self._memory["ledger"].get(self._sources["grid_current_number"], {})
+        if not isinstance(ledger, dict) or ledger.get("action") != "set_value":
+            return False
+        attempted = _number(ledger.get("at"))
+        if attempted is None or not 0 <= attempted <= now.timestamp():
+            return False
+        dispatch = self._memory["grid_dispatch"]
+        if dispatch and attempted != dispatch.get("attempt_at"):
+            return False
+        if dispatch and dispatch.get("outcome") == "not_sent":
+            # A certainly-unsent retry creates no new possible command. Do
+            # not demand a new echo that identical-state dedupe cannot cause.
+            return True
+        return ledger.get("a") == 0 and report >= attempted
+
     async def _run_driver(self, inputs, control, target, emergency, now):
         winter, night, afternoon, _, active_slot = self._window(now)
         program = self._tou_program(now)
@@ -1998,12 +2030,17 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return
         if self._real_tariff() and not self._clocks_ok(now):
             # Updating a sorted circular program is a transition, not six
-            # independent clock writes. Disable charging and confirm OFF first.
+            # independent clock writes. Confirm GC OFF and the HA zero
+            # setpoint after the latest attempt; service acceptance is not ACK.
             await self._disable_gc()
             await self._grid_attempt(0, now.timestamp(), force=True, reason="tariff_program_transition")
             if any((state := self._state(f"tou_gc_{i}")) is None or state.state != "off"
                    or state.attributes.get("restored", False) for i in range(1, 7)):
                 control["runtime_reason"] = "waiting_tou_charge_off_readback"
+                return
+            observed_at = self._now()
+            if not self._tou_zero_readback(self._read_inputs(observed_at), observed_at):
+                control["runtime_reason"] = "waiting_tou_zero_current_readback"
                 return
             old = []
             for i in range(1, 7):

@@ -1,3 +1,11 @@
+# Wersja 2.1.6 — stały szablon TOU i cztery taryfy TAURON
+
+**875 testów Python i 233 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Niezależny przegląd bezpieczeństwa i podgląd wizualny na danych syntetycznych PASS: sześć niedzielnych kart, wyłącznie cztery taryfy TAURON oraz poprawne datowane cele poniedziałek 16:00 i wtorek 07:00.
+
+Dodatkowy guard zmiany godzin wymaga znanej zatrzaśniętej nastawy HA 0 A, której znacznik nie poprzedza ostatniej możliwej próby zera, wyłączenia sześciu flag GC, poprawnych bieżących pomiarów mocy i ponownej kontroli po zapisie próby. Nie dodaje 30 s TTL do niezmiennej nastawy liczbowej i nie utożsamia jej odczytu z fizycznym potwierdzeniem baterii. Końcowy zestaw backendu: 875 testów PASS po końcowym zamrożeniu i niezależnym przeglądzie. Potwierdzona zatrzaśnięta nastawa 0 A może mieć stary znacznik czasu, jeśli spełnia warunki historii zamiaru; bieżąca komunikacja jest sprawdzana osobno przez aktualną telemetrię.
+
+Regresje panelu obejmują brak innych operatorów w nowym wyborze, zachowanie istniejącej obcej konfiguracji na otwarciu/anulowaniu, sześć stałych godzin bez fałszywego oznaczania granic stref, cykliczny program bez kotwicy 00:00, zimowy i letni podgląd oraz całodobowe G11 i dni wolne G13/G12w. Rzeczywisty scalony kalendarz jest osobny od sześciu slotów; podział nie tworzy nowych terminów celu. Wszystkie przykłady są syntetyczne i nie potwierdzają odczytu rejestrów ani fizycznego działania. Wcześniejsze wyniki i release notes pozostają historyczne.
+
 # Wersja 2.1.5 — monotoniczna ochrona i diagnostyka poleceń
 
 **855 testów Python i 230 testów panelu PASS** w końcowym pełnym sprawdzeniu offline. Niezależny przegląd bezpieczeństwa oraz przegląd wizualny sekcji na danych syntetycznych zakończone bez blokerów. Testy panelu obejmują w tym osiem nowych regresji prywatnego podglądu poleceń: stan nieaktualny, nieprawidłowe dane i braki bez fikcyjnych zer, rzeczywiste zero, nowy start RAM, limit pięciu prób, bezpieczeństwo treści, rozdzielenie usługi od odczytu oraz zachowanie rozwinięcia bez wywołań sterujących.

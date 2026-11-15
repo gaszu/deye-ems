@@ -203,6 +203,89 @@ def _rows_for_clock_day(day, profile_id, clock_tz):
                "profile_id": profile_id, "version": profile["version"]}
 
 
+STABLE_TAURON_PROFILES = frozenset(("tauron_g11_2026", "tauron_g12_2026",
+                                     "tauron_g12w_2026", "tauron_g13_2026"))
+
+
+def _tauron_clock_minutes(day, profile_id):
+    """Stable meter-clock anchors, independent of this day's free-day flag."""
+    if profile_id not in STABLE_TAURON_PROFILES:
+        raise ValueError("stable_tariff_template_unavailable")
+    profile = _profile(profile_id)
+    normal = _segments(day, profile_id, {**profile, "all_day_low_on": []})
+    # Only actual cyclic changes are mandatory; 00:00 and 04:00 may simply
+    # divide an existing zone. A future catalog change must never be truncated.
+    mandatory = {row["a"] for index, row in enumerate(normal)
+                 if (row["zone"], row["tier"]) !=
+                    (normal[index - 1]["zone"], normal[index - 1]["tier"])}
+    if profile_id in ("tauron_g11_2026", "tauron_g13_2026"):
+        winter = day.month in (10, 11, 12, 1, 2, 3)
+        minutes = (0, 240, 420, 780, 960, 1260) if winter else (0, 240, 420, 780, 1140, 1320)
+    else:
+        minutes = (0, 240, 360, 780, 900, 1320)
+    if not mandatory.issubset(minutes) or len(mandatory) > 6:
+        raise ValueError("tariff_exceeds_six_tou_slots")
+    return minutes, mandatory
+
+
+def stable_tou_template(now, profile_id, clock_basis):
+    """Six TAURON clocks plus actual dated classifications, in Deye local time.
+
+    Seasonal anchors are selected in the confirmed meter clock, not by sampling
+    another working day. Weekend/holiday overlays affect only classification.
+    Archived profiles deliberately keep their existing compiler.
+    """
+    stamp, clock_tz = _timestamp(now), _clock(clock_basis)
+    day = datetime.fromtimestamp(stamp, clock_tz).date()
+    minutes, mandatory = _tauron_clock_minutes(day, profile_id)
+    midnight = datetime.combine(day, time.min, clock_tz)
+    rows = []
+    for slot, minute in enumerate(minutes, 1):
+        at = midnight + timedelta(minutes=minute)
+        local = at.astimezone(WARSAW)
+        actual = intervals_between(at, at + timedelta(seconds=1), profile_id, clock_basis)[0]
+        rows.append(dict(slot=slot, time=local.strftime("%H:%M:%S"),
+            minute=local.hour * 60 + local.minute, zone=actual["zone"], tier=actual["tier"],
+            grid_charge_allowed=actual["grid_charge_allowed"], padding=minute not in mandatory))
+    if len({row["minute"] for row in rows}) != 6 or rows != sorted(rows, key=lambda row: row["minute"]):
+        raise ValueError("tariff_exceeds_six_tou_slots")
+    local = datetime.fromtimestamp(stamp, WARSAW)
+    minute = local.hour * 60 + local.minute + local.second / 60
+    active = next((row["slot"] for row in reversed(rows) if row["minute"] <= minute), 6)
+    return dict(rows=rows, active_slot=active, clock_template="stable_tauron",
+                template_season="winter" if day.month in (10, 11, 12, 1, 2, 3) else "summer")
+
+
+def stable_tou_intervals(start, end, profile_id, clock_basis):
+    """Split the unchanged dated calendar at stable TOU clocks; no new goals."""
+    a, b, clock_tz = _timestamp(start), _timestamp(end), _clock(clock_basis)
+    if b < a:
+        raise ValueError("invalid_tariff_range")
+    if a == b:
+        return []
+    first = datetime.fromtimestamp(a, clock_tz).date() - timedelta(days=1)
+    last = datetime.fromtimestamp(b, clock_tz).date()
+    anchors = []
+    day = first
+    while day <= last + timedelta(days=1):
+        minutes, _ = _tauron_clock_minutes(day, profile_id)
+        midnight = datetime.combine(day, time.min, clock_tz)
+        for slot, minute in enumerate(minutes, 1):
+            at = midnight + timedelta(minutes=minute)
+            anchors.append((at.timestamp(), slot, at.astimezone(WARSAW).strftime("%H:%M:%S")))
+        day += timedelta(days=1)
+    anchors.sort()
+    actual = intervals_between(start, end, profile_id, clock_basis)
+    result = []
+    for (begin, slot, slot_time), (finish, _, _) in zip(anchors, anchors[1:]):
+        for row in actual:
+            lo, hi = max(a, begin, row["start_ts"]), min(b, finish, row["end_ts"])
+            if lo < hi:
+                result.append(_serialize_row({**row, "start_ts": lo, "end_ts": hi,
+                    "slot": slot, "slot_time": slot_time}, WARSAW))
+    return sorted(result, key=lambda row: row["start_ts"])
+
+
 def _serialize_row(row, tz=UTC):
     result = dict(row)
     duration = row["end_ts"] - row["start_ts"]
