@@ -95,6 +95,14 @@ class TariffWizard(unittest.IsolatedAsyncioTestCase):
         result = await flow.async_step_tariff_confirm({"confirm_tariff": True})
         self.assertEqual(result, {"type": "abort", "reason": "tariff_configuration_changed"})
 
+    async def test_available_tauron_profiles_do_not_receive_unavailable_notice(self):
+        form = await options_flow().async_step_tariff()
+        self.assertEqual(form["step_id"], "tariff_plan")
+        marker = next(key for key in form["data_schema"] if key.key == "profile_id")
+        offered = form["data_schema"][marker]["args"][0]["options"]
+        self.assertEqual({row["value"] for row in offered}, set(TARIFF_SETTINGS.SELECTABLE_TARIFF_PROFILES))
+        self.assertEqual(form["description_placeholders"]["tariff_notices"], "")
+
     async def test_date_expiry_is_rechecked_at_save(self):
         flow = options_flow()
         flow._tariff_time = lambda: datetime(2026, 12, 31, 12, tzinfo=timezone.utc)

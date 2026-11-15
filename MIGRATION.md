@@ -1,5 +1,9 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.7
+
+Wydanie poprawia wyłącznie mylący podpis czterech dostępnych taryf TAURON. Nie wymaga zmiany ustawień ani ponownego wyboru taryfy. Zachowaj kopię bez danych dostępu i ZIP 2.1.6, sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj załadowaną wersję, dotychczasowy tryb oraz ustawienia. Powrót do 2.1.6 przywraca poprzedni podpis; reguły silnika pozostają takie same.
+
 ## Przejście na 2.1.6
 
 Nowy wybór w instalatorze i panelu obejmuje tylko TAURON G11, G13, G12w i G12, ze stałym operatorem. Istniejąca konfiguracja innego operatora lub własna nie jest automatycznie zamieniana na TAURON; otwarcie i anulowanie szkicu nie zapisują opcji ani nie zmieniają trybu. Wybór innego nowego profilu jest obecnie niedostępny.

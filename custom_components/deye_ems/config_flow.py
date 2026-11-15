@@ -253,7 +253,7 @@ class TariffFlowMixin:
             profile_marker: selector.SelectSelector(selector.SelectSelectorConfig(options=[
                 {"value": row["profile_id"], "label": row["label"]} for row in offered])),
             clock_marker: selector.SelectSelector(selector.SelectSelectorConfig(options=clocks))}),
-            description_placeholders={"tariff_notices": "TAURON Dystrybucja — G11, G13, G12w, G12."})
+            description_placeholders={"tariff_notices": ""})
 
     async def async_step_tariff_confirm(self, user_input=None):
         if self._tariff_locked():
