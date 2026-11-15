@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.4
+# Instalacja i obsługa Deye EMS 2.1.5
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -6,7 +6,7 @@ W sekcji „Przyłącze sieciowe” wpisz dozwolony import całej instalacji ora
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i nie wymaga EMHASS ani zewnętrznego solvera. Użytkownik wybiera źródła danych i parametry właściwe dla swojej instalacji.
 
-Wersja 2.1.4 dopuszcza zwykłą dodatnią nastawę nie wcześniej niż 600 s po poprzedniej możliwie wysłanej zwykłej dodatniej nastawie, także przy powrocie z zera. Nie wymaga trafienia w pierwszą minutę :00/:30. Redukcje ochronne i wyłączenie działają natychmiastowo; wznowienie wymaga dotychczasowych stabilnych pomiarów, odczytu nastawy, limitów i aktualnego planu. Termin pokazany przez panel nie gwarantuje wysłania. Zachowaj prywatną kopię ustawień i runtime przed aktualizacją; nie usuwaj historii poleceń, by wymusić start.
+Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po poprzedniej możliwie wysłanej zwykłej dodatniej nastawie, także przy powrocie z zera. Nie wymaga trafienia w pierwszą minutę :00/:30. Redukcje ochronne i wyłączenie działają natychmiastowo; wznowienie wymaga dotychczasowych stabilnych pomiarów, odczytu nastawy, limitów i aktualnego planu. Termin pokazany przez panel nie gwarantuje wysłania. Zachowaj prywatną kopię ustawień i runtime przed aktualizacją; nie usuwaj historii poleceń, by wymusić start.
 
 ## Marketplace
 
@@ -14,14 +14,14 @@ Wersja 2.1.4 dopuszcza zwykłą dodatnią nastawę nie wcześniej niż 600 s po 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.4**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.5**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.4.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.4/deye-ems-2.1.4.zip).
+1. Pobierz [deye-ems-2.1.5.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.5/deye-ems-2.1.5.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -164,6 +164,14 @@ Nie wpisuje się już „Modelowego limitu ładowania”. Prognoza korzysta z og
 Istniejące przypisania **battery_power** i natywnego **grid_power** oraz faz GRID służą do oszacowania nadwyżki lokalnej pomniejszającej potrzebę ładowania z sieci. Bateria ma znak minus podczas ładowania; port GRID ma znak plus przy dopływie do falownika. Nie przypisuj CT zamiast portu GRID ani jednej encji do obu pomiarów. Wymagane są niezależne, poprawne odczyty W do 30 s, rozbieżne czasowo najwyżej o 10 s. Brak poprawnych danych blokuje ładowanie sieciowe zamiast przyjmować PV równe zero.
 
 Panel pokazuje zachowawczy szacunek nadwyżki i potrzebę doładowania po stronie baterii. Nie są to odczyty dokładnej produkcji PV ani AC importu. Pokrycie potrzeby przez PV może zatrzymać doładowanie bez osiągnięcia celu SoC; wznowienie nadal respektuje co najmniej 600 s między zwykłymi dodatnimi nastawami oraz stabilizację pomiarów. Fizyczne ładowanie z PV pozostaje sterowane przez falownik.
+
+## Redukcje ochronne i diagnostyka poleceń — od 2.1.5
+
+Redukcja ochronna nie zwiększa wcześniejszego niższego żądania w reakcji na opóźnione echo HA. Dodatnie redukcje są zaokrąglane w dół do 5 A, z zachowaniem dopuszczalnej całkowitej nastawy 1–4 A, zaokrąglonej w dół przy limicie poniżej 5 A. Przyjęte powtórzenie tej samej redukcji nie rozpoczyna od nowa maksymalnego 30 s oczekiwania na odczyt. Jeżeli potrzebne jest surowsze zero, nie czeka ono na ten termin. Nie wymaga to zmiany firmware ani przypisań.
+
+Rozwiń **Ustawienia zaawansowane i szczegóły → Zapisy do falownika**. Sekcja tylko do odczytu pokazuje czas od uruchomienia, liczniki oraz pięć najnowszych prób; nie dodaje przycisków sterujących ani osobnych żądań przy renderowaniu.
+
+Pobrana diagnostyka udostępnia `data.command_diagnostics`: ostatnie 20 prób zmiany limitu prądu ładowania z sieci, liczniki wyników oraz oddzielne pominięcia i ostatni odczyt. Ten prywatny ślad jest przechowywany w RAM od bieżącego uruchomienia; po restarcie zaczyna się od nowa. Nie jest pełną ani odtworzoną wstecz historią instalacji. `accepted` oznacza przyjęcie wywołania usługi HA, a nie potwierdzenie nastawy przez urządzenie lub fizyczne ładowanie. Odczyt nastawy i pomiary mocy należy sprawdzać oddzielnie. Sam wykres encji HA może przedstawiać echo integracji źródłowej i nie dowodzi wykonania tylu zapisów Modbus. Nie publikuj eksportu diagnostyki zawierającego dane swojej instalacji.
 
 ## Rezerwa SoC — dolna granica z Battery low SOC
 

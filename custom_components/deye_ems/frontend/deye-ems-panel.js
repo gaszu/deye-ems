@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-4";
-const PANEL_VERSION = "2.1.4";
+const PANEL_TAG = "deye-ems-panel-2-1-5";
+const PANEL_VERSION = "2.1.5";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -282,6 +282,43 @@ class DeyeEMSPanel extends HTMLElement {
   }
   bindTelemetryDiagnostics(){
     this.shadowRoot.getElementById("telemetry-diagnostics-toggle")?.addEventListener("click",()=>{this.telemetryExpanded=!this.telemetryExpanded;this.render();});
+  }
+  commandDiagnosticsHtml(){
+    const heading='<section aria-label="Zapisy do falownika"><h2>Zapisy do falownika</h2><p>Próby zmiany limitu prądu ładowania z sieci od uruchomienia integracji.</p>';
+    const note='<p class="legend">Tylko odczyt. Przyjęcie usługi przez HA nie potwierdza odczytu rejestru ani fizycznej reakcji falownika. Historia encji może być echem integracji źródłowej.</p>';
+    if(!this.snapshotFresh())return heading+'<p class="notice warning">Brak bieżącego śladu poleceń. Oczekiwanie na świeży odczyt silnika.</p>'+note+'</section>';
+    const trace=this.payload?.data?.command_diagnostics;
+    const object=value=>value&&typeof value==="object"&&!Array.isArray(value);
+    if(!object(trace))return heading+'<p>Brak śladu poleceń w bieżącym odczycie.</p>'+note+'</section>';
+    const now=Date.now(),since=updateTimestamp(trace.since);
+    if(trace.retention!=="since_boot"||since===null||since>now)return heading+'<p class="notice warning">Brak poprawnej informacji o uruchomieniu śladu poleceń.</p>'+note+'</section>';
+    const stamp=value=>{const at=updateTimestamp(value);return at!==null&&at>=since&&at<=now?at:null;};
+    const clock=at=>new Date(at).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    const amp=value=>typeof value==="number"&&Number.isFinite(value)&&value>=0&&value<=1000?num(value,2)+" A":"—";
+    const validAmp=value=>Number.isSafeInteger(value)&&value>=0&&value<=1000;
+    const counter=value=>Number.isSafeInteger(value)&&value>=0?num(value,0):"—";
+    const kinds={ordinary:"Zwykła",safety:"Ochronna"};
+    const outcomes={accepted:"Przyjęte przez HA (usługa)",uncertain:"Wynik niepewny",not_sent:"Nie wysłano"};
+    const extraReasons={ordinary_current:"Zwykła nastawa prądu",protective_current:"Ochronna nastawa prądu",matching_ha_state:"Odczyt HA zgodny z żądaniem",accepted_settling:"Oczekiwanie na odczyt przyjętej nastawy",uncertain_backoff:"Przerwa po niepewnej próbie",safety_current_intent_guard:"Zachowanie niższego żądania ochronnego",ordinary_dispatch_wait:"Odstęp między zwykłymi nastawami",attempt_cooldown_or_ledger:"Przerwa lub kontrola historii"};
+    const reason=value=>{
+      if(typeof value!=="string"||!/^[a-z][a-z0-9_]{0,79}$/.test(value))return "Nieprawidłowy kod przyczyny";
+      const plain=value.replace(/^safety_/,""),label=Object.hasOwn(extraReasons,value)?extraReasons[value]:Object.hasOwn(reasons,value)?reasons[value]:Object.hasOwn(reasons,plain)?reasons[plain]:"Kod diagnostyczny";
+      return esc(label)+'<br><code>'+esc(value)+'</code>';
+    };
+    const validRow=row=>object(row)&&stamp(row.at)!==null&&validAmp(row.value_a)&&Object.hasOwn(kinds,row.kind);
+    const rows=Array.isArray(trace.attempts)?trace.attempts.slice(-20):null;
+    const valid=rows?rows.filter(row=>validRow(row)&&Object.hasOwn(outcomes,row.outcome)):[];
+    const latest=valid.slice().reverse().sort((a,b)=>stamp(b.at)-stamp(a.at)).slice(0,5);
+    const table=latest.length?'<div class="table"><table><caption>Najnowsze próby nastawy: '+latest.length+'. Pokazano najwyżej 5 z 20 przechowywanych w RAM.</caption><thead><tr><th>Czas</th><th>Nastawa</th><th>Rodzaj</th><th>Powód</th><th>Wynik usługi</th></tr></thead><tbody>'+latest.map(row=>'<tr><td>'+esc(clock(stamp(row.at)))+'</td><td>'+esc(amp(row.value_a))+'</td><td>'+esc(kinds[row.kind])+'</td><td>'+reason(row.reason)+'</td><td>'+esc(outcomes[row.outcome])+'</td></tr>').join("")+'</tbody></table></div>':rows&&rows.length===0?'<p>Lista prób jest pusta w tym odczycie.</p>':'<p>Brak poprawnych wpisów prób nastawy prądu.</p>';
+    const invalid=rows&&valid.length<rows.length?'<p class="notice warning">Pominięto nieprawidłowe wpisy śladu poleceń.</p>':"";
+    const counts=object(trace.counts)?trace.counts:{};
+    const summary='<p>Usługi przyjęte przez HA: <b>'+esc(counter(counts.accepted))+'</b> · wynik niepewny: <b>'+esc(counter(counts.uncertain))+'</b> · niewysłane próby: <b>'+esc(counter(counts.not_sent))+'</b> · pominięte zapisy: <b>'+esc(counter(counts.suppressed))+'</b>.</p>';
+    const suppressed=validRow(trace.last_suppressed)?'<p>Ostatnie pominięcie zapisu: '+esc(clock(stamp(trace.last_suppressed.at)))+' · '+esc(amp(trace.last_suppressed.value_a))+' · '+esc(kinds[trace.last_suppressed.kind])+'. '+reason(trace.last_suppressed.reason)+'.</p>':"";
+    const read=trace.readback,readNames={unknown:"Brak ustalonej zgodności",pending:"Oczekiwanie na nowszy odczyt HA",matched:"Odczyt HA zgodny z żądaniem",mismatch:"Odczyt HA różny od żądania"};
+    const readOk=object(read)&&read.source==="home_assistant_state"&&read.physical_confirmation===false&&stamp(read.observed_at)!==null&&Object.hasOwn(readNames,read.status);
+    const matchedOk=readOk&&read.status==="matched"&&typeof read.value_a==="number"&&typeof read.intent_a==="number"&&amp(read.value_a)!=="—"&&read.value_a===read.intent_a&&updateTimestamp(read.reported_at)!==null&&updateTimestamp(read.reported_at)<=now;
+    const readback=readOk&&(read.status!=="matched"||matchedOk)?'<p>Osobny odczyt HA: '+esc(amp(read.value_a))+' · żądanie '+esc(amp(read.intent_a))+' · '+esc(readNames[read.status])+'. Sprawdzono: '+esc(clock(stamp(read.observed_at)))+'. To stan HA, nie potwierdzenie fizycznego zapisu urządzenia.</p>':'<p>Brak poprawnego osobnego odczytu HA w śladzie.</p>';
+    return heading+'<p>Ślad od uruchomienia EMS: '+esc(clock(since))+' · upłynęło '+esc(num(Math.floor((now-since)/1000),0))+' s.</p><p class="legend">Pamięć RAM od bieżącego uruchomienia; restart lub przeładowanie EMS rozpoczyna ślad od nowa. Brak rekonstrukcji wcześniejszej historii.</p>'+summary+note+table+invalid+suppressed+readback+'</section>';
   }
   nextCurrentChangeText(){
     const at=updateTimestamp(this.payload?.data?.control?.next_current_change_at),now=Date.now();
@@ -1383,10 +1420,10 @@ class DeyeEMSPanel extends HTMLElement {
       '<p class="legend">Prognoza Solcast dla tej instalacji jest używana bez ponownego skalowania przez kWp. Moc służy do powiązania profilu z instalacją. Skalowanie profilu referencyjnego można włączyć w konfiguracji.</p>'+this.solcastHtml()+'</section>'+
       '<section><h2>Przyłącze sieciowe</h2><div class="fields">'+basicField("grid_import_limit_kw","Zapisz limit łączny")+basicField("grid_phase_limit_kw","Zapisz limit fazowy")+'</div><p class="legend">Maksymalny dozwolony pobór całej instalacji z sieci, niezależny od mocy falownika. Obowiązuje w LOAD i CT. W CT obejmuje również odbiory między przyłączem a portem GRID. Wpisz limity swojego przyłącza; regulator zachowuje zapas 0,5 kW łącznie i 0,25 kW na fazę. Moc falownika, limit ładowarki i BMS pozostają osobnymi ograniczeniami.</p></section>'+
       this.loadsHtml()+
-      this.telemetryDiagnosticsHtml()+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
+      this.telemetryDiagnosticsHtml()+this.commandDiagnosticsHtml()+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
-      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+this.gridPhaseReadoutHtml()+' · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe dodatnie nastawy prądu nie częściej niż co 10 minut, licząc od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Odstęp obejmuje start z zera i korekty; termin nie gwarantuje wysłania. Wyliczona nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
+      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+this.gridPhaseReadoutHtml()+' · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe dodatnie nastawy prądu nie częściej niż co 10 minut, licząc od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Odstęp obejmuje start z zera i korekty; termin nie gwarantuje wysłania. Zwykła nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Dodatnia redukcja ochronna jest zaokrąglana w dół do 5 A; bezpieczna całkowita nastawa 1–4 A pozostaje dopuszczalna. Ochrona nie podnosi wcześniejszego niższego żądania z powodu opóźnionego odczytu HA. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Ponowienie tej samej przyjętej redukcji nie odnawia maksymalnie 30 s oczekiwania na odczyt; wymagane surowsze zero działa natychmiast. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
       this.physicalTariffHtml()+'<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+

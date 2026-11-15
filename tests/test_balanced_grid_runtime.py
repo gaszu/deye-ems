@@ -69,10 +69,10 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         h.set("grid_l1_power", 3700, "W", age=31)
         self.assertIsNone(h.co._read_inputs(h.now)["grid_charge_balanced"])
 
-    async def test_accepted_reduction_42_to_37_keeps_active_gc_with_old_readback(self):
+    async def test_accepted_reduction_42_to_35_keeps_active_gc_with_old_readback(self):
         h = scenario()
         control = await drive(h)
-        self.assertEqual(h.current_calls(), [37])
+        self.assertEqual(h.current_calls(), [35])
         self.assertEqual(control["read_setting_a"], 42)
         self.assertTrue(control["reduction_pending"])
         self.assertFalse(control["setting_settled"])
@@ -80,7 +80,7 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(action == "turn_off" for _, action, _ in h.calls))
         self.assertEqual(float(h.states[SOURCES["battery_power"]].state), -1800)
         h.advance(10)
-        h.set("grid_current_number", 37, "A")
+        h.set("grid_current_number", 35, "A")
         settled = await drive(h)
         self.assertTrue(settled["setting_settled"])
         self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "on")
@@ -94,7 +94,7 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         control = await drive(h)
         latest = runtime.calculate_grid_charge_cap(h.co._grid_input(h.co._read_inputs(h.now), h.now, 85, False))
         self.assertEqual(latest["planning_cap_a"], 34)
-        self.assertEqual(h.current_calls(), [37])
+        self.assertEqual(h.current_calls(), [35])
         self.assertTrue(control["reduction_pending"])
         self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "on")
 
@@ -116,7 +116,7 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "off")
         self.assertFalse(any(action == "turn_on" for _, action, _ in h.calls))
         h.advance(10)
-        h.set("grid_current_number", 37, "A")
+        h.set("grid_current_number", 35, "A")
         def observe_policy():
             inputs = h.co._read_inputs(h.now)
             h.co._memory["current_policy"] = runtime.update_policy(
@@ -188,7 +188,7 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.co._last_error, "command_failed:OSError")
 
     async def test_failed_current_attempt_before_or_after_expiry_never_renews_chain_clock(self):
-        for failure_age in (15, 41):
+        for failure_age in (30, 41):
             for failure_kind in ("transport", "store"):
                 with self.subTest(failure_age=failure_age, failure_kind=failure_kind):
                     h = scenario()

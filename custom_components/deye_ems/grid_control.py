@@ -248,6 +248,45 @@ def _ordinary_history(g, now):
     return possible, not_sent
 
 
+def _protective_ceiling(g, current, current_ok):
+    """A stale register cannot undo a lower potentially dispatched intent.
+
+    Runtime supplies the validated POSSIBLE intent, separately from the upper
+    bound of older unconfirmed writes. Older pure callers retain their dated
+    attempt ledger as a conservative intent bound.
+    """
+    if not current_ok:
+        return 0
+    now = g.get("now_ts")
+    if not _number(now) or now <= 0 or any(
+            value is not None and (not _number(value) or not 0 <= value <= now)
+            for value in (g.get("last_attempt_ts"), g.get("ordinary_last_possible_ts"),
+                          g.get("ordinary_last_not_sent_ts"), g.get("ordinary_last_positive_possible_ts"))):
+        return 0
+    if any(key in g for key in ("current_intent_known", "current_intent_virgin", "last_possible_current_a")):
+        if g.get("current_intent_known") is not True or "last_possible_current_a" not in g:
+            return 0
+        intent = g.get("last_possible_current_a")
+        if intent is None:
+            return current if g.get("current_intent_virgin") is True else 0
+    else:
+        now, at, intent = (g.get(key) for key in ("now_ts", "last_attempt_ts", "last_attempt_a"))
+        if not (g.get("ordinary_history_known") is True and _number(now) and now > 0
+                and _number(at) and 0 <= at <= now):
+            return 0
+    if not _number(intent) or not 0 <= intent <= 1000:
+        return 0
+    return min(current, intent)
+
+
+def _protective_setting(ceiling, cap):
+    # Quantize only a cap that actually requires a reduction. Rounding an
+    # already safe current would create another unnecessary setting change.
+    if ceiling > cap:
+        cap = math.floor(cap / 5) * 5 if cap >= 5 else math.floor(cap)
+    return math.floor(min(ceiling, cap))
+
+
 def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     """Propose a bounded setting; persist its ledger before attempting a write.
 
@@ -286,8 +325,9 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     ledger_ok = (all(_number(v) for v in (now, attempted_at, attempted_a))
                  and now > 0 and 0 <= attempted_at <= now and 0 <= attempted_a <= 1000)
     age = now - attempted_at if ledger_ok else -1
+    protective_ceiling = _protective_ceiling(g, current, current_ok)
     if g.get("safety_only") is True:
-        candidate = min(current, cap["cap_a"]) if current_ok and pending_ok else 0
+        candidate = _protective_setting(protective_ceiling, cap["cap_a"]) if current_ok and pending_ok else 0
         same_attempt = ledger_ok and abs(attempted_a - candidate) < .01
         change = not current_ok or not pending_ok or pending_unsafe or abs(current - candidate) >= .01
         return dict(cap, need_a=0, next_a=candidate,
@@ -330,9 +370,10 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     # No charge, a failed snapshot and lower load/BMS limits take precedence
     # over all time/ramp gates. Identical failed writes are retried, not flooded.
     force_zero = not allowed or need == 0 or not cap["telemetry_ok"] or not pending_ok
-    safety = not current_ok or current > cap["cap_a"] or pending_unsafe or force_zero
+    safety = (not current_ok or current > cap["cap_a"] or current > protective_ceiling
+              or pending_unsafe or force_zero)
     if safety:
-        candidate = 0 if force_zero or not current_ok else min(current, cap["cap_a"])
+        candidate = 0 if force_zero or not current_ok else _protective_setting(protective_ceiling, cap["cap_a"])
         same_attempt = ledger_ok and abs(attempted_a - candidate) < .01
         change = (not current_ok or not pending_ok or pending_unsafe
                   or (force_zero and pending is not None and pending > 0)

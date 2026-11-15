@@ -1,3 +1,9 @@
+# Wersja 2.1.5 — monotoniczna ochrona i diagnostyka poleceń
+
+**855 testów Python i 230 testów panelu PASS** w końcowym pełnym sprawdzeniu offline. Niezależny przegląd bezpieczeństwa oraz przegląd wizualny sekcji na danych syntetycznych zakończone bez blokerów. Testy panelu obejmują w tym osiem nowych regresji prywatnego podglądu poleceń: stan nieaktualny, nieprawidłowe dane i braki bez fikcyjnych zer, rzeczywiste zero, nowy start RAM, limit pięciu prób, bezpieczeństwo treści, rozdzielenie usługi od odczytu oraz zachowanie rozwinięcia bez wywołań sterujących.
+
+Zakres obejmuje niepodnoszenie wcześniejszego niższego żądania w łańcuchu ochronnym, zachowawcze zaokrąglanie redukcji, nieodnawialne oczekiwanie na odczyt oraz ograniczony do 20 prób prywatny ślad poleceń w RAM od bieżącego uruchomienia, z oddzielnymi wynikami, pominięciami i odczytem. Zwykłe odstępy, stabilizacja, BMS i pozostałe zabezpieczenia pozostają wymagane. Testy i opisy są syntetyczne; wynik usługi nie zastępuje odczytu nastawy ani fizycznego pomiaru. Historia encji HA nie jest traktowana jako dowód liczby wykonanych zapisów urządzenia. Nie rekonstruuje się ani nie wygładza rzeczywistej historii użytkownika. Wcześniejsze wyniki poniżej pozostają historyczne.
+
 # Wersja 2.1.4 — kroczący odstęp zwykłych dodatnich nastaw
 
 **827 testów Python i 222 testy panelu PASS** w końcowym pełnym sprawdzeniu offline. Niezależny przegląd bezpieczeństwa zakończony bez blokerów.

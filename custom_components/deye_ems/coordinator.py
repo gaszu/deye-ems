@@ -118,6 +118,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # Evidence of an accepted service call, never a physical charging ACK.
         # Kept only in RAM: a restart must re-establish settled readback.
         self._pending_grid_reduction = None
+        # Private, bounded evidence since this process started. Service return,
+        # HA state observation and physical battery response are different facts.
+        self._command_diagnostics = {"since": self._now().isoformat(), "retention": "since_boot",
+            "counts": {key: 0 for key in ("accepted", "uncertain", "not_sent", "suppressed")},
+            "attempts": [], "last_suppressed": None, "readback": None}
         self._grid_reduction_chain = None
         self._current_grid_attempt = None
         super().__init__(hass, _LOGGER, name="Deye EMS", config_entry=entry,
@@ -547,7 +552,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 # Explicit relinquishing is cleaned up while we still own the
                 # hardware. A conflict is different: never touch another owner.
                 await self._disable_gc()
-                await self._grid_attempt(0, self._now().timestamp(), force=True)
+                await self._grid_attempt(0, self._now().timestamp(), force=True, reason="mode_stop")
             self._memory["mode"] = mode
             try:
                 await self._save()
@@ -1313,9 +1318,21 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 (not isinstance(upper, (int, float)) or isinstance(upper, bool)
                  or not math.isfinite(upper) or not amps <= upper <= 1000)):
             return {"known": False}
+        previous_at, previous_a = state.get("previous_possible_at"), state.get("previous_possible_a")
+        previous_upper = state.get("previous_upper_a", previous_a)
+        if ((previous_at is None) != (previous_a is None)
+                or previous_a is not None and (not isinstance(previous_a, (int, float))
+                    or isinstance(previous_a, bool) or not math.isfinite(previous_a)
+                    or not 0 <= previous_a <= 1000)
+                or (previous_a is None) != (previous_upper is None)
+                or previous_upper is not None and (not isinstance(previous_upper, (int, float))
+                    or isinstance(previous_upper, bool) or not math.isfinite(previous_upper)
+                    or not previous_a <= previous_upper <= 1000)):
+            return {"known": False}
         ordinary = self._ordinary_positive_history(state, now)
-        if (own_attempt is not None and state.get("id") == own_attempt["id"]
-                and state["outcome"] == "prepared" and at == state["attempt_at"]):
+        if own_attempt is not None and state.get("id") == own_attempt["id"]:
+            if state != own_attempt.get("prepared_record"):
+                return {"known": False}
             at, amps = state.get("previous_possible_at"), state.get("previous_possible_a")
             upper = state.get("previous_upper_a", amps)
             if ordinary.get("known") is True and "previous_at" in ordinary:
@@ -1323,6 +1340,66 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return {"known": True, "possible_at": at, "possible_a": amps, "upper_a": upper,
                 "not_sent_at": state["not_sent_at"], "ordinary_positive_known": ordinary.get("known") is True,
                 "ordinary_positive_at": ordinary.get("at"), "ordinary_kind": ordinary.get("kind")}
+
+    @staticmethod
+    def _current_intent_ceiling(inputs, history):
+        current = _number(inputs.get("current_a"))
+        if (history.get("known") is not True or history.get("ordinary_positive_known") is not True
+                or current is None or not 0 <= current <= 1000):
+            return 0
+        possible = history.get("possible_a")
+        if possible is None:  # Validated virgin history, not an unknown intent.
+            return current if history.get("possible_at") is None else 0
+        intent = _number(possible)
+        return min(current, intent) if intent is not None and 0 <= intent <= 1000 else 0
+
+    def _command_suppressed(self, value, kind, reason):
+        self._command_diagnostics["counts"]["suppressed"] += 1
+        self._command_diagnostics["last_suppressed"] = {
+            "at": self._now().isoformat(), "value_a": value, "kind": kind, "reason": reason}
+
+    def _command_attempt_finished(self, value, context, reason):
+        outcome = context["outcome"]
+        self._command_diagnostics["counts"][outcome] += 1
+        record = {"at": datetime.fromtimestamp(context.get("dispatch_at", context["prepared_at"]), _UTC).isoformat(),
+                  "value_a": value, "kind": "ordinary" if context["ordinary"] else "safety",
+                  "reason": reason, "outcome": outcome}
+        if outcome == "not_sent":
+            error = self._last_error
+            record["guard"] = (error if isinstance(error, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", error)
+                               else "service_not_sent")
+        self._command_diagnostics["attempts"] = (self._command_diagnostics["attempts"] + [record])[-20:]
+
+    def _command_readback(self, inputs, now, history):
+        state = self._state("grid_current_number")
+        reported = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        possible, at = history.get("possible_a"), history.get("possible_at")
+        current = inputs.get("current_a")
+        status = ("unknown" if history.get("known") is not True or current is None or possible is None
+                  else "pending" if reported is None or at is None or reported < at
+                  else "matched" if current == possible else "mismatch")
+        self._command_diagnostics["readback"] = {"observed_at": now.isoformat(),
+            "source": "home_assistant_state", "status": status,
+            "value_a": current, "intent_a": possible,
+            "reported_at": datetime.fromtimestamp(reported, _UTC).isoformat() if reported is not None else None,
+            "physical_confirmation": False}
+
+    def _grid_duplicate_hold(self, value, inputs, now, history):
+        if history.get("known") is not True or history.get("possible_a") != value:
+            return None
+        at = history.get("possible_at")
+        if at is None:
+            return None
+        state = self._state("grid_current_number")
+        report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        if inputs.get("current_a") == value and report is not None and at <= report <= now.timestamp():
+            return "matching_ha_state"
+        dispatch = self._memory["grid_dispatch"]
+        outcome = dispatch.get("outcome")
+        delay = 30 if outcome == "accepted" else 10 if outcome in ("prepared", "uncertain") else 0
+        if 0 <= now.timestamp() - at < delay:
+            return "accepted_settling" if outcome == "accepted" else "uncertain_backoff"
+        return None
 
     def _initial_record_valid(self, record, now):
         if (not isinstance(record, dict) or record.get("version") != 1
@@ -1434,9 +1511,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 return False
             context = self._current_grid_attempt
             if (context is not None and not context["ordinary"]
-                    and (inputs["current_a"] is None or value > inputs["current_a"])):
+                    and value > self._current_intent_ceiling(inputs,
+                        self._dispatch_history(now, own_attempt=context))):
                 # A reduction prepared before Store must not become an
-                # unthrottled increase after a new register report arrives.
+                # unthrottled increase after either a new register report or
+                # a lower potentially sent command. Own PREPARED is excluded.
                 self._last_error = "last_moment_safety_direction_guard"
                 return False
             if context is not None and context["ordinary"]:
@@ -1565,7 +1644,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 kind="ordinary" if current_attempt["ordinary"] else "safety",
                 at=now_ts if current_attempt["ordinary"] else previous.get("ordinary_positive_at"),
                 previous=previous.get("ordinary_positive_at"))
-            current_attempt.update(prepared=True, prepared_at=now_ts)
+            current_attempt.update(prepared=True, prepared_at=now_ts,
+                                   prepared_record=deepcopy(self._memory["grid_dispatch"]))
         self._memory["ledger"][entity_id] = {"at": now_ts, "a": value, "action": action}
         try:
             await self._save()  # Mandatory durable journal BEFORE every command.
@@ -1588,25 +1668,36 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._grid_reduction_chain = None
             self._pending_grid_reduction = None
 
-    async def _grid_attempt(self, value, now_ts, *, force=False):
+    async def _grid_attempt(self, value, now_ts, *, force=False, reason=None):
         value = int(value)
-        before = self._read_inputs(self._now())
+        now = self._now()
+        before = self._read_inputs(now)
+        history = self._dispatch_history(now)
+        self._command_readback(before, now, history)
         self._observe_reduction_readback(before)
+        if force and value > 0 and value > self._current_intent_ceiling(before, history):
+            self._last_error = "safety_current_intent_guard"
+            self._command_suppressed(value, "safety", "safety_current_intent_guard")
+            return False
+        duplicate = self._grid_duplicate_hold(value, before, now, history)
+        if duplicate is not None:
+            self._command_suppressed(value, "safety" if force or value == 0 else "ordinary", duplicate)
+            return False
         chain = self._grid_reduction_chain
         old_ledger = deepcopy(self._memory["ledger"].get(self._sources["grid_current_number"], {}))
-        ordinary = value > 0 and not (force and before["current_a"] is not None and value <= before["current_a"])
+        ordinary = value > 0 and not force
         if not ordinary:
             # A synchronous register readback after a safety reduction must not
             # hide the interruption from this tick's later policy observation.
             self._memory["current_policy"]["safe_since"] = None
-        now = self._now()
         if ordinary and not self._ordinary_dispatch_ready(now):
+            self._command_suppressed(value, "ordinary", "ordinary_dispatch_wait")
             return False
         target, emergency, _ = self._target(now)
         initial_grid = self._grid_input(before, now, target, emergency)
         initial = ordinary and before["current_a"] == 0 and not self._initial_window_started(now)
         context = {"id": uuid4().hex, "ordinary": ordinary, "outcome": "not_sent", "prepared": False,
-                   "previous": self._dispatch_history(now),
+                   "previous": history,
                    "initial_start": initial, "initial_permission": initial_dispatch_ready(initial_grid),
                    "initial_deadline": initial_grid["policy_deadline"] if initial else None,
                    "positive_deadline": initial_grid["policy_deadline"] if value > 0 and initial_grid["cheap_window"] else None}
@@ -1618,9 +1709,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                                            now_ts, cooldown=10, force=force, current_attempt=context)
         finally:
             self._current_grid_attempt = None
+        if context["prepared"]:
+            controlled_reason = reason if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", reason) else (
+                "ordinary_current" if ordinary else "protective_current")
+            self._command_attempt_finished(value, context, controlled_reason)
+        else:
+            self._command_suppressed(value, "ordinary" if ordinary else "safety", "attempt_cooldown_or_ledger")
         state = self._memory["grid_dispatch"]
-        if (context["prepared"] and state.get("id") == context["id"]
-                and state.get("outcome") == "prepared" and state.get("possible_at") == context["prepared_at"]):
+        if context["prepared"] and state == context.get("prepared_record"):
             state["outcome"] = context["outcome"]
             if context["outcome"] == "not_sent":
                 state.update(possible_at=context["previous"].get("possible_at"),
@@ -1765,6 +1861,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if own is not None and own["outcome"] != "not_sent":
             own = None
         history = self._dispatch_history(now, own_attempt=own)
+        self._command_readback(inputs, now, history)
         possible = history.get("possible_a")
         state = self._state("grid_current_number")
         report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
@@ -1797,6 +1894,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "ordinary_last_possible_ts": history.get("possible_at"),
                 "ordinary_last_positive_possible_ts": history.get("ordinary_positive_at"),
                 "ordinary_last_not_sent_ts": history.get("not_sent_at"),
+                "current_intent_known": history.get("known") is True and history.get("ordinary_positive_known") is True,
+                "current_intent_virgin": (history.get("known") is True and history.get("ordinary_positive_known") is True
+                                          and history.get("possible_at") is None),
+                "last_possible_current_a": history.get("possible_a"),
                 "pending_current_a": None if confirmed else history.get("upper_a"),
                 "grid_charge_active": bool(charging),
                 "grid_charge_enabled": (gc.state == "on" if gc is not None and gc.state in ("on", "off")
@@ -1855,6 +1956,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         ledger = self._memory["ledger"].get(self._sources["grid_current_number"], {})
         current = inputs["current_a"]
         valid = (not self._stopped and self.mode == "active" and not self._owner_conflicts()
+                 and self._hardware_modes_ok()
                  and inputs["grid_charge_balanced"] is True
                  and cap["telemetry_ok"] and cap["grid_within_limits"]
                  and 0 <= now.timestamp() - pending["started_at"] <= 30
@@ -1891,14 +1993,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         program = self._tou_program(now)
         if program.get("valid") is not True:
             await self._disable_gc()
-            await self._grid_attempt(0, now.timestamp(), force=True)
+            await self._grid_attempt(0, now.timestamp(), force=True, reason="invalid_tariff_configuration")
             control["runtime_reason"] = program.get("issue") or "invalid_tariff_configuration"
             return
         if self._real_tariff() and not self._clocks_ok(now):
             # Updating a sorted circular program is a transition, not six
             # independent clock writes. Disable charging and confirm OFF first.
             await self._disable_gc()
-            await self._grid_attempt(0, now.timestamp(), force=True)
+            await self._grid_attempt(0, now.timestamp(), force=True, reason="tariff_program_transition")
             if any((state := self._state(f"tou_gc_{i}")) is None or state.state != "off"
                    or state.attributes.get("restored", False) for i in range(1, 7)):
                 control["runtime_reason"] = "waiting_tou_charge_off_readback"
@@ -1929,7 +2031,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return  # Fresh control/SoC observations are required after conversion.
         floor = self._effective_min_soc()
         if control.get("write"):
-            await self._grid_attempt(control["next_a"], now.timestamp(), force=control.get("safety", False))
+            await self._grid_attempt(control["next_a"], now.timestamp(), force=control.get("safety", False),
+                                     reason=control.get("reason"))
         times = [row["time"] for row in program["rows"]]
         for slot, clock in enumerate(times, 1):
             key = f"tou_time_{slot}"
@@ -2551,10 +2654,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             modes_ok = self._hardware_modes_ok()
             if active and not modes_ok:
                 await self._disable_gc()
-                await self._grid_attempt(0, now.timestamp(), force=True)
+                await self._grid_attempt(0, now.timestamp(), force=True, reason="hardware_mode_mismatch")
             elif active:
                 if safety.get("write"):
-                    await self._grid_attempt(safety["next_a"], now.timestamp(), force=True)
+                    await self._grid_attempt(safety["next_a"], now.timestamp(), force=True, reason=safety.get("reason"))
                 _, night, afternoon, _, _ = self._window(now)
                 if not (night or afternoon) or not inputs["telemetry_valid"]:
                     await self._disable_gc()
@@ -2585,7 +2688,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             active = self.mode == "active"
             if active and not modes_ok:
                 await self._disable_gc()
-                await self._grid_attempt(0, now.timestamp(), force=True)
+                await self._grid_attempt(0, now.timestamp(), force=True, reason="hardware_mode_mismatch")
                 control["runtime_reason"] = "hardware_mode_mismatch"
             elif active:
                 await self._run_driver(inputs, control, target, emergency, now)
@@ -2605,6 +2708,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "status": control.get("runtime_reason", "active" if active else "shadow"),
                     "error": self._last_error, "conflicts": conflicts,
                     "inputs": inputs, "plan": public_plan, "tariff_calendar": self.options["tariff_calendar"],
+                    "command_diagnostics": deepcopy(self._command_diagnostics),
                     "control": {**control, "target_soc": target,
                         "target_source": target_source, "deadline": target_deadline,
                         "target_deadline": target_deadline, "target_key": target_key,

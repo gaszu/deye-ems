@@ -104,7 +104,7 @@ class DynamicCurrentLimits(unittest.TestCase):
             grid_port_phases_w=[3600, 3600, 3600])
         result = calculate_grid_charge(g)
         self.assertTrue(result["safety"])
-        self.assertEqual(result["next_a"], 11)
+        self.assertEqual(result["next_a"], 10)
         self.assertEqual(calculate_grid_charge_increase_cap({**g, "current_a": 0})["increase_cap_a"], 11)
 
     def test_need_and_projection_use_voltage_and_storage_efficiency_once(self):

@@ -172,7 +172,7 @@ class GridChargeScenarios(unittest.TestCase):
                      bms_cap_a=17)
         result = calculate_grid_charge(g)
         self.assertEqual(result["cap_a"], 17)
-        self.assertEqual(result["next_a"], 17)
+        self.assertEqual(result["next_a"], 15)
         low_v = calculate_grid_charge_cap(snapshot(battery_voltage_v=40))
         high_v = calculate_grid_charge_cap(snapshot(battery_voltage_v=65))
         self.assertLess(high_v["cap_a"], low_v["cap_a"])
@@ -466,8 +466,9 @@ class GridChargeScenarios(unittest.TestCase):
         self.assertEqual(calculate_grid_charge_cap(g)["cap_a"], 62)
         self.assertTrue(result["safety"])
         self.assertTrue(result["write"])
-        self.assertEqual(result["next_a"], 8)
-        # A later ACK of 8 A fits the separate full-request GC turn-on guard.
+        self.assertEqual(result["next_a"], 5)
+        # An already safe 8 A setting need not be quantized again; it also fits
+        # the separate full-request GC turn-on guard.
         g.update(current_a=8, last_attempt_a=8)
         self.assertEqual(calculate_grid_charge(g)["next_a"], 8)
         self.assertFalse(calculate_grid_charge(g)["write"])
@@ -475,7 +476,7 @@ class GridChargeScenarios(unittest.TestCase):
         self.assertEqual(bound["increase_cap_a"], 8)
         for inactive in (None, "on", 1):
             g.update(current_a=42, last_attempt_a=42, grid_charge_active=inactive)
-            self.assertEqual(calculate_grid_charge(g)["next_a"], 8)
+            self.assertEqual(calculate_grid_charge(g)["next_a"], 5)
 
     def test_possible_unsafe_pending_setting_is_cancelled_without_an_increase(self):
         for current, pending, bms in ((42, 62, 50), (0, 108, 100)):
@@ -525,7 +526,7 @@ class GridChargeScenarios(unittest.TestCase):
         self.assertFalse(calculate_grid_charge({**g, "now_ts": 1055})["write"])
         self.assertTrue(calculate_grid_charge({**g, "now_ts": 1500})["write"])
 
-    def test_invalid_or_missing_dispatch_history_blocks_ordinary_but_not_safety(self):
+    def test_invalid_or_missing_dispatch_history_allows_zero_only(self):
         cases = [dict(ordinary_history_known=False), dict(ordinary_history_known=1),
                  dict(ordinary_last_possible_ts=float("nan")),
                  dict(ordinary_last_possible_ts=1001), dict(ordinary_last_possible_ts=-1),
@@ -536,19 +537,21 @@ class GridChargeScenarios(unittest.TestCase):
         for fields in cases:
             with self.subTest(fields=fields):
                 g = snapshot(current_a=50, last_attempt_a=50, **fields)
-                self.assertFalse(calculate_grid_charge(g)["write"])
+                stopped = calculate_grid_charge(g)
+                self.assertTrue(stopped["safety"])
+                self.assertEqual(stopped["next_a"], 0)
                 reduction = calculate_grid_charge({**g, "bms_cap_a": 49})
                 self.assertTrue(reduction["safety"])
                 self.assertTrue(reduction["write"])
-                self.assertEqual(reduction["next_a"], 49)
+                self.assertEqual(reduction["next_a"], 0)
 
-    def test_one_amp_safety_reduction_bypasses_both_dispatch_backoffs(self):
+    def test_protective_reduction_rounds_down_and_bypasses_both_dispatch_backoffs(self):
         result = calculate_grid_charge(snapshot(
             current_a=50, last_attempt_a=50, last_attempt_ts=999,
             ordinary_last_not_sent_ts=999, bms_cap_a=49))
         self.assertTrue(result["write"])
         self.assertTrue(result["safety"])
-        self.assertEqual(result["next_a"], 49)
+        self.assertEqual(result["next_a"], 45)
 
     def test_fractional_readback_does_not_expand_the_maximum_ordinary_step(self):
         g = snapshot(soc=74, remaining_h=1, current_a=60.9, last_attempt_a=60.9)
