@@ -29,6 +29,7 @@ from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_r
                                 describe_current_wait, DEADBAND_A, QUANTUM_A)
 from .planner import (plan_energy, tariff_context, tariff_identity, tariff_target_items,
                       physical_tariff_tou, tariff_slot_targets)
+from .solcast import forecast_summary
 from .slot_meter import update_slot_measurements
 from .topology import ct_load_balance
 from .soc_policy import reserve_lower_bound
@@ -2244,7 +2245,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._solcast_status = {"status": "unavailable", "reason": "invalid_client_result"}
             return []
         self._solcast_status = self._redact({key: result[key] for key in
-            ("status", "reason", "quota", "sites", "source") if key in result})
+            ("status", "reason", "quota", "sites", "source", "forecast_summary") if key in result})
         return result.get("periods", [])
 
     async def _load_profile(self, now):
@@ -2371,6 +2372,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 state = self._state(key)
                 if state is not None:
                     groups.append(state.attributes.get("detailedForecast", []))
+        if not self._solcast_configured():
+            self._solcast_status["forecast_summary"] = forecast_summary([row for group in groups if isinstance(group, list) for row in group], now)
         for periods in groups:
             if not isinstance(periods, list):
                 bad = True

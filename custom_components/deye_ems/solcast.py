@@ -330,11 +330,10 @@ class SolcastClient:
                         "coverage_reason": "site_cache_missing", "periods": [], "sites": [], "quota": self._quota(cfg, now)}
         required = {start+i*1800 for i in range(96)}
         common = set.intersection(*(set(rows) for rows in per_site)) if per_site else set()
-        if not required <= common:
-            return {"status": "unavailable", "reason": reason if reason not in ("ok", "poll_interval") else "forecast_coverage_incomplete",
-                    "coverage_reason": "forecast_coverage_incomplete", "periods": [], "sites": [], "quota": self._quota(cfg, now)}
+        coverage_valid = required <= common
         periods = []
-        for at in sorted(t for t in common if start <= t < start+72*3600):
+        display_rows = []
+        for at in sorted(common):
             local = datetime.fromtimestamp(at, _WARSAW)
             half = local.hour*2 + local.minute//30
             factor = cfg["factor"] * cfg["hourly"][local.hour] * cfg["half_hourly"][half]
@@ -342,14 +341,20 @@ class SolcastClient:
             # before summing; global/time corrections apply once to the sum.
             corrected = [(rows[at], cfg["site_factors"][rid][half] if rid in cfg["site_factors"] else 1.)
                          for rid, rows in zip(ids, per_site)]
-            periods.append(dict(period_start=datetime.fromtimestamp(at, _UTC).isoformat(),
+            display_rows.append(dict(period_start=datetime.fromtimestamp(at, _UTC).isoformat(),
                 pv_estimate=sum(row["pv_estimate"]*site_factor for row, site_factor in corrected)*factor,
                 pv_estimate10=sum(row["pv_estimate10"]*site_factor for row, site_factor in corrected)*factor))
+        periods = [row for row in display_rows if start <= datetime.fromisoformat(row["period_start"]).timestamp() < start+72*3600]
+        summary = forecast_summary(display_rows, now, datetime.fromtimestamp(min(self._state["per_site"][rid]["fetched_at"] for rid in ids), _UTC).isoformat())
+        if not coverage_valid:
+            return {"status": "unavailable", "reason": reason if reason not in ("ok", "poll_interval") else "forecast_coverage_incomplete",
+                    "coverage_reason": "forecast_coverage_incomplete", "periods": [], "sites": [],
+                    "quota": self._quota(cfg, now), "forecast_summary": summary}
         known = {site["resource_id"]: site for site in self._state["sites"]}
         return {"status": "ok" if downloaded else "cached", "reason": reason,
                 "source": "solcast_api" if downloaded else "solcast_dated_cache", "periods": periods,
                 "sites": [deepcopy(known.get(rid, {"resource_id": rid})) for rid in ids],
-                "quota": self._quota(cfg, now), "dampening_factor": cfg["factor"]}
+                "quota": self._quota(cfg, now), "dampening_factor": cfg["factor"], "forecast_summary": summary}
 
     async def async_forecast(self, config, now, force=False):
         async with self._lock:
@@ -397,3 +402,41 @@ class SolcastClient:
                     reason = "forecast_store_failed"
                     break
             return self._aggregate(cfg, now, ids, reason, downloaded)
+
+
+def forecast_summary(rows, now, updated_at=None):
+    zone = ZoneInfo("Europe/Warsaw")
+    local = now.astimezone(zone)
+    today = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow = today + timedelta(days=1)
+    end = tomorrow + timedelta(days=1)
+    points = {}
+    invalid = False
+    for row in rows:
+        try:
+            at = datetime.fromisoformat(row["period_start"].replace("Z", "+00:00"))
+            values = (row["pv_estimate"], row["pv_estimate10"])
+            if at.tzinfo is None or at.timestamp() % 1800 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in values) or values[1] > values[0]:
+                raise ValueError
+            stamp = at.timestamp()
+            if stamp in points and points[stamp] != values:
+                raise ValueError
+            points[stamp] = values
+        except (KeyError, TypeError, ValueError, AttributeError):
+            invalid = True
+    def total(start, stop):
+        start, stop = start.timestamp(), stop.timestamp()
+        covered, p50, p10 = 0., 0., 0.
+        for at, values in points.items():
+            seconds = max(0, min(stop, at + 1800) - max(start, at))
+            covered += seconds
+            p50 += values[0] * seconds / 3600
+            p10 += values[1] * seconds / 3600
+        complete = not invalid and abs(covered - (stop - start)) < .01
+        return {"p50_kwh": round(p50, 3) if complete else None,
+                "p10_kwh": round(p10, 3) if complete else None,
+                "complete": complete}
+    return {"date": local.date().isoformat(), "timezone": "Europe/Warsaw",
+            "as_of": now.isoformat(), "source_updated_at": updated_at,
+            "today": total(today, tomorrow), "remaining_today": total(now, tomorrow),
+            "tomorrow": total(tomorrow, end)}
