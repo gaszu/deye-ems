@@ -230,17 +230,17 @@ for language, translation in (("pl", doc), ("en", doc_en)):
 # the generator authoritative so packaging cannot drop these flow steps.
 for language, translation in (("pl", doc), ("en", doc_en)):
     pl = language == "pl"
-    tariff_title = "Operator i taryfa" if pl else "Operator and tariff"
+    tariff_title = "Taryfa TAURON" if pl else "TAURON tariff"
     tariff_steps = {
         "tariff_operator": {
             "title": tariff_title,
-            "description": ("Wybierz operatora z umowy dystrybucyjnej. Następny krok pokaże jego taryfy dla gospodarstw domowych."
-                if pl else "Choose the distribution operator on your contract. The next step shows its household tariffs."),
+            "description": ("Operator jest stały: TAURON Dystrybucja. Dostępne taryfy: G11, G13, G12w i G12. Dotychczasowa konfiguracja innego operatora nie jest automatycznie zmieniana."
+                if pl else "The operator is fixed to TAURON Dystrybucja. Available tariffs: G11, G13, G12w and G12. An existing configuration for another operator is not changed automatically."),
             "data": {"operator_id": "Operator sieci" if pl else "Distribution operator"}},
         "tariff_plan": {
-            "title": "Taryfa i zegar licznika" if pl else "Tariff and meter clock",
-            "description": ("Wybierz grupę taryfową z własnej umowy i sposób działania zegara licznika rozliczeniowego. Zmiana sezonu taryfy i przestawienie zegara to odrębne zasady. Harmonogram jest odczytywany z dokumentu operatora; nie edytujesz jego godzin. Następny ekran jest podglądem przed zapisem.\n\n{tariff_notices}"
-                if pl else "Choose your contracted tariff and the settlement meter clock. Tariff seasons and daylight-saving clock changes are separate rules. Operator hours come from its published document and cannot be edited. The next screen previews the selection before saving.\n\n{tariff_notices}"),
+            "title": "Taryfa TAURON i zegar licznika" if pl else "TAURON tariff and meter clock",
+            "description": ("Operator: TAURON Dystrybucja. Wybierz G11, G13, G12w albo G12 zgodnie z umową oraz zegar licznika rozliczeniowego. Godziny TOU są stałe w sezonie profilu; dzień wolny zmienia strefę i zgodę na ładowanie, nie godziny. Podgląd nie zapisuje ustawień.\n\n{tariff_notices}"
+                if pl else "Operator: TAURON Dystrybucja. Choose G11, G13, G12w or G12 according to your contract and confirm the settlement meter clock. TOU times stay fixed within the profile season; a day off changes classification and charging permission, not the times. Previewing does not save settings.\n\n{tariff_notices}"),
             "data": {"profile_id": "Taryfa" if pl else "Tariff",
                      "clock_basis": "Zegar licznika rozliczeniowego" if pl else "Settlement meter clock"}},
         "tariff_confirm": {
@@ -250,14 +250,15 @@ for language, translation in (("pl", doc), ("en", doc_en)):
                 if pl else "Confirm the contracted tariff and settlement meter clock")}},
     }
     errors = {
-        "invalid_tariff_operator": "Wybierz operatora z listy." if pl else "Choose a listed operator.",
-        "invalid_tariff_profile": "Wybierz taryfę z listy operatora." if pl else "Choose a listed operator tariff.",
+        "invalid_tariff_operator": "Nowy wybór jest dostępny tylko dla TAURON Dystrybucja." if pl else "New selections are available only for TAURON Dystrybucja.",
+        "invalid_tariff_profile": "Wybierz G11, G13, G12w albo G12 z listy TAURON." if pl else "Choose G11, G13, G12w or G12 from the TAURON list.",
         "tariff_operator_mismatch": "Ta taryfa należy do innego operatora." if pl else "This tariff belongs to another operator.",
         "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę." if pl else "This profile needs an additional verified schedule. Choose a supported tariff.",
         "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika." if pl else "Choose the settlement meter clock.",
         "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu." if pl else "The preserved schedule retains local time. Choose an operator profile to change the time basis.",
         "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu." if pl else "The profile document does not cover this date. Update the catalog.",
         "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem." if pl else "Review the schedule and check confirmation before saving.",
+        "tariff_selection_restricted": "Obecnie można wybrać tylko TAURON: G11, G13, G12w albo G12. Dotychczasowa konfiguracja pozostaje zachowana." if pl else "Only TAURON G11, G13, G12w or G12 can currently be selected. The existing configuration is preserved.",
     }
     for section in ("config", "options"):
         translation[section]["step"].update(json.loads(json.dumps(tariff_steps)))

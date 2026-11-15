@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.5
+# Instalacja i obsługa Deye EMS 2.1.6
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -14,14 +14,14 @@ Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.5**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.6**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.5.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.5/deye-ems-2.1.5.zip).
+1. Pobierz [deye-ems-2.1.6.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.6/deye-ems-2.1.6.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -130,10 +130,10 @@ Pomiary muszą być świeże (do30s), bez restored, wW; znaczniki CT i portu GRI
 
 Zmiana topologii lub przypisań unieważnia stary plan i cache celu. Zapis kreatora lub zmienionych opcji, także selektora LOAD/CT w panelu, może wznowić sterowanie dopiero po ponownym sprawdzeniu warunków. Panel pokazuje osobno sieć mierzoną na CT, LOAD, odbiory przed falownikiem i port GRID. Sekcja **Układ LOAD** lub **Układ LOAD i CT** w **Ustawieniach zaawansowanych i szczegółach** opisuje znaczenie pomiarów w zapisanym układzie. W układzie LOAD odbiory między GRID a CT są nieobliczane. Nieaktualny lub niezgodny odczyt jest oznaczony jako brak danych. Testy offline nie potwierdzają kierunków rzeczywistych czujników ani reakcji sprzętu.
 
-## Operator, taryfa i automatyczny start po zapisie
+## Taryfa TAURON i automatyczny start po zapisie
 
-1. W **Operator i taryfa** otwórz wybór taryfy. Podczas sterowania najpierw jawnie przejdź do obserwacji.
-2. Wybierz operatora z listy pięciu OSD, a następnie taryfę zgodną z umową. Katalog opisuje 30 obsługiwanych profili i dwie pozycje zablokowane; brakujące reguły regionalne lub dynamiczne nie są zastępowane domysłem.
+1. Otwórz **Wybierz taryfę TAURON**. Podczas sterowania najpierw jawnie przejdź do obserwacji.
+2. Operator jest stały: **TAURON Dystrybucja**. Wybierz zgodną z umową taryfę **G11, G13, G12w albo G12**. Nowego profilu innego operatora obecnie nie można wybrać; istniejąca obca lub własna konfiguracja nie jest automatycznie zastępowana.
 3. Potwierdź zegar licznika. **Czas lokalny** uwzględnia zmianę lato/zima; **stały CET** pozostaje czasem zimowym. Nie dobieraj tego ustawienia na podstawie pory roku. Ustal je dla swojego układu pomiarowego. Zegary HA i falownika muszą być prawidłowe.
 4. Sprawdź podgląd dni roboczych, wolnych, sezonu i godzin. Zaznacz potwierdzenie zgodności z umową i wybierz **Zapisz potwierdzoną taryfę**. Anulowanie odrzuca szkic, a zmiana konfiguracji w tle unieważnia stary podgląd.
 5. Kreator zamknie się sam. Silnik HA oczekuje na nową konfigurację, pomiary i obliczenia, a następnie używa zwykłych zabezpieczeń aktywacji. Poprawny plan zachowawczy może być użyty jawnie bez udawania pełnej prognozy. Oczekiwanie i przyczyny blokady pozostają widoczne; przeglądarka nie musi być otwarta.
@@ -143,7 +143,7 @@ Sprawdzanie po zapisie obejmuje wszystkie zmienione opcje wpisu integracji, tak�
 
 Przy przeładowaniu aktywnej konfiguracji silnik najpierw żąda wyłączenia Grid Charge i 0 A oraz wymaga poprawnych odczytów potwierdzających. Brak potwierdzenia blokuje przeładowanie i jest pokazywany jako błąd. Potwierdzenie nastaw nie jest pomiarem fizycznej reakcji urządzenia.
 
-Tabela taryfy rozdziela zgodę strefy, cel doładowania, stałą rezerwę i projekcję SoC. Projekcja bieżącego przedziału zaczyna się od podanej chwili. Wartości minione lub nieznane nie otrzymują sztucznego 0%. Dodatkowe wpisy TOU służą dopasowaniu do sześciu rejestrów falownika, a nie tworzeniu nowych stref OSD. [Źródła i warunki taryf](TARIFFS.md).
+Tabela taryfy rozdziela zgodę strefy, cel doładowania, stałą rezerwę i projekcję SoC. Projekcja bieżącego przedziału zaczyna się od podanej chwili. Wartości minione lub nieznane nie otrzymują sztucznego 0%. Sześć wpisów TOU ma stałe godziny sezonowego szablonu. Dni wolne zmieniają klasyfikację i zgodę na ładowanie, nie przesuwają tych godzin. Podział nie tworzy nowych stref OSD ani sześciu nowych terminów celu. Dla cyklicznego szablonu lub stałego CET lokalna doba może pokazywać fragmenty jednego wpisu po obu stronach północy. Godziny i fragmenty pochodzą z backendu. Po instalacji osobno sprawdź przyjęcie programu i rzeczywiste odczyty godzin oraz flag; sam podgląd ich nie potwierdza. [Źródła i warunki taryf](TARIFFS.md).
 
 ## Sprawdzanie aktualizacji — od 2.0.3
 

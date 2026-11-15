@@ -1,5 +1,15 @@
 # Przejście z innego EMS i powrót z kopii
 
+## Przejście na 2.1.6
+
+Nowy wybór w instalatorze i panelu obejmuje tylko TAURON G11, G13, G12w i G12, ze stałym operatorem. Istniejąca konfiguracja innego operatora lub własna nie jest automatycznie zamieniana na TAURON; otwarcie i anulowanie szkicu nie zapisują opcji ani nie zmieniają trybu. Wybór innego nowego profilu jest obecnie niedostępny.
+
+TAURON korzysta ze stałych godzin sezonowego szablonu TOU. Dni wolne zmieniają strefy i flagi zgody na ładowanie, nie godziny wpisów. Karty w widoku lokalnego zegara zachowują sześć przedziałów również w całodobowo tanim dniu. Wszystkie korzystają z istniejących terminów planu, bez tworzenia sześciu nowych celów. Zapisany zegar i podstawa sezonu pozostają wymagane; nie utożsamiaj każdego początku wpisu z granicą strefy cenowej.
+
+Przed aktualizacją zachowaj prywatną kopię ustawień i runtime bez danych dostępu, dotychczasowe odczyty godzin/flag TOU oraz ZIP 2.1.5. Po instalacji sprawdź konfigurację, wymagany restart i rzeczywiście załadowaną wersję silnika oraz panelu. Osobno zweryfikuj sześć odczytanych godzin i ich flagi, zegar, taryfę, źródła, rezerwę, pomiary, plan i tryb. Podgląd przygotowanego programu nie jest dowodem odczytu nastaw ani fizycznego ładowania. Zmiana godzin nadal podlega wyłączeniu ładowania i dotychczasowym potwierdzeniom.
+
+**Powrót do 2.1.5:** zachowaj wpis konfiguracji i runtime, zainstaluj poprzedni ZIP, sprawdź konfigurację i uruchom HA ponownie. Wraca wcześniejszy sposób kompilacji programu, więc sam powrót plików nie dowodzi przywrócenia wcześniejszych godzin urządzenia. Porównaj rzeczywiste odczyty z zachowaną kopią i zweryfikuj flagi, źródła, rezerwę, pomiary oraz tryb. Nie obniżaj zabezpieczeń ani nie usuwaj historii poleceń w celu wymuszenia startu.
+
 ## Przejście na 2.1.5
 
 Aktualizacja poprawia łańcuch ochronnych redukcji i jego oczekiwanie na odczyt. Opóźniony stan HA nie może podnieść wcześniejszego niższego żądania; dodatnia redukcja jest zaokrąglana w dół do 5 A, z dopuszczeniem całkowitej nastawy 1–4 A, zaokrąglonej w dół przy limicie poniżej 5 A. Ponowienie tej samej przyjętej redukcji nie odnawia maksymalnego 30 s oczekiwania. Wymagane surowsze zero zachowuje pierwszeństwo. Zwykły odstęp 600 s, stabilizacja 120 s, BMS, zgoda GC i walidacja pomiarów pozostają skuteczne.

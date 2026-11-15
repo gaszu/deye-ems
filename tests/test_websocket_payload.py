@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
-from test_installable import C, load, CALENDAR
+from test_installable import C, load, CALENDAR, TARIFF_SETTINGS
 from test_websocket import POST_SAVE
 from test_runtime import Harness
 from test_single_phase_runtime import single_harness
@@ -23,6 +23,7 @@ def websocket_module():
         "DATA_APPEARANCE": "test_appearance", "DATA_UPDATES": "test_updates",
         "calendar_operators": CALENDAR.calendar_operators,
         "calendar_profiles": CALENDAR.calendar_profiles,
+        "selectable_tariffs": TARIFF_SETTINGS.selectable_tariffs,
         "post_save_status": POST_SAVE.post_save_status,
         "cancel_all_post_save": POST_SAVE.cancel_all_post_save,
     })

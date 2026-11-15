@@ -29,15 +29,15 @@
         }
       },
       "tariff_operator": {
-        "title": "Operator i taryfa",
-        "description": "Wybierz operatora z umowy dystrybucyjnej. Następny krok pokaże jego taryfy dla gospodarstw domowych.",
+        "title": "Taryfa TAURON",
+        "description": "Operator jest stały: TAURON Dystrybucja. Dostępne taryfy: G11, G13, G12w i G12. Dotychczasowa konfiguracja innego operatora nie jest automatycznie zmieniana.",
         "data": {
           "operator_id": "Operator sieci"
         }
       },
       "tariff_plan": {
-        "title": "Taryfa i zegar licznika",
-        "description": "Wybierz grupę taryfową z własnej umowy i sposób działania zegara licznika rozliczeniowego. Zmiana sezonu taryfy i przestawienie zegara to odrębne zasady. Harmonogram jest odczytywany z dokumentu operatora; nie edytujesz jego godzin. Następny ekran jest podglądem przed zapisem.\n\n{tariff_notices}",
+        "title": "Taryfa TAURON i zegar licznika",
+        "description": "Operator: TAURON Dystrybucja. Wybierz G11, G13, G12w albo G12 zgodnie z umową oraz zegar licznika rozliczeniowego. Godziny TOU są stałe w sezonie profilu; dzień wolny zmienia strefę i zgodę na ładowanie, nie godziny. Podgląd nie zapisuje ustawień.\n\n{tariff_notices}",
         "data": {
           "profile_id": "Taryfa",
           "clock_basis": "Zegar licznika rozliczeniowego"
@@ -63,25 +63,27 @@
       "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem.",
       "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami.",
       "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie.",
-      "invalid_tariff_operator": "Wybierz operatora z listy.",
-      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
-      "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
-      "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
-      "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
-      "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
-      "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
-      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem."
-    },
-    "abort": {
-      "already_configured": "Integracja Deye EMS jest już skonfigurowana.",
-      "invalid_tariff_operator": "Wybierz operatora z listy.",
-      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "invalid_tariff_operator": "Nowy wybór jest dostępny tylko dla TAURON Dystrybucja.",
+      "invalid_tariff_profile": "Wybierz G11, G13, G12w albo G12 z listy TAURON.",
       "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
       "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
       "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
       "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
       "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
       "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem.",
+      "tariff_selection_restricted": "Obecnie można wybrać tylko TAURON: G11, G13, G12w albo G12. Dotychczasowa konfiguracja pozostaje zachowana."
+    },
+    "abort": {
+      "already_configured": "Integracja Deye EMS jest już skonfigurowana.",
+      "invalid_tariff_operator": "Nowy wybór jest dostępny tylko dla TAURON Dystrybucja.",
+      "invalid_tariff_profile": "Wybierz G11, G13, G12w albo G12 z listy TAURON.",
+      "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
+      "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
+      "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
+      "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
+      "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
+      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem.",
+      "tariff_selection_restricted": "Obecnie można wybrać tylko TAURON: G11, G13, G12w albo G12. Dotychczasowa konfiguracja pozostaje zachowana.",
       "tariff_configuration_changed": "Konfiguracja zmieniła się od podglądu. Otwórz wybór taryfy ponownie."
     },
     "create_entry": {
@@ -243,7 +245,7 @@
           "entity_prefix": "Prefiks encji Deye",
           "topology": "Topologia i moc falownika",
           "inverter": "Model i fazy falownika",
-          "tariff": "Operator i taryfa"
+          "tariff": "Taryfa TAURON"
         }
       },
       "solcast": {
@@ -272,15 +274,15 @@
         }
       },
       "tariff_operator": {
-        "title": "Operator i taryfa",
-        "description": "Wybierz operatora z umowy dystrybucyjnej. Następny krok pokaże jego taryfy dla gospodarstw domowych.",
+        "title": "Taryfa TAURON",
+        "description": "Operator jest stały: TAURON Dystrybucja. Dostępne taryfy: G11, G13, G12w i G12. Dotychczasowa konfiguracja innego operatora nie jest automatycznie zmieniana.",
         "data": {
           "operator_id": "Operator sieci"
         }
       },
       "tariff_plan": {
-        "title": "Taryfa i zegar licznika",
-        "description": "Wybierz grupę taryfową z własnej umowy i sposób działania zegara licznika rozliczeniowego. Zmiana sezonu taryfy i przestawienie zegara to odrębne zasady. Harmonogram jest odczytywany z dokumentu operatora; nie edytujesz jego godzin. Następny ekran jest podglądem przed zapisem.\n\n{tariff_notices}",
+        "title": "Taryfa TAURON i zegar licznika",
+        "description": "Operator: TAURON Dystrybucja. Wybierz G11, G13, G12w albo G12 zgodnie z umową oraz zegar licznika rozliczeniowego. Godziny TOU są stałe w sezonie profilu; dzień wolny zmienia strefę i zgodę na ładowanie, nie godziny. Podgląd nie zapisuje ustawień.\n\n{tariff_notices}",
         "data": {
           "profile_id": "Taryfa",
           "clock_basis": "Zegar licznika rozliczeniowego"
@@ -311,14 +313,15 @@
       "inverter_model_phase_mismatch": "Liczba faz jest niezgodna z wybranym modelem.",
       "invalid_inverter_limits": "Limity mocy muszą być poprawnymi dodatnimi liczbami.",
       "confirm_inverter_model": "Sprawdź podsumowanie i zaznacz potwierdzenie.",
-      "invalid_tariff_operator": "Wybierz operatora z listy.",
-      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "invalid_tariff_operator": "Nowy wybór jest dostępny tylko dla TAURON Dystrybucja.",
+      "invalid_tariff_profile": "Wybierz G11, G13, G12w albo G12 z listy TAURON.",
       "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
       "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
       "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
       "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
       "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
-      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem."
+      "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem.",
+      "tariff_selection_restricted": "Obecnie można wybrać tylko TAURON: G11, G13, G12w albo G12. Dotychczasowa konfiguracja pozostaje zachowana."
     },
     "abort": {
       "no_extra_loads": "Brak dodatkowych odbiorników do usunięcia.",
@@ -329,14 +332,15 @@
       "panel_not_ready": "Integracja nie zakończyła ładowania. Sprawdź jej stan i dzienniki HA.",
       "invalid_topology": "Wybierz poprawną topologię instalacji.",
       "inverter_settings_changed": "Ustawienia falownika zmieniły się od przygotowania podglądu. Otwórz kreator ponownie.",
-      "invalid_tariff_operator": "Wybierz operatora z listy.",
-      "invalid_tariff_profile": "Wybierz taryfę z listy operatora.",
+      "invalid_tariff_operator": "Nowy wybór jest dostępny tylko dla TAURON Dystrybucja.",
+      "invalid_tariff_profile": "Wybierz G11, G13, G12w albo G12 z listy TAURON.",
       "tariff_operator_mismatch": "Ta taryfa należy do innego operatora.",
       "tariff_profile_unavailable": "Ten profil wymaga dodatkowego, zweryfikowanego harmonogramu. Wybierz obsługiwaną taryfę.",
       "invalid_tariff_clock_basis": "Wybierz sposób działania zegara licznika.",
       "legacy_tariff_clock_unchanged": "Dotychczasowy harmonogram zachowuje lokalny zegar. Wybierz profil operatora, aby zmienić podstawę czasu.",
       "tariff_outside_validity": "Dokument tego profilu nie obejmuje wybranej daty. Wymagana jest aktualizacja katalogu.",
       "confirm_tariff": "Sprawdź harmonogram i zaznacz potwierdzenie przed zapisem.",
+      "tariff_selection_restricted": "Obecnie można wybrać tylko TAURON: G11, G13, G12w albo G12. Dotychczasowa konfiguracja pozostaje zachowana.",
       "tariff_configuration_changed": "Konfiguracja zmieniła się od podglądu. Otwórz wybór taryfy ponownie."
     }
   }

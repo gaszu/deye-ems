@@ -7,6 +7,7 @@ from .appearance import DATA_APPEARANCE
 from .const import DOMAIN, DEFAULT_OPTIONS, DEFAULT_SOURCES, VERSION
 from .updates import DATA_UPDATES
 from .tariff_calendar import calendar_operators, calendar_profiles
+from .tariff_settings import selectable_tariffs
 from .post_save import post_save_status, cancel_all_post_save
 
 
@@ -53,7 +54,8 @@ async def status(hass, connection, msg):
 async def tariff_catalog(hass, connection, msg):
     """Embedded public rules only; no source, device, history or network calls."""
     connection.send_result(msg["id"], {"backend_version": VERSION,
-        "operators": calendar_operators(), "profiles": calendar_profiles()})
+        "operators": [row for row in calendar_operators() if row["operator_id"] == "tauron_dystrybucja"],
+        "profiles": selectable_tariffs(calendar_profiles())})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/command",

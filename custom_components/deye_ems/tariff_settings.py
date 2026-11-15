@@ -4,6 +4,26 @@ from hashlib import sha256
 import json
 
 
+SELECTABLE_TARIFF_PROFILES = ("tauron_g11_2026", "tauron_g13_2026",
+                              "tauron_g12w_2026", "tauron_g12_2026")
+
+
+def selectable_tariffs(profiles):
+    """Current selection policy; the full historical calendar stays available."""
+    by_id = {row.get("profile_id"): row for row in profiles}
+    return [deepcopy(by_id[key]) for key in SELECTABLE_TARIFF_PROFILES
+            if key in by_id and by_id[key].get("runtime_allowed") is True
+            and by_id[key].get("supported") is True]
+
+
+def validate_tariff_change(previous, candidate):
+    """Restrict new selections without migrating an unchanged saved tariff."""
+    keys = ("tariff_profile", "tariff_clock_basis", "tariff_contract_confirmed")
+    if (any(candidate.get(key) != previous.get(key) for key in keys)
+            and candidate.get("tariff_profile") not in SELECTABLE_TARIFF_PROFILES):
+        raise ValueError("tariff_selection_restricted")
+
+
 def selected_tariff(profiles, profile_id):
     found = [row for row in profiles if row.get("profile_id") == profile_id]
     if len(found) != 1:
@@ -23,6 +43,8 @@ def tariff_revision(values):
 
 def validate_tariff_draft(profiles, operator_id, profile_id, clock_basis, *, now, describe):
     profile = selected_tariff(profiles, profile_id)
+    if profile_id not in SELECTABLE_TARIFF_PROFILES or operator_id != "tauron_dystrybucja":
+        raise ValueError("tariff_selection_restricted")
     if profile.get("operator_id", profile.get("operator")) != operator_id:
         raise ValueError("tariff_operator_mismatch")
     if profile.get("runtime_allowed") is not True or profile.get("supported") is not True:

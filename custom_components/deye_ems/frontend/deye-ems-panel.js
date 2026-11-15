@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-5";
-const PANEL_VERSION = "2.1.5";
+const PANEL_TAG = "deye-ems-panel-2-1-6";
+const PANEL_VERSION = "2.1.6";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -26,6 +26,7 @@ const ranges = {
 const reasons = {
   planned:"Plan gotowy", initializing:"Uruchamianie", shadow:"Obserwacja",
   telemetry_invalid:"Brak poprawnych, świeżych pomiarów",
+  waiting_tou_zero_current_readback:"Oczekiwanie na odczyt nastawy prądu z sieci równy 0 A przed zmianą godzin TOU",
   waiting_tou_charge_off_readback:"Oczekiwanie na potwierdzenie wyłączenia ładowania przed zmianą TOU",waiting_tou_clock_readback:"Oczekiwanie na odczyt godzin TOU po zmianie",tariff_program_updated:"Przygotowano nowy harmonogram TOU — trwa weryfikacja",invalid_tou_clock_readback:"Nieprawidłowy odczyt godzin TOU falownika",
   bms_blocked:"Blokada ładowania baterii", grid_headroom:"Ograniczenie poborem z sieci",
   connection_other_phase_headroom:"Ograniczenie przyłącza na fazie poza falownikiem — ładowanie wstrzymane",
@@ -105,8 +106,9 @@ const hardwareMessages={
 };
 
 
+const TAURON_TARIFF_IDS=new Set(["tauron_g11_2026","tauron_g13_2026","tauron_g12w_2026","tauron_g12_2026"]);
 const tariffLabels={operator_id:"Operator sieci dystrybucyjnej",profile_id:"Taryfa zgodna z umową",clock_basis:"Zegar przełączania stref",confirm_tariff:"Potwierdzam operatora, taryfę, zegar i przedstawiony harmonogram"};
-const tariffMessages={confirm_tariff:"Sprawdź podgląd i zaznacz potwierdzenie przed zapisaniem.",tariff_configuration_changed:"Konfiguracja zmieniła się w trakcie podglądu. Otwórz kreator ponownie.",tariff_operator_mismatch:"Taryfa nie odpowiada wybranemu operatorowi.",tariff_profile_unavailable:"Ta taryfa nie ma zweryfikowanego harmonogramu dostępnego do sterowania.",tariff_outside_validity:"Profil nie obowiązuje w bieżącej dacie. Wybierz aktualny profil.",legacy_tariff_clock_unchanged:"Dotychczasowy własny profil zachowuje czas lokalny.",stop_before_mapping:"Przełącz EMS w tryb obserwacji przed zmianą taryfy.",invalid_tariff_operator:"Wybierz operatora z listy.",invalid_tariff_profile:"Wybierz taryfę dostępną dla wybranego operatora.",invalid_tariff_clock_basis:"Potwierdź sposób odmierzania czasu przez licznik: czas lokalny albo stały CET.",confirm_tariff_required:"Sprawdź podgląd i zaznacz potwierdzenie przed zapisaniem.",tariff_preview_changed:"Ustawienia lub harmonogram zmieniły się. Otwórz kreator ponownie i sprawdź aktualny podgląd.",already_in_progress:"Kreator jest już otwarty. Zamknij poprzednią konfigurację i spróbuj ponownie."};
+const tariffMessages={tariff_selection_restricted:"Obecnie można wybrać tylko TAURON: G11, G13, G12w lub G12. Dotychczasowa konfiguracja nie została zmieniona.",confirm_tariff:"Sprawdź podgląd i zaznacz potwierdzenie przed zapisaniem.",tariff_configuration_changed:"Konfiguracja zmieniła się w trakcie podglądu. Otwórz kreator ponownie.",tariff_operator_mismatch:"Taryfa nie odpowiada wybranemu operatorowi.",tariff_profile_unavailable:"Ta taryfa nie ma zweryfikowanego harmonogramu dostępnego do sterowania.",tariff_outside_validity:"Profil nie obowiązuje w bieżącej dacie. Wybierz aktualny profil.",legacy_tariff_clock_unchanged:"Dotychczasowy własny profil zachowuje czas lokalny.",stop_before_mapping:"Przełącz EMS w tryb obserwacji przed zmianą taryfy.",invalid_tariff_operator:"Nowy wybór taryfy jest dostępny tylko dla TAURON Dystrybucja.",invalid_tariff_profile:"Wybierz taryfę dostępną dla wybranego operatora.",invalid_tariff_clock_basis:"Potwierdź sposób odmierzania czasu przez licznik: czas lokalny albo stały CET.",confirm_tariff_required:"Sprawdź podgląd i zaznacz potwierdzenie przed zapisaniem.",tariff_preview_changed:"Ustawienia lub harmonogram zmieniły się. Otwórz kreator ponownie i sprawdź aktualny podgląd.",already_in_progress:"Kreator jest już otwarty. Zamknij poprzednią konfigurację i spróbuj ponownie."};
 
 class DeyeEMSPanel extends HTMLElement {
   telemetryExpanded=false;
@@ -192,7 +194,7 @@ class DeyeEMSPanel extends HTMLElement {
     let message=Object.hasOwn(messages,state.reason)?messages[state.reason]:fallback[state.status];
     if(state.status==="active"&&this.payload?.mode!=="active")message=fallback.active;
     const issueNames={missing:"brak odczytu",restored:"odczyt przywrócony po uruchomieniu",wrong_unit:"błędna jednostka",invalid:"nieprawidłowy odczyt",future:"czas odczytu w przyszłości",stale:"odczyt jest za stary",time_skew:"odczyty z różnych chwil",alias:"powtórzone przypisanie",telemetry_invalid:"brak poprawnych pomiarów",bms_blocked:"blokada ładowania",incomplete_48h_forecast:"brak kompletnej prognozy",unavailable:"brak danych",invalid_or_unsupported:"niepoprawna lub nieobsługiwana konfiguracja",provider_unavailable:"źródło danych jest niedostępne"};
-    const names={...sourceLabels,charge_power:"Zgodność czasowa pomiarów mocy",reserve:"Rezerwa SoC",forecast:"Prognoza",plan:"Plan",hardware:"Model falownika",battery_alarm:"Alarm baterii",battery_fault:"Błąd baterii",topology:"Układ pomiarowy",grid_setting:"Nastawa ładowania",tariff:"Operator i taryfa"};
+    const names={...sourceLabels,charge_power:"Zgodność czasowa pomiarów mocy",reserve:"Rezerwa SoC",forecast:"Prognoza",plan:"Plan",hardware:"Model falownika",battery_alarm:"Alarm baterii",battery_fault:"Błąd baterii",topology:"Układ pomiarowy",grid_setting:"Nastawa ładowania",tariff:"Profil taryfy"};
     for(const kind of ["grid","load","ct_grid"])for(let i=1;i<=3;i++)names[kind+"_l"+i+"_power"]=(kind==="ct_grid"?"CT":kind.toUpperCase())+" L"+i;
     const issues=(Array.isArray(state.issues)?state.issues:[]).slice(0,24).filter(issue=>issue&&typeof issue==="object"&&Object.hasOwn(names,issue.source)&&Object.hasOwn(issueNames,issue.reason));
     return '<div role="'+(state.status==="blocked"?'alert':'status')+'" class="notice '+(state.status==="blocked"?'error':'')+'" data-post-save="'+esc(state.status)+'"><p>'+(!this.snapshotFresh()?'Ostatni odczyt sprawdzania; oczekiwanie na aktualizację. ':'')+esc(message)+'</p>'+issues.map(issue=>'<p>'+esc(names[issue.source])+': '+esc(issueNames[issue.reason])+'.</p>').join("")+(state.plan_source==="own_conservative_fallback"?'<p>'+esc(this.fallbackPlanText(state.plan_reason))+'</p>':state.plan_source==="own_deterministic_planner"?'<p>Silnik używa bieżącego planu opartego na prognozie.</p>':'')+(this.postSavePending()?'<p>Sprawdzanie prowadzi silnik także po zamknięciu panelu. Przycisk „Zatrzymaj i obserwuj” anuluje automatyczne włączenie.</p>':'')+'</div>';
@@ -639,7 +641,8 @@ class DeyeEMSPanel extends HTMLElement {
     const rows=(Array.isArray(program.rows)?program.rows:[]).slice(0,7);
     const valid=program.valid===true&&rows.length===6&&rows.every(row=>row&&Number.isInteger(row.slot)&&row.slot>=1&&row.slot<=6&&typeof row.time==="string"&&/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(row.time)&&typeof row.grid_charge_allowed==="boolean")&&new Set(rows.map(row=>row.slot)).size===6&&new Set(rows.map(row=>row.time)).size===6;
     if(!valid)return title+'<p class="notice warning">Brak kompletnego, poprawnego planu sześciu wpisów TOU. Sprawdź kalendarz i diagnostykę przed sterowaniem.</p></section>';
-    return title+'<p>Techniczny podział na sześć wpisów wymaganych przez Deye. Rzeczywiste strefy operatora są pokazane osobno powyżej.</p><div class="table"><table><thead><tr><th>Wpis TOU</th><th>Początek</th><th>Strefa</th><th>Sieć → bateria</th><th>Rodzaj granicy</th></tr></thead><tbody>'+[...rows].sort((a,b)=>a.slot-b.slot).map(row=>'<tr><td>'+row.slot+'</td><td>'+esc(row.time)+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+(row.padding===true?'Podział techniczny tej samej strefy':'Granica strefy')+'</td></tr>').join("")+'</tbody></table></div><p class="legend">To przygotowany program, nie potwierdzenie odczytu rejestrów ani fizycznego ładowania. Dodatkowy podział nie tworzy nowej strefy taryfowej i nie rozszerza zgody na ładowanie.</p></section>';
+    const description=program.clock_template==="stable_tauron"?'<p>Sześć stałych godzin sezonowego szablonu profilu. Dni robocze i wolne zmieniają klasyfikację oraz zgodę na ładowanie, nie przesuwają godzin. Rzeczywiste strefy operatora są pokazane osobno powyżej.</p>':'<p>Sześć wpisów TOU przygotowanych przez silnik dla zapisanego profilu. Rzeczywiste strefy operatora są pokazane osobno powyżej.</p>';
+    return title+description+'<div class="table"><table><thead><tr><th>Wpis TOU</th><th>Godzina TOU</th><th>Strefa tego dnia</th><th>Sieć → bateria</th></tr></thead><tbody>'+[...rows].sort((a,b)=>a.slot-b.slot).map(row=>'<tr><td>'+row.slot+'</td><td>'+esc(row.time)+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td></tr>').join("")+'</tbody></table></div><p class="legend">Godzina wpisu TOU nie musi być granicą strefy operatora. Szablon może być cykliczny i nie musi zaczynać się o 00:00. To przygotowany program, nie potwierdzenie odczytu rejestrów ani fizycznego ładowania. Sam podział nie tworzy nowych terminów celu ani nie rozszerza zgody kalendarza na ładowanie.</p></section>';
   }
   modelTargetsHtml(){
     const plan=this.payload?.data?.plan||{};
@@ -990,15 +993,17 @@ class DeyeEMSPanel extends HTMLElement {
           (confirm?type!=="boolean":type!=="select"||selector.select?.multiple===true))throw Error("unsupported_field");
         names.add(field.name);
         const value=Object.hasOwn(field,"default")?field.default:field.description?.suggested_value;
-        const options=type==="select"&&Array.isArray(selector.select.options)?selector.select.options.slice(0,128).map(option=>typeof option==="string"?{value:option,label:option}:{value:option?.value,label:typeof option?.label==="string"?option.label:option?.value}):[];
+        let options=type==="select"&&Array.isArray(selector.select.options)?selector.select.options.slice(0,128).map(option=>typeof option==="string"?{value:option,label:option}:{value:option?.value,label:typeof option?.label==="string"?option.label:option?.value}):[];
+        if(field.name==="operator_id")options=options.filter(option=>option.value==="tauron_dystrybucja");
+        if(field.name==="profile_id")options=options.filter(option=>TAURON_TARIFF_IDS.has(option.value));
         if(type==="select"&&(!options.length||options.some(option=>typeof option.value!=="string"||!option.value||option.value.length>200||typeof option.label!=="string")||new Set(options.map(option=>option.value)).size!==options.length))throw Error("unsupported_options");
         if(field.name==="clock_basis"&&options.some(option=>!["local","fixed_cet"].includes(option.value)))throw Error("unsupported_clock");
-        return {name:field.name,type,options,required:true,value:type==="boolean"?false:typeof value==="string"&&options.some(option=>option.value===value)?value:""};
+        return {name:field.name,type,options,required:true,value:type==="boolean"?false:field.name==="operator_id"?"tauron_dystrybucja":typeof value==="string"&&options.some(option=>option.value===value)?value:""};
       });
       if(expected.some(name=>!names.has(name)))throw Error("incomplete_form");
       const retain=previous?.type==="form"&&previous.step_id===flow.step_id;
       this.tariffDraft=Object.fromEntries(flow.fields.map(field=>[field.name,retain&&Object.hasOwn(this.tariffDraft,field.name)?this.tariffDraft[field.name]:field.value]));
-      flow.errors=Object.values(result.errors||{}).map(code=>Object.hasOwn(tariffMessages,code)?tariffMessages[code]:"Sprawdź operatora, taryfę, zegar i warunki umowy. Ustawienia nie zostały zapisane.");
+      flow.errors=Object.values(result.errors||{}).map(code=>Object.hasOwn(tariffMessages,code)?tariffMessages[code]:"Sprawdź taryfę TAURON, zegar i warunki umowy. Ustawienia nie zostały zapisane.");
       if(typeof result.description_placeholders?.tariff_preview==="string")flow.note=result.description_placeholders.tariff_preview;
       else if(typeof result.description_placeholders?.tariff_notices==="string"&&result.description_placeholders.tariff_notices)flow.note="Pozycje niedostępne do sterowania: "+result.description_placeholders.tariff_notices.replaceAll("unverified_region_schedule","brak zweryfikowanego harmonogramu dla regionu").replaceAll("dynamic_feed_required","wymaga zewnętrznego źródła aktualnych cen / stref");
     }
@@ -1019,8 +1024,8 @@ class DeyeEMSPanel extends HTMLElement {
     try{
       const result=await this._hass.callWS({type:"deye_ems/tariff_catalog"});
       if(sequence!==this.tariffSequence||!this.tariffOpen||result?.backend_version!==this.payload?.backend_version||!Array.isArray(result.operators)||!Array.isArray(result.profiles))return;
-      const operators=result.operators.slice(0,16).filter(row=>row&&typeof row.operator_id==="string"&&typeof row.label==="string").map(row=>({operator_id:row.operator_id,label:row.label}));
-      const profiles=result.profiles.slice(0,128).filter(row=>row&&typeof row.profile_id==="string"&&typeof row.operator_id==="string"&&typeof row.label==="string").map(row=>({profile_id:row.profile_id,operator_id:row.operator_id,label:row.label,tariff:typeof row.tariff==="string"?row.tariff:"",supported:row.supported===true,runtime_allowed:row.runtime_allowed===true}));
+      const operators=result.operators.slice(0,16).filter(row=>row&&row.operator_id==="tauron_dystrybucja"&&typeof row.label==="string").map(row=>({operator_id:row.operator_id,label:row.label}));
+      const profiles=result.profiles.slice(0,128).filter(row=>row&&TAURON_TARIFF_IDS.has(row.profile_id)&&row.operator_id==="tauron_dystrybucja"&&typeof row.label==="string").map(row=>({profile_id:row.profile_id,operator_id:row.operator_id,label:row.label,tariff:typeof row.tariff==="string"?row.tariff:"",supported:row.supported===true,runtime_allowed:row.runtime_allowed===true}));
       this.tariffCatalog={operators,profiles};
     }catch{/* The native wizard validates its own choices if optional catalog lookup fails. */}
   }
@@ -1051,24 +1056,24 @@ class DeyeEMSPanel extends HTMLElement {
         data[field.name]=true;
       }else{
         const value=String(this.tariffDraft[field.name]??"").trim();
-        if(!field.options.some(option=>option.value===value)){this.tariffError="Wybierz operatora, taryfę i potwierdź zegar z dostępnych list.";this.render();return;}
+        if(!field.options.some(option=>option.value===value)){this.tariffError="Wybierz taryfę TAURON i potwierdź zegar licznika.";this.render();return;}
         data[field.name]=value;
       }
     }
     return this.runTariff(async sequence=>{const result=await this._hass.callApi("POST","config/config_entries/options/flow/"+encodeURIComponent(id),data);this.applyTariffResult(result,sequence);},confirm);
   }
   tariffEditorHtml(){
-    if(!this.tariffOpen)return '<button id="tariff-open" class="secondary" '+(this.busy?'disabled':'')+'>Wybierz operatora i taryfę</button>';
+    if(!this.tariffOpen)return '<button id="tariff-open" class="secondary" '+(this.busy?'disabled':'')+'>Wybierz taryfę TAURON</button>';
     const flow=this.tariffFlow,active=this.payload?.mode==="active",disabled=this.busy||active;
     let body=active?'<p class="notice">Zmiana taryfy wymaga obserwacji. Dotychczasowe sterowanie działa do jawnego przełączenia. <button id="tariff-observe" class="secondary" '+(this.busy?'disabled':'')+'>Przejdź do obserwacji</button></p>':'';
     if(flow?.type==="form"){
-      const fields=flow.fields.map(field=>field.type==="boolean"?'<label class="check"><input type="checkbox" data-tariff-field="'+esc(field.name)+'" '+(this.tariffDraft[field.name]===true?'checked':'')+'>'+esc(tariffLabels[field.name])+'</label>':'<label>'+esc(tariffLabels[field.name])+'<select data-tariff-field="'+esc(field.name)+'" required><option value="" disabled '+(!this.tariffDraft[field.name]?'selected':'')+'>Wybierz…</option>'+field.options.map(option=>'<option value="'+esc(option.value)+'" '+(option.value===this.tariffDraft[field.name]?'selected':'')+'>'+esc(option.label)+'</option>').join("")+'</select></label>').join("");
-      const stages={tariff_operator:"Wybierz operatora zgodnego z umową dystrybucyjną.",tariff_plan:"Wybierz taryfę i zegar potwierdzony dla Twojego licznika. Czas lokalny zmienia się lato/zima; stały CET pozostaje czasem zimowym. Podgląd nie zapisuje ustawień.",tariff_confirm:"Sprawdź harmonogram, dni wolne, sezon i zegar. Zapis zmieni wyłącznie profil taryfy i jego potwierdzenia; pozostałe ustawienia zostaną zachowane."};
+      const fields=flow.fields.map(field=>field.name==="operator_id"?'<p>Operator: <b>TAURON Dystrybucja</b></p>':field.type==="boolean"?'<label class="check"><input type="checkbox" data-tariff-field="'+esc(field.name)+'" '+(this.tariffDraft[field.name]===true?'checked':'')+'>'+esc(tariffLabels[field.name])+'</label>':'<label>'+esc(tariffLabels[field.name])+'<select data-tariff-field="'+esc(field.name)+'" required><option value="" disabled '+(!this.tariffDraft[field.name]?'selected':'')+'>Wybierz…</option>'+field.options.map(option=>'<option value="'+esc(option.value)+'" '+(option.value===this.tariffDraft[field.name]?'selected':'')+'>'+esc(option.label)+'</option>').join("")+'</select></label>').join("");
+      const stages={tariff_operator:"Dostępny operator: TAURON Dystrybucja. Wybierz taryfę zgodną z umową.",tariff_plan:"Wybierz taryfę i zegar potwierdzony dla Twojego licznika. Czas lokalny zmienia się lato/zima; stały CET pozostaje czasem zimowym. Podgląd nie zapisuje ustawień.",tariff_confirm:"Sprawdź harmonogram, dni wolne, sezon i zegar. Zapis zmieni wyłącznie profil taryfy i jego potwierdzenia; pozostałe ustawienia zostaną zachowane."};
       const buttons={tariff_operator:"Wybierz taryfę",tariff_plan:"Pokaż harmonogram",tariff_confirm:"Zapisz potwierdzoną taryfę"};
       body+='<form id="tariff-form">'+(flow.note?'<p class="notice solcast-note">'+esc(flow.note)+'</p>':'')+'<fieldset '+(disabled?'disabled':'')+'><div class="fields">'+fields+'</div></fieldset>'+flow.errors.map(error=>'<p role="alert" class="notice error">'+esc(error)+'</p>').join("")+'<p class="legend">'+stages[flow.step_id]+'</p><button type="submit" '+(disabled?'disabled':'')+'>'+buttons[flow.step_id]+'</button></form>';
     }
     if(flow?.type==="abort")body+='<button id="tariff-reopen" class="secondary" '+(disabled?'disabled':'')+'>Otwórz kreator ponownie</button>';
-    return '<div class="tariff-editor">'+(this.tariffError?'<p role="alert" class="notice error">'+esc(this.tariffError)+'</p>':'')+(this.tariffNotice?'<p role="status" class="notice">'+esc(this.tariffNotice)+'</p>':'')+(this.tariffBusy?'<p role="status">'+(this.tariffCommitting?'Zapisywanie taryfy w HA…':'Otwieranie podglądu taryfy…')+'</p>':'')+body+'<div class="actions"><button id="tariff-cancel" type="button" class="secondary" '+(this.tariffCommitting?'disabled':'')+'>'+'Anuluj kreator'+'</button></div></div>';
+    return '<div class="tariff-editor"><h3>Taryfa TAURON</h3><p>Operator: <b>TAURON Dystrybucja</b> · dostępne taryfy: G11, G13, G12w i G12.</p>'+(this.tariffError?'<p role="alert" class="notice error">'+esc(this.tariffError)+'</p>':'')+(this.tariffNotice?'<p role="status" class="notice">'+esc(this.tariffNotice)+'</p>':'')+(this.tariffBusy?'<p role="status">'+(this.tariffCommitting?'Zapisywanie taryfy w HA…':'Otwieranie podglądu taryfy…')+'</p>':'')+body+'<div class="actions"><button id="tariff-cancel" type="button" class="secondary" '+(this.tariffCommitting?'disabled':'')+'>'+'Anuluj kreator'+'</button></div></div>';
   }
   bindTariff(){
     const root=this.shadowRoot;

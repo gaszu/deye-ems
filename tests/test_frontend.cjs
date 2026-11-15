@@ -41,13 +41,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:(fn,ms)=>{const timer={id:++timerId,fn,ms,cleared:false};timers.push(timer);return timer.id;},clearTimeout:id=>{const timer=timers.find(t=>t.id===id);if(timer)timer.cleared=true;},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-1-5");
+  const Panel = registry.get("deye-ems-panel-2-1-6");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"2.1.5",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.1.6",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -58,14 +58,14 @@ function fixture(previousElements = [], now = NOW) {
 
 test("an existing browser session registers the updated panel alongside the old element",()=>{
   class LegacyPanel {}
-  const {panel,registry}=fixture([["deye-ems-panel-2-1-4",LegacyPanel],["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel],["deye-ems-panel-1-0-10",LegacyPanel]]);
-  assert.equal(registry.get("deye-ems-panel-2-1-4"),LegacyPanel);
+  const {panel,registry}=fixture([["deye-ems-panel-2-1-5",LegacyPanel],["deye-ems-panel",LegacyPanel],["deye-ems-panel-1-0-1",LegacyPanel],["deye-ems-panel-1-0-5",LegacyPanel],["deye-ems-panel-1-0-10",LegacyPanel]]);
+  assert.equal(registry.get("deye-ems-panel-2-1-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-1-5"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.1\.5/);
+  assert.notEqual(registry.get("deye-ems-panel-2-1-6"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.1\.6/);
 });
 
 function setSettingsOpen(panel,open){
@@ -91,8 +91,8 @@ test("software version and manual update check stay inside existing advanced det
   const [primary,html]=panel.shadowRoot.innerHTML.split("<details>");
   assert.doesNotMatch(primary,/Wersja i aktualizacje|id="updates-check"/);
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>2\.1\.5<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>2\.1\.5<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.1\.6<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.1\.6<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -101,18 +101,18 @@ test("software version and manual update check stay inside existing advanced det
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"2.1.5",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.1.6",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
   html=updateInfo(panel,{status:"available",latest_version:"2.1.200",checked_at});
   assert.match(html,/Dostępna aktualizacja: 2\.1\.200/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"2.1.6",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.1.7",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"2.1.5"},
-    {status:"current",latest_version:"2.1.5",checked_at:"0"},
-    {status:"current",latest_version:"2.1.5",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"2.1.5",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.1.6"},
+    {status:"current",latest_version:"2.1.6",checked_at:"0"},
+    {status:"current",latest_version:"2.1.6",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.1.6",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -120,12 +120,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="2.1.6";panel.render();
+  panel.payload.backend_version="2.1.7";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v2.1.5","2.1.5-beta","02.1.5"]){
+  for(const value of [undefined,null,17,"unknown","v2.1.6","2.1.6-beta","02.1.6"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -135,22 +135,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.1.6",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.1.7",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 2\.1\.6/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.1\.7/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"2.1.6",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.1.7",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.1\.6"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.1\.7"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['2.1.6\" onclick=\"unexpected()','<img src=x>','2.1.6/../../x',"v2.1.6",true,18,"2.1.6-beta","999999999.0.1"]){
+  for(const latest_version of ['2.1.7\" onclick=\"unexpected()','<img src=x>','2.1.7/../../x',"v2.1.7",true,18,"2.1.7-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -169,9 +169,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"2.1.6",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.1.7",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.1.6");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.1.7");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -181,9 +181,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"2.1.6",updates:{status:"not_checked"}};
-  finish({backend_version:"2.1.5",updates:{status:"current",latest_version:"2.1.5",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.1.6");
+  panel.payload={...panel.payload,backend_version:"2.1.7",updates:{status:"not_checked"}};
+  finish({backend_version:"2.1.6",updates:{status:"current",latest_version:"2.1.6",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.1.7");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -218,20 +218,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"2.1.6",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.1.7",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"2.1.6");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"2.1.6",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.1.7");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.1.7",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="2.1.6";
+  panel.payload.backend_version="2.1.7";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -254,18 +254,18 @@ test("automatic Deye current ceiling is read-only and independent of the control
   assert.equal(calls.length,0);
 });
 
-const storeRow=(available_version="v2.1.5",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
+const storeRow=(available_version="v2.1.6",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
 function storeFixture(){
   const result=fixture(),{panel}=result;
   panel.isConnected=true;panel._hass.user={is_admin:true};
-  panel.payload.updates={status:"available",latest_version:"2.1.6",checked_at:new Date(NOW).toISOString(),stale:false};
+  panel.payload.updates={status:"available",latest_version:"2.1.7",checked_at:new Date(NOW).toISOString(),stale:false};
   return result;
 }
 function successfulStore(panel,calls,{legacy=false,alreadyCurrent=false}={}){
   let refreshed=false;
   panel._hass.callWS=async message=>{calls.push(message);
     if(legacy&&message.type.startsWith("marketplace/"))throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.1.5")];
+    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.1.6")];
     if(message.type.endsWith("/repository/refresh")){refreshed=true;return {};}
     throw Error("Unexpected store request");};
 }
@@ -281,7 +281,7 @@ test("open admin panel synchronizes only its older installed repository metadata
   assert.equal(calls.length,3);assert.equal(reloads(),0);assert.equal(panel.busy,false);
   assert.match(panel.updatesHtml(),/Marketplace otrzymał aktualne metadane/);
   assert.ok(calls.every(message=>!JSON.stringify(message).match(/install|download|restart|version\"|mode/)));
-  panel.payload.updates.latest_version="2.1.7";successfulStore(panel,calls);
+  panel.payload.updates.latest_version="2.1.8";successfulStore(panel,calls);
   assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,6);
 });
 
@@ -291,18 +291,18 @@ test("store metadata work is single-flight and never occupies the EMS stop contr
   const first=panel.syncStoreMetadata(),second=panel.syncStoreMetadata();
   assert.equal(first,second);assert.equal(calls.length,1);assert.equal(panel.busy,false);
   assert.equal(panel.shadowRoot.getElementById("mode").disabled,false);
-  finish([storeRow("v2.1.6")]);assert.equal(await first,true);assert.equal(calls.length,1);
+  finish([storeRow("v2.1.7")]);assert.equal(await first,true);assert.equal(calls.length,1);
 });
 
 test("already current marketplace metadata does not issue refresh and cannot downgrade a newer store release",async()=>{
-  for(const version of ["2.1.6","v2.1.7"]){
+  for(const version of ["2.1.7","v2.1.8"]){
     const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return [storeRow(version)];};
     assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,1);
   }
 });
 
 test("metadata sync requires an open admin panel and a fresh validated available release",async()=>{
-  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.1.6"},{latest_version:"2.1.5"},
+  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.1.7"},{latest_version:"2.1.6"},
     {latest_version:"<img src=x>"},{checked_at:new Date(NOW+1).toISOString()},
     {checked_at:new Date(NOW-7200001).toISOString()},{checked_at:null}];
   for(const changes of bad){const {panel,calls}=storeFixture();Object.assign(panel.payload.updates,changes);assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,0);}
@@ -313,9 +313,9 @@ test("metadata sync requires an open admin panel and a fresh validated available
 });
 
 test("wrong ambiguous uninstalled or malformed repository metadata never permits a refresh",async()=>{
-  const rows=[[],{},[storeRow("2.1.5",{id:"different"})],[storeRow("2.1.5",{full_name:"other/repo"})],
-    [storeRow("2.1.5",{domain:"other"})],[storeRow("2.1.5",{category:"plugin"})],
-    [storeRow("2.1.5",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
+  const rows=[[],{},[storeRow("2.1.6",{id:"different"})],[storeRow("2.1.6",{full_name:"other/repo"})],
+    [storeRow("2.1.6",{domain:"other"})],[storeRow("2.1.6",{category:"plugin"})],
+    [storeRow("2.1.6",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
   for(const response of rows){const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return response;};
     assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,1);await panel.syncStoreMetadata();assert.equal(calls.length,1);}
 });
@@ -336,7 +336,7 @@ test("legacy HACS fallback is allowed only for unknown_command and uses the same
 test("an unknown refresh endpoint rediscovers the same repository through legacy HACS before refreshing",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="marketplace/repository/refresh")throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.6":"v2.1.5")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.7":"v2.1.6")];done=true;return {};};
   assert.equal(await panel.syncStoreMetadata(),true);
   assert.deepEqual(calls.map(message=>message.type),["marketplace/repositories/list","marketplace/repository/refresh","hacs/repositories/list","hacs/repository/refresh","hacs/repositories/list"]);
 });
@@ -358,7 +358,7 @@ test("metadata responses after unmount cancellation or release changes never tri
     panel._hass.callWS=message=>{calls.push(message);return new Promise(resolve=>{finish=resolve;});};
     const pending=panel.syncStoreMetadata();
     if(reason==="disconnect"){panel.isConnected=false;panel.disconnectedCallback();}
-    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.7";else panel.payload.updates.stale=true;
+    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.8";else panel.payload.updates.stale=true;
     finish([storeRow()]);assert.equal(await pending,false);assert.equal(calls.length,1);
   }
 });
@@ -380,7 +380,7 @@ test("successful metadata fetch does not claim the store offers an unconfirmed n
 test("normal status polling can trigger metadata synchronization without a separate release check command",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="deye_ems/status")return panel.payload;
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.6":"v2.1.5")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.1.7":"v2.1.6")];done=true;return {};};
   await panel.refresh();await panel.storeSyncFlight;
   assert.equal(calls.filter(message=>message.type==="marketplace/repository/refresh").length,1);
   assert.ok(calls.every(message=>message.command!=="check_updates"));
@@ -2260,27 +2260,27 @@ test("a removed draft theme cannot be sent and HA card and Lovelace shape variab
     assert.ok(source.includes(variable),variable);
   }
 });
-const tariffOperators=[{value:"tauron_dystrybucja",label:"TAURON Dystrybucja"},{value:"pge_dystrybucja",label:"PGE Dystrybucja"},{value:"enea_operator",label:"Enea Operator"},{value:"energa_operator",label:"Energa Operator"},{value:"pge_energetyka_kolejowa",label:"PGE Energetyka Kolejowa"},{value:"custom",label:"Dotychczasowy własny profil"}];
+const tariffOperators=[{value:"tauron_dystrybucja",label:"TAURON Dystrybucja"}];
+const tariffProfiles=[{value:"tauron_g11_2026",label:"G11"},{value:"tauron_g13_2026",label:"G13"},{value:"tauron_g12w_2026",label:"G12w"},{value:"tauron_g12_2026",label:"G12"}];
 const tariffOperatorForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_operator",errors,data_schema:[{name:"operator_id",required:true,default:"tauron_dystrybucja",selector:{select:{options:tariffOperators}}}]});
-const tariffPlanForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_plan",errors,data_schema:[{name:"profile_id",required:true,selector:{select:{options:[{value:"tauron_g13_2026",label:"G13 — trzy strefy"},{value:"tauron_g11_2026",label:"G11 — jedna strefa"}]}}},{name:"clock_basis",required:true,selector:{select:{options:[{value:"local",label:"Czas lokalny — lato/zima"},{value:"fixed_cet",label:"Stały CET"}]}}}]});
+const tariffPlanForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_plan",errors,data_schema:[{name:"profile_id",required:true,selector:{select:{options:tariffProfiles}}},{name:"clock_basis",required:true,selector:{select:{options:[{value:"local",label:"Czas lokalny — lato/zima"},{value:"fixed_cet",label:"Stały CET"}]}}}]});
 const tariffConfirmForm=(errors={})=>({type:"form",flow_id:"tariff-flow",step_id:"tariff_confirm",errors,description_placeholders:{tariff_preview:"TAURON G13. Czas lokalny. Dzień roboczy 07–13 szczyt; święto: poza szczytem."},data_schema:[{name:"confirm_tariff",required:true,default:false,selector:{boolean:{}}}]});
 function nativeTariff(panel,{plan,confirm,finish,catalogError=false}={}){
   const apiCalls=[],wsCalls=[],effects={writes:0};
   panel._hass.callWS=async message=>{wsCalls.push(message);if(message.type==="deye_ems/tariff_catalog"){
     if(catalogError)throw Error("private-catalog-body");
-    return {backend_version:"2.1.5",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:[{profile_id:"tauron_g13_2026",operator_id:"tauron_dystrybucja",label:"TAURON G13",tariff:"G13",supported:true,runtime_allowed:true,private_key:"must-not-retain"}],private_body:"must-not-retain"};}
+    return {backend_version:"2.1.6",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:tariffProfiles.map(row=>({profile_id:row.value,operator_id:"tauron_dystrybucja",label:row.label,tariff:row.label,supported:true,runtime_allowed:true,private_key:"must-not-retain"})),private_body:"must-not-retain"};}
     return panel.payload;};
   panel._hass.callApi=async(method,route,data)=>{apiCalls.push({method,route,data});if(method==="DELETE")return {};
     if(route==="config/config_entries/options/flow")return {type:"menu",flow_id:"tariff-flow",step_id:"init",menu_options:["tariff","inverter","sources"]};
-    if(data.next_step_id==="tariff")return tariffOperatorForm();
-    if(Object.hasOwn(data,"operator_id"))return plan?plan(data):tariffPlanForm();
+    if(data.next_step_id==="tariff")return plan?plan(data):tariffPlanForm();
     if(Object.hasOwn(data,"profile_id"))return confirm?confirm(data):tariffConfirmForm();
     assert.deepEqual(JSON.parse(JSON.stringify(data)),{confirm_tariff:true});effects.writes++;
     return finish?finish(data):{type:"create_entry",data:{private_body:"must-not-retain"}};};
   return {apiCalls,wsCalls,effects};
 }
 function tariffInput(panel,name,value){const input=panel.shadowRoot.querySelector('[data-tariff-field="'+name+'"]');assert.ok(input,name);if(input.type==="checkbox")input.checked=value;else input.value=value;input.events.input();return input;}
-async function openTariffPlan(panel){await panel.openTariff();await panel.submitTariff();}
+async function openTariffPlan(panel){await panel.openTariff();}
 async function openTariffConfirm(panel){await openTariffPlan(panel);tariffInput(panel,"profile_id","tauron_g13_2026");tariffInput(panel,"clock_basis","local");await panel.submitTariff();}
 
 test("mode action is unique in the sticky responsive header beside the real mode",async()=>{
@@ -2316,13 +2316,13 @@ test("tariff render shows operator meter clock and operator zone names without r
   assert.match(html,/PGE Dystrybucja/);assert.match(html,/G12w/);assert.match(html,/Stały czas zimowy CET/);assert.match(html,/Pozaszczytowa — święto/);assert.doesNotMatch(html,/kolejnym etapie/);assert.equal(calls.length,0);
   assert.doesNotMatch(panel.shadowRoot.innerHTML,/Silnik lokalny · G13/);
 });
-test("tariff wizard reads catalog and creates only a native draft before operator selection",async()=>{
+test("tariff wizard offers only four TAURON tariffs in a native draft without changing existing configuration",async()=>{
   const {panel,calls}=fixture(),before=JSON.stringify(panel.payload),{apiCalls,wsCalls,effects}=nativeTariff(panel);
   await panel.shadowRoot.getElementById("tariff-open").events.click();
-  assert.equal(panel.tariffFlow.step_id,"tariff_operator");assert.equal(panel.tariffDraft.operator_id,"tauron_dystrybucja");assert.equal(effects.writes,0);assert.equal(JSON.stringify(panel.payload),before);assert.equal(calls.length,0);
+  assert.equal(panel.tariffFlow.step_id,"tariff_plan");assert.equal(panel.tariffDraft.operator_id,undefined);assert.equal(panel.tariffFlow.fields.find(row=>row.name==="profile_id").options.length,4);assert.equal(effects.writes,0);assert.equal(JSON.stringify(panel.payload),before);assert.equal(calls.length,0);
   assert.deepEqual(JSON.parse(JSON.stringify(wsCalls)),[{type:"deye_ems/tariff_catalog"}]);assert.equal(apiCalls.length,2);assert.equal(apiCalls[1].data.next_step_id,"tariff");
   assert.doesNotMatch(JSON.stringify(panel.tariffCatalog),/must-not-retain|private_/);
-  for(const operator of tariffOperators)assert.match(panel.tariffEditorHtml(),new RegExp(operator.label));assert.doesNotMatch(panel.tariffEditorHtml(),/Stoen/);
+  for(const operator of tariffOperators)assert.match(panel.tariffEditorHtml(),new RegExp(operator.label));assert.doesNotMatch(panel.tariffEditorHtml(),/Stoen|PGE|Enea|Energa|data-tariff-field="operator_id"/);
 });
 test("tariff requires an explicit meter clock then preview and an unchecked confirmation before save",async()=>{
   const {panel}=fixture(),{apiCalls,effects,wsCalls}=nativeTariff(panel);await openTariffPlan(panel);
@@ -2358,7 +2358,7 @@ test("tariff commit cannot be cancelled but a late cancelled opening is cleaned 
   const opening=late.openTariff();await flush();await late.cancelTariff();opened({type:"menu",flow_id:"late-tariff-flow",step_id:"init",menu_options:["tariff"]});await opening;await flush();assert.equal(late.tariffOpen,false);assert.equal(apiCalls.at(-1).method,"DELETE");assert.match(apiCalls.at(-1).route,/late-tariff-flow$/);
 });
 test("tariff edits participate in unsaved protection and disconnect cleanup while catalog failure is optional",async()=>{
-  const {panel,reloads}=fixture(),{apiCalls}=nativeTariff(panel,{catalogError:true});await panel.openTariff();assert.equal(panel.tariffFlow.step_id,"tariff_operator");assert.equal(panel.hasUnsavedChanges(),true);assert.equal(panel.reloadInterface(),false);assert.equal(reloads(),0);
+  const {panel,reloads}=fixture(),{apiCalls}=nativeTariff(panel,{catalogError:true});await panel.openTariff();assert.equal(panel.tariffFlow.step_id,"tariff_plan");assert.equal(panel.hasUnsavedChanges(),true);assert.equal(panel.reloadInterface(),false);assert.equal(reloads(),0);
   panel.disconnectedCallback();await flush();assert.equal(panel.tariffOpen,false);assert.ok(apiCalls.some(call=>call.method==="DELETE"));
 });
 function slotTarget(changes={}){return {start:"2026-11-10T21:00:00+01:00",end:"2026-11-11T06:00:00+01:00",zone:"low",tier:0,grid_charge_allowed:true,charge_target_soc_percent:76,reserve_soc_percent:45,projected_soc_start_percent:62,projected_soc_end_percent:76,projection_from:new Date(NOW).toISOString(),deadline:"2026-11-11T06:00:00+01:00",quality:"forecast",reason:"weekday",...changes};}
@@ -2414,15 +2414,15 @@ test("preview implements the tariff wizard and cancellable automatic start witho
   const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{events:{},addEventListener(name,fn){this.events[name]=fn;},refresh(){return Promise.resolve();}});return nodes.get(id);}};
   const context=vm.createContext({document,Date,structuredClone,console,setTimeout(fn){timers.push({fn,cancelled:false});return timers.length;},clearTimeout(id){if(timers[id-1])timers[id-1].cancelled=true;},fetch(){throw Error("Network forbidden");}});
   vm.runInContext(script,context,{filename:"preview-inline.js"});const hass=vm.runInContext("previewHass",context);
-  const save=async()=>{const first=await hass.callApi("POST","config/config_entries/options/flow",{}),route="config/config_entries/options/flow/"+first.flow_id;let step=await hass.callApi("POST",route,{next_step_id:"tariff"});assert.equal(step.step_id,"tariff_operator");step=await hass.callApi("POST",route,{operator_id:"enea_operator"});assert.equal(step.step_id,"tariff_plan");step=await hass.callApi("POST",route,{profile_id:"demo_enea_operator",clock_basis:"local"});assert.equal(step.step_id,"tariff_confirm");step=await hass.callApi("POST",route,{confirm_tariff:true});assert.equal(step.type,"create_entry");};
-  await save();let state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.mode,"shadow");assert.equal(state.post_save_activation.status,"waiting");assert.equal(state.options.tariff_calendar.operator_id,"enea_operator");
+  const save=async()=>{const first=await hass.callApi("POST","config/config_entries/options/flow",{}),route="config/config_entries/options/flow/"+first.flow_id;let step=await hass.callApi("POST",route,{next_step_id:"tariff"});assert.equal(step.step_id,"tariff_plan");assert.equal(step.data_schema.find(row=>row.name==="profile_id").selector.select.options.length,4);step=await hass.callApi("POST",route,{profile_id:"tauron_g11_2026",clock_basis:"local"});assert.equal(step.step_id,"tariff_confirm");step=await hass.callApi("POST",route,{confirm_tariff:true});assert.equal(step.type,"create_entry");};
+  await save();let state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.mode,"shadow");assert.equal(state.post_save_activation.status,"waiting");assert.equal(state.options.tariff_calendar.operator_id,"tauron_dystrybucja");
   await hass.callWS({command:"mode",mode:"shadow"});assert.equal(timers.at(-1).cancelled,true);state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.post_save_activation.status,"cancelled");
   await save();timers.at(-1).fn();state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.mode,"active");assert.equal(state.post_save_activation.status,"active");assert.ok(state.data.plan.tariff_slot_targets.length>0);
 });
 
 test("six physical TOU plan entries stay separate from operator intervals and do not claim device acknowledgment",()=>{
-  const {panel,calls}=fixture();panel.payload.options.physical_tou={valid:true,rows:Array.from({length:6},(_,i)=>({slot:i+1,time:String(i*4).padStart(2,"0")+":00:00",zone:"low",tier:0,grid_charge_allowed:true,padding:i%2===1}))};panel.render();
-  const html=panel.physicalTariffHtml();assert.equal((html.match(/<tr>/g)||[]).length,7);assert.match(html,/Rzeczywiste strefy operatora są pokazane osobno/);assert.match(html,/Podział techniczny tej samej strefy/);assert.match(html,/nie potwierdzenie odczytu rejestrów/);assert.match(panel.shadowRoot.innerHTML.split('<details>')[1],/Plan wpisów TOU/);assert.equal(calls.length,0);
+  const {panel,calls}=fixture();panel.payload.options.physical_tou={valid:true,clock_template:"stable_tauron",rows:Array.from({length:6},(_,i)=>({slot:i+1,time:String(i*4).padStart(2,"0")+":00:00",zone:"low",tier:0,grid_charge_allowed:true,padding:i%2===1}))};panel.render();
+  const html=panel.physicalTariffHtml();assert.equal((html.match(/<tr>/g)||[]).length,7);assert.match(html,/Rzeczywiste strefy operatora są pokazane osobno/);assert.match(html,/Sześć stałych godzin sezonowego szablonu profilu/);assert.doesNotMatch(html,/Rodzaj granicy|Granica strefy|Podział techniczny tej samej strefy/);assert.match(html,/nie potwierdzenie odczytu rejestrów/);assert.match(panel.shadowRoot.innerHTML.split('<details>')[1],/Plan wpisów TOU/);assert.equal(calls.length,0);
 });
 test("invalid incomplete or duplicate physical TOU entries cannot look like a complete program",()=>{
   const {panel}=fixture();for(const program of [{valid:false,issue:"private-error-body",rows:[]},{valid:true,rows:[]},{valid:true,rows:Array.from({length:6},()=>({slot:1,time:"00:00:00",grid_charge_allowed:true}))},{valid:true,rows:Array.from({length:6},(_,i)=>({slot:i+1,time:'<img src=x>',grid_charge_allowed:true}))}]){panel.payload.options.physical_tou=program;const html=panel.physicalTariffHtml();assert.match(html,/Brak kompletnego, poprawnego planu/);assert.doesNotMatch(html,/<table>|<img|private-error-body/);}
@@ -2430,12 +2430,13 @@ test("invalid incomplete or duplicate physical TOU entries cannot look like a co
 
 test("post-save explains all dedicated tariff and grid-source blockers using controlled labels",()=>{
   const {panel}=fixture();panel.payload.post_save_activation={status:"blocked",reason:"activation_conditions_failed",issues:[{source:"tariff",reason:"invalid_or_unsupported"},{source:"grid_setting",reason:"provider_unavailable"},{source:"battery_alarm",reason:"invalid"}]};
-  const html=panel.postSaveHtml();assert.match(html,/Operator i taryfa: niepoprawna lub nieobsługiwana konfiguracja/);assert.match(html,/Nastawa ładowania: źródło danych jest niedostępne/);assert.match(html,/Alarm baterii: nieprawidłowy odczyt/);
+  const html=panel.postSaveHtml();assert.match(html,/Profil taryfy: niepoprawna lub nieobsługiwana konfiguracja/);assert.match(html,/Nastawa ładowania: źródło danych jest niedostępne/);assert.match(html,/Alarm baterii: nieprawidłowy odczyt/);
 });
 test("unavailable tariff notices and TOU-readback waits use helpful Polish messages",async()=>{
   const {panel}=fixture();nativeTariff(panel,{plan:()=>({...tariffPlanForm(),description_placeholders:{tariff_notices:"G12x: unverified_region_schedule; G14: dynamic_feed_required"}})});await openTariffPlan(panel);
   assert.match(panel.tariffEditorHtml(),/brak zweryfikowanego harmonogramu dla regionu/);assert.match(panel.tariffEditorHtml(),/wymaga zewnętrznego źródła/);assert.doesNotMatch(panel.tariffEditorHtml(),/unverified_region_schedule|dynamic_feed_required/);
   panel.payload.mode="active";assert.match(panel.currentStatusText("waiting_tou_clock_readback"),/Oczekiwanie na odczyt godzin TOU/);
+  const zeroHold=panel.currentStatusText("waiting_tou_zero_current_readback");assert.match(zeroHold,/odczyt nastawy prądu z sieci równy 0 A przed zmianą godzin TOU/);assert.doesNotMatch(zeroHold,/moc baterii|potwierdzenie fizyczne|prąd baterii/);
 });
 
 test("real backend numeric tariff tiers show allowed charge targets and never create protected targets",()=>{
@@ -2593,7 +2594,7 @@ test("concise slot clocks still identify both offsets across the repeated DST ho
   assert.match(full,/25\.10/);assert.match(full,/26\.10/);assert.match(full,/GMT\+2/);assert.match(full,/GMT\+1/);
 });
 
-test("synthetic G13 preview uses a single cheap weekend interval without changing other calendar examples",()=>{
+test("synthetic G13 preview preserves merged weekend calendar but renders six fixed seasonal slots",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../preview/index.html"),"utf8"),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1],nodes=new Map();
   const now=Date.parse("2026-11-13T12:00:00+01:00");
   class PreviewDate extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
@@ -2605,6 +2606,12 @@ test("synthetic G13 preview uses a single cheap weekend interval without changin
   assert.equal(calendar.tomorrow[0].grid_charge_allowed,true);assert.equal(calendar.tomorrow[0].reason,"weekend");
   assert.equal(calendar.tomorrow[0].start,"2026-11-13T23:00:00.000Z");
   assert.equal(calendar.tomorrow[0].end,"2026-11-14T23:00:00.000Z");
+  const program=JSON.parse(vm.runInContext("JSON.stringify(example.options.physical_tou)",context));
+  assert.deepEqual(program.rows.map(row=>row.time),["00:00:00","04:00:00","07:00:00","13:00:00","16:00:00","21:00:00"]);
+  const slots=JSON.parse(vm.runInContext("JSON.stringify(example.data.plan.tariff_slot_targets)",context));
+  const tomorrow=slots.filter(row=>row.start>=calendar.tomorrow[0].start);
+  assert.equal(tomorrow.length,6);assert.ok(tomorrow.every(row=>row.grid_charge_allowed&&row.tier===0));assert.equal(new Set(tomorrow.map(row=>row.deadline)).size,1);
+  assert.deepEqual(tomorrow.map(row=>row.slot_time),program.rows.map(row=>row.time));
   vm.runInContext('applyPreviewScenario("seven","forecast",false)',context);
   assert.equal(vm.runInContext("example.options.tariff_calendar.today.length",context),7);
   assert.equal(vm.runInContext("example.options.tariff_calendar.tomorrow.length",context),7);
@@ -2707,4 +2714,51 @@ test("command trace refresh preserves the existing advanced expansion and never 
   await panel.refresh();assert.equal(panel.shadowRoot.querySelector("details").open,true);
   assert.match(panel.commandDiagnosticsHtml(),/Usługi przyjęte przez HA: <b>2<\/b>/);
   assert.equal((panel.shadowRoot.innerHTML.match(/<details>/g)||[]).length,1);assert.equal(calls.length,0);
+});
+
+
+test("TAURON selection filters foreign profile options and never migrates an existing foreign configuration on open or cancel",async()=>{
+  const {panel}=fixture();calendarData(panel,{profile_id:"pge_g12_2026",operator_label:"PGE Dystrybucja",tariff:"G12"});
+  const before=JSON.stringify(panel.payload),{apiCalls,effects}=nativeTariff(panel,{plan:()=>{const form=tariffPlanForm();form.data_schema[0].selector.select.options=[...tariffProfiles,{value:"pge_g12_2026",label:"PGE"},{value:"tauron_g13s_2026",label:"G13s"}];form.data_schema[0].default="pge_g12_2026";return form;}});
+  await panel.openTariff();assert.equal(panel.tariffDraft.profile_id,"");assert.equal(panel.tariffFlow.fields[0].options.length,4);
+  assert.doesNotMatch(panel.tariffEditorHtml(),/PGE|G13s|data-tariff-field="operator_id"/);assert.match(panel.tariffEditorHtml(),/Taryfa TAURON/);
+  assert.equal(JSON.stringify(panel.payload),before);assert.equal(effects.writes,0);
+  const count=apiCalls.length;panel.tariffDraft.profile_id="pge_g12_2026";panel.tariffDraft.clock_basis="local";await panel.submitTariff();assert.equal(apiCalls.length,count);
+  await panel.cancelTariff();assert.equal(JSON.stringify(panel.payload),before);assert.match(panel.tariffCalendarHtml(),/PGE Dystrybucja/);
+});
+
+test("a six-clock program may begin after midnight and never invents operator boundaries from padding",()=>{
+  const {panel}=fixture();panel.payload.options.physical_tou={valid:true,clock_template:"stable_tauron",rows:[1,5,8,14,20,23].map((hour,index)=>({slot:index+1,time:String(hour).padStart(2,"0")+":00:00",tier:0,zone:"flat",grid_charge_allowed:true,padding:index===0}))};
+  const html=panel.physicalTariffHtml();assert.equal((html.match(/<tr>/g)||[]).length,7);assert.match(html,/01:00:00/);assert.match(html,/nie musi zaczynać się o 00:00/);
+  assert.doesNotMatch(html,/Rodzaj granicy|Granica strefy|Podział techniczny/);
+});
+
+test("synthetic seasonal TAURON templates keep workday and free-day clocks while preserving flat and weekend classification",()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../preview/index.html"),"utf8"),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1];
+  for(const date of ["2026-06-07T12:00:00+02:00","2026-11-15T12:00:00+01:00"]){
+    const now=Date.parse(date),nodes=new Map();class PreviewDate extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
+    const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{addEventListener(){},refresh(){return Promise.resolve();}});return nodes.get(id);}};
+    const context=vm.createContext({document,Date:PreviewDate,structuredClone,console,setTimeout(){return 1;},clearTimeout(){},fetch(){throw Error("Network forbidden");}});vm.runInContext(script,context);
+    const expected=date.includes("06-07")?["00:00:00","04:00:00","07:00:00","13:00:00","19:00:00","22:00:00"]:["00:00:00","04:00:00","07:00:00","13:00:00","16:00:00","21:00:00"];
+    for(const kind of ["g13","all_day","g12w","g12"]){
+      vm.runInContext('applyPreviewScenario("'+kind+'","forecast",false)',context);
+      const data=JSON.parse(vm.runInContext("JSON.stringify({calendar:example.options.tariff_calendar,program:example.options.physical_tou,targets:example.data.plan.tariff_slot_targets,next:example.data.control.target_deadline})",context));
+      assert.deepEqual(data.program.rows.map(row=>row.time),["g12w","g12"].includes(kind)?["00:00:00","04:00:00","06:00:00","13:00:00","15:00:00","22:00:00"]:expected);
+      assert.equal(data.targets.length,12);assert.deepEqual(data.targets.slice(0,6).map(row=>row.slot_time),data.targets.slice(6).map(row=>row.slot_time));
+      const existing=JSON.parse(vm.runInContext("JSON.stringify(Object.values(example.data.plan.targets).map(row=>row.deadline))",context));
+      assert.equal(data.next,existing[0]);assert.ok(Date.parse(data.next)>now);
+      for(const row of data.targets.filter(row=>Date.parse(row.end)>now)){
+        assert.ok(existing.includes(row.deadline));assert.ok(Date.parse(row.deadline)>=Date.parse(row.end));
+      }
+      if(date.startsWith("2026-11-15")&&kind==="g13"){
+        const monday=data.targets.slice(6);
+        assert.equal(monday.find(row=>row.slot_time==="13:00:00").deadline,"2026-11-16T15:00:00.000Z");
+        assert.equal(monday.find(row=>row.slot_time==="21:00:00").deadline,"2026-11-17T06:00:00.000Z");
+        assert.ok(data.targets.slice(0,6).every(row=>row.deadline==="2026-11-16T06:00:00.000Z"));
+      }
+
+      if(kind!=="g12"){assert.equal(data.calendar.today.length,1);assert.ok(data.targets.slice(0,6).every(row=>row.grid_charge_allowed));assert.equal(new Set(data.targets.slice(0,6).map(row=>row.deadline)).size,1);}
+      else{assert.equal(data.calendar.today.length,5);assert.ok(data.targets.slice(0,6).some(row=>!row.grid_charge_allowed));}
+    }
+  }
 });
