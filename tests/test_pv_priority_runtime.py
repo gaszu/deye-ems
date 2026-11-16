@@ -32,7 +32,7 @@ class PVPriorityRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.calls, [])
 
     def test_battery_and_native_grid_alignment_boundaries(self):
-        for battery_age, port_age, valid in ((0, 10, True), (0, 10.001, False),
+        for battery_age, port_age, valid in ((0, 20, True), (0, 20.001, False),
                                               (30, 20, True), (30.001, 20, False),
                                               (20, 20, True)):
             with self.subTest(battery_age=battery_age, port_age=port_age):
@@ -43,10 +43,18 @@ class PVPriorityRuntime(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(inputs["charge_power_valid"], valid)
                 self.assertEqual(inputs["telemetry_valid"], valid)
 
+    def test_sequential_power_tolerance_applies_to_single_phase_inverter(self):
+        for skew, valid in ((10.5, True), (20, True), (20.001, False), (31, False)):
+            with self.subTest(skew=skew):
+                h = Harness(options={"inverter_model": "SUN-5K-SG04LP1-EU", "inverter_phases": 1,
+                                     "inverter_phase": "L1", "connection_phases": 1})
+                h.set("battery_power", 0, "W", age=skew)
+                self.assertEqual(h.co._read_inputs(h.now)["charge_power_valid"], valid)
+
     def test_one_misaligned_native_phase_invalidates_the_combined_snapshot(self):
         h = Harness()
         h.set("battery_power", -2000, "W")
-        h.set("grid_l2_power", 600, "W", age=11)
+        h.set("grid_l2_power", 600, "W", age=21)
         inputs = h.co._read_inputs(h.now)
         self.assertFalse(inputs["charge_power_valid"])
         self.assertFalse(inputs["telemetry_valid"])

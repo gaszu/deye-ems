@@ -35,7 +35,7 @@ from .topology import ct_load_balance
 from .soc_policy import reserve_lower_bound
 from .inverter_models import hardware_profile, applied_limits
 from .tariff_calendar import describe_calendar
-from .telemetry_diagnostics import describe_telemetry, activation_diagnostics
+from .telemetry_diagnostics import describe_telemetry, activation_diagnostics, POWER_TIME_SKEW_SECONDS
 from .esphome_provider import async_create_adapter
 from .report_state import effective_state
 from .post_save import cancel_post_save, get_post_save_status, configuration_requires_reload
@@ -1005,7 +1005,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     raise ValueError("ct_and_grid_port_require_distinct_meters")
                 reports = [_stamp(getattr(self._state(key), "last_reported", None) or
                                   getattr(self._state(key), "last_updated", None)) for key in meter_keys]
-                if None in reports or max(reports)-min(reports) > 10:
+                if None in reports or max(reports)-min(reports) > POWER_TIME_SKEW_SECONDS:
                     raise ValueError("ct_and_grid_port_not_synchronised")
                 balance = ct_load_balance(raw_load, [powers[f"load_l{i}_power"] for i in (1, 2, 3)],
                     powers["grid_power"], [powers[f"grid_l{i}_power"] for i in (1, 2, 3)],
@@ -1037,7 +1037,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs["charge_power_valid"] = (battery is not None and all(v is not None for v in powers.values())
             and all(charge_ids) and len(set(charge_ids)) == len(charge_ids)
             and all(at is not None and 0 <= now.timestamp() - at <= 30 for at in reports)
-            and max(reports) - min(reports) <= 10)
+            and max(reports) - min(reports) <= POWER_TIME_SKEW_SECONDS)
         if not inputs["charge_power_valid"]:
             inputs["telemetry_valid"] = False
             inputs["grid_charge_balanced"] = None
@@ -1073,7 +1073,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 issues.append(dict(source="grid_current_number", reason="invalid"))
         if not all(charge_ids) or len(set(charge_ids)) != len(charge_ids):
             issues.append(dict(source="charge_power", reason="alias"))
-        elif all(at is not None for at in reports) and max(reports)-min(reports) > 10:
+        elif all(at is not None for at in reports) and max(reports)-min(reports) > POWER_TIME_SKEW_SECONDS:
             issues.append(dict(source="charge_power", reason="time_skew"))
         if inputs["topology_error"]:
             issues.append(dict(source="ct_balance", reason="invalid"))
@@ -1086,6 +1086,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs["telemetry_details"], inputs["telemetry_hints"] = describe_telemetry(
             self.hass, self._sources, diagnostic_checks, issues, now,
             groups={"charge_power": charge_keys}, state_lookup=lambda entity: self._entity_state(entity, now))
+        if issues:
+            self._last_telemetry_fault = {"at": now.isoformat(), "issues": deepcopy(issues),
+                "details": [deepcopy(row) for row in inputs["telemetry_details"] if not row.get("valid")]}
+        inputs["last_telemetry_fault"] = deepcopy(getattr(self, "_last_telemetry_fault", None))
         inputs["report_stream"] = self._report_stream_status()
         return inputs
 

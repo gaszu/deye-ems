@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 import math
 import re
 
+POWER_TIME_SKEW_SECONDS = 20
+
 _UTC = timezone.utc
 _ENTITY = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
 _PLATFORM = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -128,7 +130,7 @@ def describe_telemetry(hass, sources, checks, issues, now, *, groups=None, platf
             if reports and all(report is not None for report in reports):
                 row["observed_time_skew_seconds"] = round(
                     max(report.timestamp() for report in reports) - min(report.timestamp() for report in reports), 1)
-            row["max_time_skew_seconds"] = 10
+            row["max_time_skew_seconds"] = POWER_TIME_SKEW_SECONDS
         details.append(row)
     hints = []
     for reason in ("stale", "time_skew"):

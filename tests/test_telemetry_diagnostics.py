@@ -96,6 +96,18 @@ class TelemetryDiagnostics(unittest.IsolatedAsyncioTestCase):
         h.set("grid_power", 123456789012345, "W")
         self.assertIsNone(by_source(h.co._read_inputs(h.now))["grid_power"]["value"])
 
+    async def test_last_fault_remains_available_after_valid_measurements_return(self):
+        h = Harness()
+        h.set("battery_power", 0, "W", age=21)
+        failed = h.co._read_inputs(h.now)
+        self.assertFalse(failed["telemetry_valid"])
+        fault = failed["last_telemetry_fault"]
+        self.assertIn({"source": "charge_power", "reason": "time_skew"}, fault["issues"])
+        h.set("battery_power", 0, "W")
+        healthy = h.co._read_inputs(h.now)
+        self.assertTrue(healthy["telemetry_valid"])
+        self.assertEqual(healthy["last_telemetry_fault"], fault)
+
     async def test_alias_and_coherence_rows_do_not_weaken_original_guards(self):
         h = Harness()
         h.co._sources["max_charge_current_number"] = h.co._sources["grid_current_number"]
@@ -103,15 +115,15 @@ class TelemetryDiagnostics(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(by_source(inputs)["max_charge_current_number"]["reason"], "alias")
         self.assertFalse(inputs["telemetry_valid"])
         h = Harness()
-        h.set("grid_power", 1800, "W", age=11)
+        h.set("grid_power", 1800, "W", age=21)
         inputs = h.co._read_inputs(h.now)
         rows = by_source(inputs)
         self.assertTrue(rows["grid_power"]["valid"])
         self.assertEqual((rows["charge_power"]["reason"], rows["charge_power"]["observed_time_skew_seconds"],
-                          rows["charge_power"]["max_time_skew_seconds"]), ("time_skew", 11, 10))
+                          rows["charge_power"]["max_time_skew_seconds"]), ("time_skew", 21, 20))
         self.assertFalse(inputs["charge_power_valid"])
         self.assertFalse(inputs["telemetry_valid"])
-        self.assertIn("11 s, dopuszczalne 10 s", diag.activation_diagnostics(inputs["telemetry_details"]))
+        self.assertIn("21 s, dopuszczalne 20 s", diag.activation_diagnostics(inputs["telemetry_details"]))
 
     async def test_latched_sources_show_age_without_inventing_expiry(self):
         h = Harness()

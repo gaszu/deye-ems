@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-8";
-const PANEL_VERSION = "2.1.8";
+const PANEL_TAG = "deye-ems-panel-2-1-9";
+const PANEL_VERSION = "2.1.9";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -39,7 +39,7 @@ const reasons = {
   scheduled_hold:"Oczekiwanie na dozwolony termin korekty prądu", scheduled_setpoint:"Wyliczona bieżąca nastawa prądu",
   initial_charge_start:"Przygotowanie pierwszego startu ładowania w tanim oknie",
   scheduled_retry:"Ponowienie niepotwierdzonej nastawy", scheduled_deadband:"Zmiana mniejsza niż 10 A — utrzymanie nastawy",
-  recovery_wait:"Oczekiwanie na 2 minuty stabilnych warunków", target_hysteresis:"Cel osiągnięty — wznowienie po spadku o 2 p.p. SoC",
+  batch_wait:"Małe doładowanie odłożone bliżej końca taniego okna", recovery_wait:"Oczekiwanie na 2 minuty stabilnych warunków", target_hysteresis:"Cel osiągnięty — wznowienie po spadku o 5 p.p. SoC",
   ramp_wait:"Historyczna przerwa regulacji", target_reached:"Cel SoC osiągnięty",
   pv_covers_charge_need:"PV pokrywa potrzebę ładowania",
   dispatch_retry_wait:"Oczekiwanie po niewysłanej próbie", dispatch_history_unknown:"Weryfikacja historii poleceń",
@@ -279,8 +279,10 @@ class DeyeEMSPanel extends HTMLElement {
       return '<p class="notice">'+esc(names)+': '+esc(advice)+'</p>';
     });
     const notice=failed.length?'<p class="notice warning">Pomiary wymagające sprawdzenia: '+failed.length+'. Szczegóły poniżej wyjaśniają blokadę; wartości źródłowe z błędem nie są potwierdzonym pomiarem do sterowania.</p>':this.payload?.data?.inputs?.telemetry_valid===true?'<p>Wszystkie pokazane źródła spełniają bieżące kontrole pomiarów.</p>':'<p class="notice warning">Lista szczegółów nie wskazuje błędnego odczytu, ale silnik nie potwierdza kompletu pomiarów. Sprawdź komunikat sterowania.</p>';
+    const fault=this.payload?.data?.inputs?.last_telemetry_fault;
+    const lastFault=fault&&typeof fault.at==="string"&&Array.isArray(fault.issues)?'<p class="legend">Ostatnio wykryty problem pomiarów: '+esc(reported(fault.at))+' — '+esc(fault.issues.slice(0,12).map(row=>this.sourceFieldLabel(row.source)+': '+(reasonNames[row.reason]||'Wymaga sprawdzenia')).join('; '))+'. To zapis wcześniejszej kontroli, a nie bieżący stan.</p>':'';
     const button=healthy?'<button id="telemetry-diagnostics-toggle" class="secondary" aria-expanded="'+(this.telemetryExpanded?'true':'false')+'" aria-controls="telemetry-diagnostics-table">'+(this.telemetryExpanded?'Ukryj prawidłowe pomiary':failed.length?'Pokaż także prawidłowe pomiary ('+healthy+')':'Pokaż pomiary ('+healthy+')')+'</button>':'';
-    return heading+notice+stream+'<p class="legend">Wiek dotyczy ostatniego sprawdzenia silnika: '+esc(reported(this.payload?.data?.updated_at))+'. Limity bezpieczeństwa pozostają bez zmian.</p>'+button+table+(failed.length||this.payload?.data?.inputs?.telemetry_valid!==true?[...new Set(hints)].join(""):'')+'</section>';
+    return heading+notice+stream+lastFault+'<p class="legend">Wiek dotyczy ostatniego sprawdzenia silnika: '+esc(reported(this.payload?.data?.updated_at))+'. Limity bezpieczeństwa pozostają bez zmian.</p>'+button+table+(failed.length||this.payload?.data?.inputs?.telemetry_valid!==true?[...new Set(hints)].join(""):'')+'</section>';
   }
   bindTelemetryDiagnostics(){
     this.shadowRoot.getElementById("telemetry-diagnostics-toggle")?.addEventListener("click",()=>{this.telemetryExpanded=!this.telemetryExpanded;this.render();});
@@ -338,7 +340,7 @@ class DeyeEMSPanel extends HTMLElement {
     const hard=new Set(["bms_blocked","hardware_mode_mismatch","owner_conflict","ownership_conflict","grid_headroom","inverter_grid_headroom","deye_charge_cap","actuator_cap","converter_cap","battery_charge_headroom"]);
     if(hard.has(plain)&&Object.hasOwn(reasons,plain))return reasons[plain];
     if(input.telemetry_valid!==true||c.current_hold_reason==="telemetry_invalid"){const issues=this.telemetryIssueText();return "Brak poprawnych, świeżych pomiarów."+(issues?" "+issues+".":"");}
-    const routine=new Set(["scheduled_hold","scheduled_setpoint","scheduled_retry","scheduled_deadband","initial_charge_start","recovery_wait","ramp_wait","dispatch_retry_wait","pending_readback","awaiting_readback","retry_unconfirmed","waiting_setting_readback","deadband","ramp_up","ramp_down","active","initializing"]);
+    const routine=new Set(["batch_wait","scheduled_hold","scheduled_setpoint","scheduled_retry","scheduled_deadband","initial_charge_start","recovery_wait","ramp_wait","dispatch_retry_wait","pending_readback","awaiting_readback","retry_unconfirmed","waiting_setting_readback","deadband","ramp_up","ramp_down","active","initializing"]);
     if(!routine.has(plain))return Object.hasOwn(reasons,reason)?reasons[reason]:Object.hasOwn(reasons,plain)?reasons[plain]:"Silnik sprawdza plan i dostępne dane";
     const rawSetting=c.read_setting_a??input.current_a;
     const setting=typeof rawSetting==="number"&&Number.isFinite(rawSetting)&&rawSetting>=0?rawSetting:null;
@@ -351,7 +353,7 @@ class DeyeEMSPanel extends HTMLElement {
       const left=c.recovery_remaining_s;
       return state+" Oczekiwanie na stabilne pomiary"+(typeof left==="number"&&Number.isFinite(left)&&left>0&&left<=120?" — pozostało co najmniej "+Math.ceil(left)+" s.":".");
     }
-    const notes={policy_blocked:"Ładowanie z sieci jest teraz niedozwolone.",target_reached:"Cel SoC został osiągnięty.",pv_covers_charge_need:"PV pokrywa potrzebę ładowania.",waiting_readback:"Oczekiwanie na potwierdzenie nastawy z falownika.",waiting_retry:"Oczekiwanie po poprzedniej próbie polecenia.",initial_start:"Przygotowanie pierwszego startu w tanim oknie.",ready:"Regulator może teraz zmienić prąd."};
+    const notes={batch_wait:"Małe doładowanie czeka na końcową część taniego okna. Wcześniejszy start przy niedoborze mocy lub zagrożeniu rezerwy.",policy_blocked:"Ładowanie z sieci jest teraz niedozwolone.",target_reached:"Cel SoC został osiągnięty.",pv_covers_charge_need:"PV pokrywa potrzebę ładowania.",waiting_readback:"Oczekiwanie na potwierdzenie nastawy z falownika.",waiting_retry:"Oczekiwanie po poprzedniej próbie polecenia.",initial_start:"Przygotowanie pierwszego startu w tanim oknie.",ready:"Regulator może teraz zmienić prąd."};
     if(Object.hasOwn(notes,hold))state+=" "+notes[hold];
     if(next)return state+" Następna zmiana prądu najwcześniej "+next+".";
     if(hold==="scheduled_regular"||plain==="scheduled_hold")return state+" Termin kolejnej zmiany prądu nie jest jeszcze potwierdzony.";
@@ -1438,7 +1440,7 @@ class DeyeEMSPanel extends HTMLElement {
       this.telemetryDiagnosticsHtml()+this.commandDiagnosticsHtml()+this.appearanceHtml()+'<section><h2>Limity i model</h2><div class="fields">'+Object.entries(labels).filter(([key])=>!["min_soc_percent","capacity_kwh","pv_peak_kwp","grid_import_limit_kw","grid_phase_limit_kw"].includes(key)).map(([key,label])=>{
         const r=ranges[key],value=Object.prototype.hasOwnProperty.call(this.drafts,key)?this.drafts[key]:o[key]??"";return '<label>'+esc(label)+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" class="secondary" '+(this.busy?'disabled':'')+'>Zapisz</button></label>';
       }).join("")+'</div><p class="legend">Przypisanie encji: Ustawienia → Urządzenia i usługi → Deye EMS → Konfiguruj.</p><button id="recalculate" class="secondary" '+(this.busy?'disabled':'')+'>Przelicz plan</button></section>'+
-      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+this.gridPhaseReadoutHtml()+' · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe dodatnie nastawy prądu nie częściej niż co 10 minut, licząc od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Odstęp obejmuje start z zera i korekty; termin nie gwarantuje wysłania. Zwykła nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Dodatnia redukcja ochronna jest zaokrąglana w dół do 5 A; bezpieczna całkowita nastawa 1–4 A pozostaje dopuszczalna. Ochrona nie podnosi wcześniejszego niższego żądania z powodu opóźnionego odczytu HA. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 2 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Ponowienie tej samej przyjętej redukcji nie odnawia maksymalnie 30 s oczekiwania na odczyt; wymagane surowsze zero działa natychmiast. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
+      '<section><h2>Regulacja ładowania</h2>'+card("Żądany limit ładowania",num(request,0),"A",'Odczyt nastawy: '+num(readSetting,0)+' A · dostępne do '+num(fresh?c.cap_a:null,0)+' A · pomiar baterii: '+num(this.kw("battery_power"))+' kW')+'<p>'+esc(phaseModel)+'</p><p class="legend">'+this.gridPhaseReadoutHtml()+' · limity importu: '+num(o.grid_import_limit_kw)+' kW łącznie / '+num(o.grid_phase_limit_kw)+' kW na fazę.</p><p class="legend">Zwykłe dodatnie nastawy prądu nie częściej niż co 10 minut, licząc od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Odstęp obejmuje start z zera i korekty; termin nie gwarantuje wysłania. Zwykła nastawa bez rampy, zaokrąglenie do 5 A i korekta od 10 A. Dodatnia redukcja ochronna jest zaokrąglana w dół do 5 A; bezpieczna całkowita nastawa 1–4 A pozostaje dopuszczalna. Ochrona nie podnosi wcześniejszego niższego żądania z powodu opóźnionego odczytu HA. Bezpieczny start może mieć mniej niż 5 A. Po ograniczeniu wymagane są 2 minuty stabilnych warunków; po osiągnięciu celu wznowienie wymaga spadku SoC o 5 p.p. Redukcje ochronne i zakończenie ładowania działają od razu. Ponowienie tej samej przyjętej redukcji nie odnawia maksymalnie 30 s oczekiwania na odczyt; wymagane surowsze zero działa natychmiast. Wyliczone żądanie, odczyt nastawy i pomiar baterii opisują różne etapy działania.</p></section>'+
       this.physicalTariffHtml()+'<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+

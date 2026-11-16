@@ -100,6 +100,13 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
             h.co._preflight()
         self.assertEqual(h.calls, [])
 
+    def test_ct_sequential_power_reports_keep_twenty_second_boundary(self):
+        for skew, valid in ((10.5, True), (20, True), (20.001, False), (31, False)):
+            with self.subTest(skew=skew):
+                h = ct_harness()
+                h.set("ct_grid_l1_power", 0, "W", age=skew)
+                self.assertEqual(h.co._read_inputs(h.now)["telemetry_valid"], valid)
+
     def test_missing_stale_restored_wrong_unit_and_swapped_ct_fail_closed(self):
         for mutation in ("missing", "stale", "restored", "unit", "direction", "same_meter", "skew"):
             with self.subTest(mutation=mutation):
@@ -118,7 +125,7 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
                 elif mutation == "same_meter":
                     h.co._sources["ct_grid_power"] = SOURCES["grid_power"]
                 else:
-                    h.set("ct_grid_l1_power", 0, "W", age=11)
+                    h.set("ct_grid_l1_power", 0, "W", age=21)
                 self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
                 with self.assertRaisesRegex(ValueError, "Topologia CT"):
                     h.co._preflight()
