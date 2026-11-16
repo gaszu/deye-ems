@@ -124,15 +124,6 @@ class BalancedGridRuntime(unittest.IsolatedAsyncioTestCase):
         observe_policy()
         settled = await drive(h)
         self.assertTrue(settled["setting_settled"])
-        self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "off")
-        for _ in range(11):
-            h.advance(10)
-            observe_policy()
-            await drive(h)
-            self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "off")
-        h.advance(10)
-        observe_policy()
-        await drive(h)
         self.assertEqual(h.states[SOURCES["tou_gc_2"]].state, "on")
 
     async def test_journal_only_and_failed_transport_do_not_authorize_gc_keep(self):

@@ -1,4 +1,14 @@
-# Instalacja i obsługa Deye EMS 2.1.9
+# Instalacja i obsługa Deye EMS 2.1.10
+
+
+## Rampa prądu i zakończenie ładowania
+
+Zwykła nastawa rośnie lub maleje o najwyżej 10 A, nie częściej niż co 600 s. Natywny krok nastawy 5 A i niższe ograniczenia mogą wymusić mniejszą zmianę. Nagły pobór domu, BMS, nieprawidłowe dane i koniec dozwolonego okna mają pierwszeństwo i mogą od razu obniżyć prąd lub go wyzerować. Po ustaniu ograniczenia powrót odbywa się według bieżącego zapotrzebowania i dostępnych limitów, z zachowaniem kroku i pierwotnego zegara zwykłych prób; redukcja ochronna go nie przesuwa.
+
+Cel SoC planu rozpoczyna stopniowe wygaszanie już trwającego ładowania do 0 A. SoC może przekroczyć cel. Maksymalny SoC ładowania z konfiguracji jest twardym ograniczeniem: jego osiągnięcie zatrzymuje ładowanie od razu. W tanich slotach TOU zapisuje się ten maksymalny próg, aby falownik nie odcinał fizycznie ładowania wcześniej na miękkim celu planu. W chronionych slotach pozostaje rezerwa i GC OFF. Próg sprzętowy nie jest źródłem podnoszącym cel planu ani cache. Po zatrzymaniu ładowanie nie jest ponownie włączane tylko po to, aby wykonać taper.
+
+Rampa zmienia czas dostarczenia energii; osiągnięcie planowanego SoC nie jest gwarantowane. Ustawiona nastawa, odczyt HA i fizyczny prąd baterii pozostają osobnymi informacjami.
+
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -14,14 +24,14 @@ Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.9**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.10**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.9.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.9/deye-ems-2.1.9.zip).
+1. Pobierz [deye-ems-2.1.10.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.10/deye-ems-2.1.10.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 

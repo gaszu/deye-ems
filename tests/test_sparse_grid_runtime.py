@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import timedelta
 import unittest
+from unittest.mock import patch
 
 from test_runtime import Coordinator, Harness, SOURCES, runtime
 
@@ -18,23 +19,30 @@ def grid(h):
 
 
 class SparseGridRuntime(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These direct-dispatch tests exercise durable journals and transport,
+        # independently of the ordinary controller's 10 A proposal bound.
+        guard = patch.object(runtime, "MAX_STEP_A", 1000)
+        guard.start()
+        self.addCleanup(guard.stop)
+
     async def test_accepted_ordinary_is_durable_and_not_repeated_before_next_half_hour(self):
         h = setup()
         await h.tick()
-        self.assertEqual(h.current_calls(), [55])
+        self.assertEqual(h.current_calls(), [10])
         prepared = next(s["grid_dispatch"] for s in h.store.history
                         if s.get("grid_dispatch", {}).get("outcome") == "prepared")
-        self.assertEqual(prepared["possible_a"], 55)
+        self.assertEqual(prepared["possible_a"], 10)
         self.assertEqual(h.store.saved["grid_dispatch"]["outcome"], "accepted")
         for seconds in (10, 100, 489):
             h.advance(seconds)
             await h.tick()
-            self.assertEqual(h.current_calls(), [55])
+            self.assertEqual(h.current_calls(), [10])
         h.advance(1201)
         h.set("soc", 45, "%")
         h.co._memory["current_policy"].update(safe_since=h.now.timestamp()-120, observed_at=h.now.timestamp())
         await h.tick()
-        self.assertEqual(h.current_calls(), [55, 65])
+        self.assertEqual(h.current_calls(), [10, 20])
 
     async def test_store_failure_is_not_sent_and_retry_waits_for_next_half_hour(self):
         h = setup()

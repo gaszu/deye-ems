@@ -45,7 +45,7 @@ class V2Migration(unittest.IsolatedAsyncioTestCase):
                 for key, value in LEGACY_OPTIONS.items():
                     self.assertEqual(h.co.options[key], value, key)
                 self.assertEqual(h.co._memory["target_cache"]["synthetic"]["soc_percent"], 77)
-                self.assertIsNone(h.co._memory["current_policy"]["safe_since"])
+                self.assertIsNone(h.co._memory["current_policy"]["observed_at"])
                 self.assertEqual(h.calls, [])
 
     def test_missing_model_fields_match_explicit_legacy_hardware_in_all_control_inputs(self):

@@ -337,36 +337,36 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await h.co._grid_attempt(2, h.now.timestamp()))
         self.assertEqual(h.calls, [])
 
-    async def test_uncertain_command_keeps_journal_and_waits_next_half_hour(self):
+    async def test_uncertain_command_preserves_rolling_600_second_deadline(self):
         h = Harness()
         h.active()
         h.fail_service = True
         await h.tick()
-        self.assertEqual(h.current_calls(), [40])
+        self.assertEqual(h.current_calls(), [10])
         self.assertEqual(h.co._memory["grid_dispatch"]["outcome"], "uncertain")
-        h.advance(1799)
+        h.advance(599)
         await h.tick()
-        self.assertEqual(h.current_calls(), [40])
+        self.assertEqual(h.current_calls(), [10])
         h.advance(1)
         h.co._memory["current_policy"].update(safe_since=h.now.timestamp()-120, observed_at=h.now.timestamp())
         await h.tick()
-        self.assertEqual(h.current_calls(), [40, 40])
+        self.assertEqual(h.current_calls(), [10, 10])
 
     async def test_current_is_set_directly_and_held_without_pulsing_grid_charge(self):
         h = Harness()
         h.active()
         await h.tick()
-        self.assertEqual(h.current_calls(), [40])
+        self.assertEqual(h.current_calls(), [10])
         self.assertFalse(any(a == "turn_on" for _, a, _ in h.calls))
         h.advance(10)
         await h.tick()
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "on")
         h.advance(589)
         await h.tick()
-        self.assertEqual(h.current_calls(), [40])
+        self.assertEqual(h.current_calls(), [10])
         h.advance(1)
         await h.tick()
-        self.assertEqual(h.current_calls(), [40])
+        self.assertEqual(h.current_calls(), [10, 20])
         self.assertEqual(h.states[SOURCES["tou_gc_6"]].state, "on")
 
     async def test_incoming_protected_clock_mismatch_blocks_enabling_grid_charge(self):
@@ -651,14 +651,14 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["control"]["target_soc"], 95)
         self.assertEqual(result["control"]["target_source"], "unreachable_plan_raise")
         self.assertEqual(h.co._memory["target_cache"]["night"]["soc_percent"], 45)
-        self.assertEqual(h.current_calls(), [65])
+        self.assertEqual(h.current_calls(), [10])
         self.assertLessEqual(result["control"]["next_a"], result["control"]["cap_a"])
 
-    async def test_invalid_plan_keeps_winter_higher_setting_until_fresh_valid_counterplan(self):
+    async def test_tou_hard_ceiling_never_raises_the_cached_plan_target(self):
         h = Harness()
         h.co._accept_targets(self.plan(h, 45, age=600), h.now)
         h.set("tou_soc_6", 95, "%")
-        self.assertEqual(h.co._target(h.now)[0], 95)
+        self.assertEqual(h.co._target(h.now)[0], 45)
         fresh = self.plan(h, 45)
         h.co._accept_targets(fresh, h.now)
         h.co._memory["plan"] = fresh

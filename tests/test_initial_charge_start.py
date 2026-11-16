@@ -2,8 +2,9 @@
 from copy import deepcopy
 from datetime import datetime, timedelta
 import unittest
+from unittest.mock import patch
 
-from test_runtime import Harness, Coordinator, SOURCES, TZ
+from test_runtime import Harness, Coordinator, SOURCES, TZ, runtime
 
 
 def setup(at="2026-11-10T22:07:00+01:00"):
@@ -26,11 +27,18 @@ def legacy_zero(h, at=None):
 
 
 class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These direct-dispatch tests exercise durable journals and transport,
+        # independently of the ordinary controller's 10 A proposal bound.
+        guard = patch.object(runtime, "MAX_STEP_A", 1000)
+        guard.start()
+        self.addCleanup(guard.stop)
+
     async def test_missed_boundary_first_start_uses_live_demand_after_stable_observation(self):
         h = setup()
         await h.tick()
         self.assertEqual(len(h.current_calls()), 1)
-        self.assertGreater(h.current_calls()[0], 20)
+        self.assertEqual(h.current_calls()[0], 10)
         self.assertEqual(h.co.data["control"]["reason"], "initial_charge_start")
         self.assertTrue(h.store.saved["initial_charge_window"]["spent"])
         prepared = next(s["grid_dispatch"] for s in h.store.history
@@ -38,17 +46,16 @@ class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(prepared["initial_start"])
         self.assertEqual(prepared["positive_deadline"], h.co._window(h.now)[3].isoformat())
 
-    async def test_first_start_waits_120_seconds_of_fresh_observation(self):
+    async def test_first_start_uses_current_valid_data_without_observation_delay(self):
         h = setup()
         h.co._memory["current_policy"] = {}
+        h.set("battery_power", 0, "W", age=31)
         await h.tick()
-        for _ in range(11):
-            h.advance(10)
-            await h.tick()
         self.assertEqual(h.current_calls(), [])
-        h.advance(10)
+        h.set("battery_power", 0, "W")
         await h.tick()
         self.assertEqual(len(h.current_calls()), 1)
+        self.assertGreater(h.current_calls()[0], 0)
 
     async def test_pv_stop_zero_and_cloud_do_not_refund_initial_permission(self):
         h = setup()
@@ -84,7 +91,7 @@ class InitialChargeStart(unittest.IsolatedAsyncioTestCase):
         await restored.async_initialize()
         h.co = restored
         self.assertTrue(h.co._initial_window_started(h.now))
-        self.assertIsNone(h.co._memory["current_policy"]["safe_since"])
+        self.assertIsNone(h.co._memory["current_policy"]["observed_at"])
         h.advance(130)
         stable(h)
         self.assertFalse(await h.co._grid_attempt(20, h.now.timestamp()))

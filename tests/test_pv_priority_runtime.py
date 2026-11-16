@@ -138,12 +138,13 @@ class PVPriorityRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(h.co._memory["current_policy"].get("stopped"))
         h.co._solar_points.assert_not_awaited()
         h.co._load_profile.assert_not_awaited()
-        # Loss of PV does not grant an ordinary increase outside :00/:30.
+        # Loss of PV resumes at the durable command deadline, without a new observation timer.
         h.advance(120)
         native_grid(h, 1800)
         h.set("battery_power", 0, "W")
         await h.tick()
-        self.assertEqual(h.current_calls(), [0])
+        self.assertEqual(h.current_calls()[0], 0)
+        self.assertGreater(h.current_calls()[-1], 0)
         self.assertEqual(h.co.mode, "active")
 
     async def test_genuine_zero_battery_power_keeps_night_grid_charging_available(self):

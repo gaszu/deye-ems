@@ -17,12 +17,12 @@ class CurrentWaitStatus(unittest.TestCase):
         g.update(changes)
         return g
 
-    def test_unspent_initial_permission_waits_for_observed_recovery(self):
+    def test_unspent_initial_permission_uses_valid_current_snapshot(self):
         g = self.sample(elapsed=60)
         status = runtime.describe_current_wait(g)
-        self.assertEqual(status["current_hold_reason"], "waiting_stable_measurements")
-        self.assertEqual(status["recovery_remaining_s"], 60)
-        self.assertEqual(datetime.fromisoformat(status["next_current_change_at"]).timestamp(), g["now_ts"]+60)
+        self.assertEqual(status["current_hold_reason"], "initial_start")
+        self.assertNotIn("recovery_remaining_s", status)
+        self.assertEqual(datetime.fromisoformat(status["next_current_change_at"]).timestamp(), g["now_ts"])
         g = self.sample()
         self.assertEqual(runtime.describe_current_wait(g)["current_hold_reason"], "initial_start")
 
@@ -32,14 +32,14 @@ class CurrentWaitStatus(unittest.TestCase):
         self.assertEqual(status["current_hold_reason"], "ready")
         self.assertEqual(datetime.fromisoformat(status["next_current_change_at"]).timestamp(), g["now_ts"])
         recovering = runtime.describe_current_wait(self.sample(started=True, elapsed=60))
-        self.assertEqual(recovering["current_hold_reason"], "waiting_stable_measurements")
-        self.assertEqual(recovering["recovery_remaining_s"], 60)
+        self.assertEqual(recovering["current_hold_reason"], "ready")
+        self.assertNotIn("recovery_remaining_s", recovering)
 
     def test_missing_recovery_cannot_invent_a_countdown(self):
         g = self.sample()
-        g["current_policy"]["safe_since"] = None
+        g["current_policy"]["observed_at"] = None
         status = runtime.describe_current_wait(g)
-        self.assertIsNone(status["recovery_remaining_s"])
+        self.assertNotIn("recovery_remaining_s", status)
         self.assertIsNone(status["next_current_change_at"])
 
     def test_readback_and_unknown_history_have_no_prediction(self):

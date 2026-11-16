@@ -1,4 +1,21 @@
-# Wersja 2.1.9
+# Wersja 2.1.10
+
+Weryfikacja wydania 2.1.10: 894 testy Python oraz 235 testów panelu zakończone poprawnie. Nowe scenariusze obejmują rampę 10 A/600 s w obu kierunkach, wygaszanie po celu bez podnoszenia celu planu, twardy maksymalny SoC, redukcję i powrót po ograniczeniu, ochronę przed skokiem przy zmianie odczytu w trakcie zapisu oraz brak sprzężenia progu TOU z celem cache. Są to testy offline; nie stanowią potwierdzenia fizycznej reakcji urządzenia.
+
+## Bieżące dane bez dodatkowej stabilizacji — 2.1.10
+
+Silnik po restarcie lub przerwie danych korzysta z pierwszego poprawnego bieżącego zestawu pomiarów. Usunięto licznik ciągłej obserwacji `safe_since` i dodatkowe oczekiwanie 120 s po uzyskaniu poprawnych danych. Panel czeka na poprawne, świeże pomiary bez odliczania stabilizacji.
+
+Reguły odbioru Deye pozostają: dwa potwierdzone raporty natywne, zgodność źródła i wartości HA, moc do 30 s, napięcie do 120 s oraz rozbieżność grupy mocy do 20 s. Sam widoczny stan HA bez spełnienia tych reguł nie uprawnia do sterowania.
+
+Trwały rejestr prób poleceń, minimum 600 s między zwykłymi dodatnimi nastawami, dotychczasowe 120 s od możliwego polecenia i 60 s od pewnego niewysłania pozostają. Są to odstępy poleceń; nie rozpoczyna się nowego dwuminutowego odliczania od poprawy pomiarów. Redukcje ochronne nadal działają od razu. Rezerwa, BMS, limity mocy, odczyt nastawy i sprawdzenie aktualnych danych tuż przed usługą pozostają obowiązkowe.
+
+G13 używa jednakowego harmonogramu sezonowego przez siedem dni tygodnia, także w święta. To polityka sterowania EMS, niezależna od rozliczeń operatora.
+
+Przed aktualizacją zachowaj kopię konfiguracji bez danych dostępu i poprzednie pliki. Sprawdź konfigurację, zatrzymaj sterowanie, potwierdź 0 A i wszystkie GC OFF przed restartem. Po starcie sprawdź wersję, pomiary i zachowanie ustawień, a następnie przywróć wcześniejszy tryb. Powrót: pliki 2.1.9 i jeden kontrolowany restart; historia poleceń i ustawienia nie są cofane.
+
+Walidacja jest syntetyczna; odczyt HA i przyjęcie usługi nie potwierdzają fizycznej reakcji falownika.
+
 
 887 testów Python i 235 testów panelu PASS. Szczegóły aktualnych granic i scenariuszy opisano poniżej; starsze wyniki są historyczne.
 

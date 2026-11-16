@@ -1,4 +1,29 @@
-# Specyfikacja Deye EMS 2.1.9
+# Specyfikacja Deye EMS 2.1.10
+
+
+## Rampa prądu i zakończenie ładowania
+
+Zwykła nastawa rośnie lub maleje o najwyżej 10 A, nie częściej niż co 600 s. Natywny krok nastawy 5 A i niższe ograniczenia mogą wymusić mniejszą zmianę. Nagły pobór domu, BMS, nieprawidłowe dane i koniec dozwolonego okna mają pierwszeństwo i mogą od razu obniżyć prąd lub go wyzerować. Po ustaniu ograniczenia powrót odbywa się według bieżącego zapotrzebowania i dostępnych limitów, z zachowaniem kroku i pierwotnego zegara zwykłych prób; redukcja ochronna go nie przesuwa.
+
+Cel SoC planu rozpoczyna stopniowe wygaszanie już trwającego ładowania do 0 A. SoC może przekroczyć cel. Maksymalny SoC ładowania z konfiguracji jest twardym ograniczeniem: jego osiągnięcie zatrzymuje ładowanie od razu. W tanich slotach TOU zapisuje się ten maksymalny próg, aby falownik nie odcinał fizycznie ładowania wcześniej na miękkim celu planu. W chronionych slotach pozostaje rezerwa i GC OFF. Próg sprzętowy nie jest źródłem podnoszącym cel planu ani cache. Po zatrzymaniu ładowanie nie jest ponownie włączane tylko po to, aby wykonać taper.
+
+Rampa zmienia czas dostarczenia energii; osiągnięcie planowanego SoC nie jest gwarantowane. Ustawiona nastawa, odczyt HA i fizyczny prąd baterii pozostają osobnymi informacjami.
+
+
+## Bieżące dane bez dodatkowej stabilizacji — 2.1.10
+
+Silnik po restarcie lub przerwie danych korzysta z pierwszego poprawnego bieżącego zestawu pomiarów. Usunięto licznik ciągłej obserwacji `safe_since` i dodatkowe oczekiwanie 120 s po uzyskaniu poprawnych danych. Panel czeka na poprawne, świeże pomiary bez odliczania stabilizacji.
+
+Reguły odbioru Deye pozostają: dwa potwierdzone raporty natywne, zgodność źródła i wartości HA, moc do 30 s, napięcie do 120 s oraz rozbieżność grupy mocy do 20 s. Sam widoczny stan HA bez spełnienia tych reguł nie uprawnia do sterowania.
+
+Trwały rejestr prób poleceń, minimum 600 s między zwykłymi dodatnimi nastawami, dotychczasowe 120 s od możliwego polecenia i 60 s od pewnego niewysłania pozostają. Są to odstępy poleceń; nie rozpoczyna się nowego dwuminutowego odliczania od poprawy pomiarów. Redukcje ochronne nadal działają od razu. Rezerwa, BMS, limity mocy, odczyt nastawy i sprawdzenie aktualnych danych tuż przed usługą pozostają obowiązkowe.
+
+G13 używa jednakowego harmonogramu sezonowego przez siedem dni tygodnia, także w święta. To polityka sterowania EMS, niezależna od rozliczeń operatora.
+
+Przed aktualizacją zachowaj kopię konfiguracji bez danych dostępu i poprzednie pliki. Sprawdź konfigurację, zatrzymaj sterowanie, potwierdź 0 A i wszystkie GC OFF przed restartem. Po starcie sprawdź wersję, pomiary i zachowanie ustawień, a następnie przywróć wcześniejszy tryb. Powrót: pliki 2.1.9 i jeden kontrolowany restart; historia poleceń i ustawienia nie są cofane.
+
+Walidacja jest syntetyczna; odczyt HA i przyjęcie usługi nie potwierdzają fizycznej reakcji falownika.
+
 
 ## Podpis wyboru taryfy — 2.1.7
 
@@ -110,7 +135,7 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 
 ## Pierwszy start ładowania — rozszerzenie 1.0.17
 
-- Pierwsza nastawa z zera w tanim oknie może zostać wysłana po 120 s stabilnych obserwacji i po upływie odstępu zwykłych dodatnich nastaw z 2.1.4, przy znanej historii, bez niepotwierdzonej dodatniej nastawy i przy spełnieniu limitów oraz potrzeby ładowania. Od ostatniego możliwego polecenia nadal wymagane są 120 s, a od pewnego niewysłania 60 s.
+- Pierwsza nastawa z zera w tanim oknie może zostać wysłana po poprawnych bieżących pomiarów (od 2.1.10 bez dodatkowego odliczania) i po upływie odstępu zwykłych dodatnich nastaw z 2.1.4, przy znanej historii, bez niepotwierdzonej dodatniej nastawy i przy spełnieniu limitów oraz potrzeby ładowania. Od ostatniego możliwego polecenia nadal wymagane są 120 s, a od pewnego niewysłania 60 s.
 - Uprawnienie jest trwałe i obejmuje całe okno do terminu celu: zimowe 21:00–07:00 jest jednym oknem także przez północ i zmianę slotów TOU. Każda możliwie wysłana dodatnia nastawa zużywa uprawnienie, również zwykła korekta. Zapisy zerowe go nie odnawiają. Prepared zapis po restarcie jest traktowany zachowawczo jako potencjalnie wysłany.
 - Nieprawidłowy zapis lub niejednoznaczna historia starego wydania blokują automatyczny pierwszy start. Jawna zmiana z obserwacji do aktywnego sterowania może jednorazowo nadać brakujące uprawnienie przy znanej historii i zerowej nastawie, bez dodatniego oczekującego polecenia. Nie odnawia już zużytej ani uszkodzonej zgody.
 - Kontrola ostatniej chwili po Store ponownie potwierdza okno, zerową nastawę i uprawnienie oraz wszystkie dotychczasowe zabezpieczenia. Zmiana PV/BMS, taryfy lub odczytu nastawy może zablokować przygotowaną próbę. Od 2.1.4 następne zwykłe dodatnie nastawy wymagają co najmniej 600 s od poprzedniej takiej możliwie wysłanej próby.
@@ -136,7 +161,7 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - Lato IV–IX: tanie okna22–07 i13–19, chronione07–13 i19–22.
 - Zimą pierwszeństwo mają autokonsumpcja, zapas na chronione okna i ograniczanie importu; pogodowy punkt odniesienia około75% przy słabej prognozie maleje wraz z dostępnością PV, z zachowaniem stałej rezerwy.
 - Latem PV zasila dom, następnie utrzymuje wysoki poziom baterii, a nadwyżka jest eksportowana. Doładowanie z sieci jest awaryjne, wyłącznie w tanich oknach przy deficycie lub utracie wiarygodnego planu/cache.
-- Ładowanie rozłożone na dostępne tanie okno. Zwykła nastawa jest wyliczana z brakującej energii i czasu do terminu, bez rampy20A. Od 2.1.4 zwykła dodatnia nastawa wymaga co najmniej 600 s od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy; nie zależy od pierwszej minuty bloku półgodzinnego. Zwykłe nastawy są zaokrąglane do5A bez przekroczenia ograniczeń; ochronne dodatnie redukcje od 2.1.5 zaokrągla się w dół. Zwykła zmiana co najmniej10A, z wyjątkiem bezpiecznego startu z0A. Zapas GRID i całego ustawienia przy GC ON pozostają obowiązkowe. Osiągnięcie celu zatrzaskuje stop dla danego terminu; wznowienie po spadku o2p.p. lub poniżej minimalnej rezerwy, a przy nowym terminie według jego celu. Wznowienie wymaga120s ciągłych poprawnych obserwacji i najbliższego dopuszczonego terminu zapisu. Restart zachowuje zatrzask i rejestr poleceń, ale rozpoczyna obserwację bezpieczeństwa od nowa. Redukcje ochronne i zakończenie okna pozostają natychmiastowe w cyklu. Pominięty termin lub niepewne polecenie nie powodują serii ponowień.
+- Ładowanie rozłożone na dostępne tanie okno. Zwykła nastawa jest wyliczana z brakującej energii i czasu do terminu, z rampą najwyżej 10 A (od 2.1.10). Od 2.1.4 zwykła dodatnia nastawa wymaga co najmniej 600 s od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy; nie zależy od pierwszej minuty bloku półgodzinnego. Zwykłe nastawy są zaokrąglane do5A bez przekroczenia ograniczeń; ochronne dodatnie redukcje od 2.1.5 zaokrągla się w dół. Zwykła zmiana co najmniej10A, z wyjątkiem bezpiecznego startu z0A. Zapas GRID i całego ustawienia przy GC ON pozostają obowiązkowe. Osiągnięcie celu zatrzaskuje stop dla danego terminu; wznowienie po spadku o2p.p. lub poniżej minimalnej rezerwy, a przy nowym terminie według jego celu. Wznowienie wymagapoprawnych bieżących pomiarów (od 2.1.10 bez dodatkowego odliczania) i najbliższego dopuszczonego terminu zapisu. Restart zachowuje zatrzask i rejestr poleceń, ale rozpoczyna obserwację bezpieczeństwa od nowa. Redukcje ochronne i zakończenie okna pozostają natychmiastowe w cyklu. Pominięty termin lub niepewne polecenie nie powodują serii ponowień.
 - Limity importu GRID sumy/faz i ograniczenie mocy konwersji falownika są sprawdzane osobno. BMS i twarde ograniczenia mają pierwszeństwo.
 - Uściślenie 1.0.3: potwierdzone bilansowanie faz w Zero Export To Load pozwala modelować równy pobór GRID. Przy bezpiecznej redukcji przyjętej przez usługę GC może pozostać ON podczas oczekiwania na odczyt, najwyżej30s bez odnawiania przez ponowienia; twarde ograniczenia i okna chronione pozostają nadrzędne.
 - Regulacja lokalna co10s; pobieranie prognoz i historii w tle. Powolne API nie zatrzymuje kontroli obciążenia.
@@ -190,4 +215,4 @@ Po osiągnięciu celu histereza wznowienia wynosi 5 p.p. SoC. W ostatniej godzin
 
 Małe, jeszcze nierozpoczęte doładowanie (obliczona potrzeba do 10 A) można odłożyć bliżej końca taniego okna. Silnik uwzględnia aktualny limit prądu, napięcie, sprawność, obserwowane rozładowywanie i zapas rezerwy; pozostawia co najmniej godzinę oraz margines czasu. Niski limit lub zagrożenie rezerwy powodują wcześniejszy start. Rozpoczęte ładowanie nie jest zatrzymywane wyłącznie przez ten mechanizm odkładania. Nagła zmiana obciążenia może zmienić termin; osiągnięcie celu nie jest gwarantowane.
 
-Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga 120 s stabilnych warunków. Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.
+Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga poprawnych bieżących pomiarów (od 2.1.10 bez dodatkowego odliczania). Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.

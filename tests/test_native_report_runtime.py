@@ -203,7 +203,7 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((row["observed_time_skew_seconds"], row["max_time_skew_seconds"]), (21, 20))
         self.assertEqual(h.calls, [])
 
-    async def test_mixed_changing_ha_and_constant_native_powers_need_120_stable_seconds(self):
+    async def test_mixed_ha_and_native_reports_start_when_current_data_are_valid(self):
         for older_epoch in (True, False):
             with self.subTest(older_epoch=older_epoch):
                 f = await self.fixture(options={"topology": "load_with_external_ct"})
@@ -246,12 +246,12 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
                         if older_epoch:
                             self.assertFalse(data["inputs"]["telemetry_valid"])
                             self.assertEqual(h.current_calls(), [])
-                        elif first_healthy is None or (h.now-first_healthy).total_seconds() < 120:
+                        elif first_healthy is None:
                             self.assertFalse(any(amps > 0 for amps in h.current_calls()))
                         else:
                             self.assertTrue(data["inputs"]["telemetry_valid"])
                             self.assertTrue(any(amps > 0 for amps in h.current_calls()))
-                            self.assertGreaterEqual(h.now.timestamp()-h.co._memory["current_policy"]["safe_since"], 120)
+                            self.assertEqual(h.co._memory["current_policy"]["observed_at"], h.now.timestamp())
                     if not older_epoch:
                         self.assertIsNotNone(first_healthy)
                         self.assertTrue(any(amps > 0 for amps in h.current_calls()))

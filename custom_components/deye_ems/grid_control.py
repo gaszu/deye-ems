@@ -369,7 +369,7 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
                   net_grid_need_w=round(net_need, 6) if net_need is not None and power_valid and soc_ok else None)
     # No charge, a failed snapshot and lower load/BMS limits take precedence
     # over all time/ramp gates. Identical failed writes are retried, not flooded.
-    force_zero = not allowed or need == 0 or not cap["telemetry_ok"] or not pending_ok
+    force_zero = not allowed or (need == 0 and g.get("taper_to_zero") is not True) or not cap["telemetry_ok"] or not pending_ok
     safety = (not current_ok or current > cap["cap_a"] or current > protective_ceiling
               or pending_unsafe or force_zero)
     if safety:

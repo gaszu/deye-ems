@@ -212,11 +212,11 @@ class PVPriority(unittest.TestCase):
             ordinary_last_possible_ts=1)
         on_boundary = scheduled_calculate(g)
         self.assertTrue(on_boundary["write"])
-        self.assertEqual(on_boundary["next_a"], 35)
+        self.assertEqual(on_boundary["next_a"], 70)
         # A pure proposal does not write the journal. Represent the possible
         # dispatch explicitly before checking the next ordinary opportunity.
         g.update(ordinary_last_positive_possible_ts=g["now_ts"],
-                 ordinary_last_possible_ts=g["now_ts"], last_attempt_ts=g["now_ts"], last_attempt_a=35)
+                 ordinary_last_possible_ts=g["now_ts"], last_attempt_ts=g["now_ts"], last_attempt_a=70)
         g["now_ts"] += 120
         g["current_policy"]["observed_at"] = g["now_ts"]
         held = scheduled_calculate(g)

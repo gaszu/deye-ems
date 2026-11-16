@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import datetime
 import unittest
+from unittest.mock import patch
 
 from test_runtime import Coordinator, Harness, SOURCES, TZ, runtime
 
@@ -22,6 +23,13 @@ def grid(h):
 
 
 class DynamicCurrentRuntime(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These direct-dispatch tests exercise durable journals and transport,
+        # independently of the ordinary controller's 10 A proposal bound.
+        guard = patch.object(runtime, "MAX_STEP_A", 1000)
+        guard.start()
+        self.addCleanup(guard.stop)
+
     async def test_dynamic_limit_exceeds_legacy108_and_is_not_actuator_feedback(self):
         h = roomy()
         for current in (0, 50, 180):

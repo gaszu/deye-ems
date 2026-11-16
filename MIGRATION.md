@@ -1,5 +1,30 @@
 # Przejście z innego EMS i powrót z kopii
 
+
+## Rampa prądu i zakończenie ładowania
+
+Zwykła nastawa rośnie lub maleje o najwyżej 10 A, nie częściej niż co 600 s. Natywny krok nastawy 5 A i niższe ograniczenia mogą wymusić mniejszą zmianę. Nagły pobór domu, BMS, nieprawidłowe dane i koniec dozwolonego okna mają pierwszeństwo i mogą od razu obniżyć prąd lub go wyzerować. Po ustaniu ograniczenia powrót odbywa się według bieżącego zapotrzebowania i dostępnych limitów, z zachowaniem kroku i pierwotnego zegara zwykłych prób; redukcja ochronna go nie przesuwa.
+
+Cel SoC planu rozpoczyna stopniowe wygaszanie już trwającego ładowania do 0 A. SoC może przekroczyć cel. Maksymalny SoC ładowania z konfiguracji jest twardym ograniczeniem: jego osiągnięcie zatrzymuje ładowanie od razu. W tanich slotach TOU zapisuje się ten maksymalny próg, aby falownik nie odcinał fizycznie ładowania wcześniej na miękkim celu planu. W chronionych slotach pozostaje rezerwa i GC OFF. Próg sprzętowy nie jest źródłem podnoszącym cel planu ani cache. Po zatrzymaniu ładowanie nie jest ponownie włączane tylko po to, aby wykonać taper.
+
+Rampa zmienia czas dostarczenia energii; osiągnięcie planowanego SoC nie jest gwarantowane. Ustawiona nastawa, odczyt HA i fizyczny prąd baterii pozostają osobnymi informacjami.
+
+
+## Bieżące dane bez dodatkowej stabilizacji — 2.1.10
+
+Silnik po restarcie lub przerwie danych korzysta z pierwszego poprawnego bieżącego zestawu pomiarów. Usunięto licznik ciągłej obserwacji `safe_since` i dodatkowe oczekiwanie 120 s po uzyskaniu poprawnych danych. Panel czeka na poprawne, świeże pomiary bez odliczania stabilizacji.
+
+Reguły odbioru Deye pozostają: dwa potwierdzone raporty natywne, zgodność źródła i wartości HA, moc do 30 s, napięcie do 120 s oraz rozbieżność grupy mocy do 20 s. Sam widoczny stan HA bez spełnienia tych reguł nie uprawnia do sterowania.
+
+Trwały rejestr prób poleceń, minimum 600 s między zwykłymi dodatnimi nastawami, dotychczasowe 120 s od możliwego polecenia i 60 s od pewnego niewysłania pozostają. Są to odstępy poleceń; nie rozpoczyna się nowego dwuminutowego odliczania od poprawy pomiarów. Redukcje ochronne nadal działają od razu. Rezerwa, BMS, limity mocy, odczyt nastawy i sprawdzenie aktualnych danych tuż przed usługą pozostają obowiązkowe.
+
+G13 używa jednakowego harmonogramu sezonowego przez siedem dni tygodnia, także w święta. To polityka sterowania EMS, niezależna od rozliczeń operatora.
+
+Przed aktualizacją zachowaj kopię konfiguracji bez danych dostępu i poprzednie pliki. Sprawdź konfigurację, zatrzymaj sterowanie, potwierdź 0 A i wszystkie GC OFF przed restartem. Po starcie sprawdź wersję, pomiary i zachowanie ustawień, a następnie przywróć wcześniejszy tryb. Powrót: pliki 2.1.9 i jeden kontrolowany restart; historia poleceń i ustawienia nie są cofane.
+
+Walidacja jest syntetyczna; odczyt HA i przyjęcie usługi nie potwierdzają fizycznej reakcji falownika.
+
+
 ## Przejście na 2.1.9
 
 Zachowaj kopię konfiguracji bez danych dostępu oraz ZIP 2.1.8. Sprawdź konfigurację HA, zatrzymaj sterowanie i potwierdź odczyt 0 A oraz wyłączone GC przed wymaganym restartem. Po uruchomieniu sprawdź wersję, pomiary, dotychczasowe przypisania, rezerwę, zegary i topologię; przywróć wcześniejszy tryb po spełnieniu warunków. W razie problemu zatrzymaj sterowanie, przywróć pliki 2.1.8, wykonaj jeden kontrolowany restart i ponownie sprawdź warunki przed wznowieniem. Cofnięcie plików nie cofa historii ani ustawień.
@@ -158,4 +183,4 @@ Po osiągnięciu celu histereza wznowienia wynosi 5 p.p. SoC. W ostatniej godzin
 
 Małe, jeszcze nierozpoczęte doładowanie (obliczona potrzeba do 10 A) można odłożyć bliżej końca taniego okna. Silnik uwzględnia aktualny limit prądu, napięcie, sprawność, obserwowane rozładowywanie i zapas rezerwy; pozostawia co najmniej godzinę oraz margines czasu. Niski limit lub zagrożenie rezerwy powodują wcześniejszy start. Rozpoczęte ładowanie nie jest zatrzymywane wyłącznie przez ten mechanizm odkładania. Nagła zmiana obciążenia może zmienić termin; osiągnięcie celu nie jest gwarantowane.
 
-Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga 120 s stabilnych warunków. Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.
+Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga poprawnych bieżących pomiarów (od 2.1.10 bez dodatkowego odliczania). Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.

@@ -13,14 +13,31 @@ from datetime import datetime
 from .grid_control import calculate_grid_charge as _base, calculate_grid_charge_increase_cap
 
 ORDINARY_INTERVAL_SECONDS = 600
-RECOVERY_SECONDS = 120
-DEADBAND_A = 10
+COMMAND_SETTLE_SECONDS = 120
+DEADBAND_A = 5
+MAX_STEP_A = 10
 QUANTUM_A = 5
 SOC_HYSTERESIS = 5
 
 
 def _finite(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def policy_ready(policy, now):
+    """Use the latest validated snapshot; no continuous-observation timer."""
+    observed = policy.get("observed_at") if isinstance(policy, dict) else None
+    return (_finite(now) and now > 0 and _finite(observed)
+            and 0 <= now - observed <= 30)
+
+
+def tapering(g):
+    """Only continue an already running charge below the hard SoC ceiling."""
+    policy = g.get("current_policy", {})
+    current, soc, ceiling = g.get("current_a"), g.get("soc"), g.get("grid_max_soc_percent", 95)
+    return (isinstance(policy, dict) and policy.get("stopped") is True
+            and g.get("grid_charge_active") is True and _finite(current) and current > 0
+            and _finite(soc) and _finite(ceiling) and soc < ceiling)
 
 
 def dispatch_ready(now, possible, not_sent, positive):
@@ -31,7 +48,7 @@ def dispatch_ready(now, possible, not_sent, positive):
            for at in (possible, not_sent, positive)):
         return False
     return ((positive is None or now - positive >= ORDINARY_INTERVAL_SECONDS)
-            and (possible is None or now - possible >= RECOVERY_SECONDS)
+            and (possible is None or now - possible >= COMMAND_SETTLE_SECONDS)
             and (not_sent is None or now - not_sent >= 60))
 
 
@@ -59,11 +76,9 @@ def initial_dispatch_ready(g):
             now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"),
             g["ordinary_last_positive_possible_ts"])):
         return False
-    since, observed = policy.get("safe_since"), policy.get("observed_at")
-    if (not _finite(since) or not 0 <= since <= now - RECOVERY_SECONDS
-            or not _finite(observed) or not 0 <= now - observed <= 30):
+    if not policy_ready(policy, now):
         return False
-    for key, delay in (("ordinary_last_possible_ts", RECOVERY_SECONDS),
+    for key, delay in (("ordinary_last_possible_ts", COMMAND_SETTLE_SECONDS),
                        ("ordinary_last_not_sent_ts", 60)):
         if key not in g:
             return False
@@ -74,7 +89,7 @@ def initial_dispatch_ready(g):
 
 
 def update_policy(g, previous):
-    """Target latch belongs to one tariff deadline, with a fresh safety timer.
+    """Target latch belongs to one tariff deadline; readiness uses current data.
 
     Unknown/corrupt state is treated as stopped until target-5pp (or reserve
     emergency). A changed target alone does not erase a reached-target latch.
@@ -108,18 +123,11 @@ def update_policy(g, previous):
     healthy = (valid and safety["telemetry_ok"] and safety["grid_within_limits"]
                and safety["cap_a"] > 0 and not safety["write"]
                and g.get("hardware_ok") is True)
-    since = previous.get("safe_since")
-    observed = previous.get("observed_at")
-    if not healthy:
-        since = None
-    elif (not _finite(since) or not 0 <= since <= now or not _finite(observed)
-          or not 0 <= now - observed <= 30):
-        since = now
     initial = g.get("initial_window_started")
     if not isinstance(initial, bool):
         initial = (previous.get("initial_started", False) if previous.get("deadline") == key else False)
     return dict(version=1, deadline=key if isinstance(key, str) else "",
-                stopped=bool(stopped), safe_since=since, observed_at=now, final_window_seen=final_seen,
+                stopped=bool(stopped), observed_at=now if healthy else None, final_window_seen=final_seen,
                 initial_started=initial if isinstance(initial, bool) else True)
 
 
@@ -134,13 +142,10 @@ def _ordinary(g, result):
         result["reason"] = "scheduled_hold"
         return result
     policy = g.get("current_policy", {})
-    since = policy.get("safe_since")
-    observed = policy.get("observed_at")
-    if (not _finite(since) or not 0 <= since <= now - RECOVERY_SECONDS
-            or not _finite(observed) or not 0 <= now - observed <= 30):
-        result["reason"] = "recovery_wait"
+    if not policy_ready(policy, now):
+        result["reason"] = "fresh_data_wait"
         return result
-    wanted = min(result["need_a"], result["cap_a"])
+    wanted = 0 if g.get("taper_to_zero") is True else min(result["need_a"], result["cap_a"])
     attempted = g.get("last_attempt_a")
     unconfirmed = _finite(attempted) and abs(g["current_a"] - attempted) >= .01
     if unconfirmed:
@@ -158,11 +163,17 @@ def _ordinary(g, result):
     # A sub-5A hardware cap must still permit a safe initial start.
     if candidate == 0 and wanted > 0 and g["current_a"] == 0:
         candidate = math.floor(min(wanted, upper))
-    if abs(candidate - g["current_a"]) < DEADBAND_A and not (g["current_a"] == 0 and candidate > 0):
+    # Ordinary corrections are bounded in both directions; safety bypasses this path.
+    current = g["current_a"]
+    if candidate > current:
+        candidate = min(candidate, math.floor((current + MAX_STEP_A) / QUANTUM_A) * QUANTUM_A)
+    elif candidate < current:
+        candidate = max(candidate, math.ceil(max(current - MAX_STEP_A, 0) / QUANTUM_A) * QUANTUM_A)
+    if abs(candidate - g["current_a"]) < DEADBAND_A and not (g["current_a"] == 0 and candidate > 0 or g.get("taper_to_zero") and candidate == 0):
         result["reason"] = "scheduled_deadband"
         return result
     result.update(next_a=candidate, write=True,
-                  reason="initial_charge_start" if initial else
+                  reason="target_taper" if g.get("taper_to_zero") else "initial_charge_start" if initial else
                          "scheduled_retry" if unconfirmed else "scheduled_setpoint")
     return result
 
@@ -200,8 +211,13 @@ def calculate_grid_charge(g):
     if g.get("safety_only") is True:
         return _base(g)
     policy = g.get("current_policy", {})
+    if _finite(g.get("soc")) and g["soc"] >= g.get("grid_max_soc_percent", 95):
+        result = _base({**g, "soc": g.get("target_soc")}, ordinary_policy=_ordinary)
+        result["reason"] = "maximum_soc_reached"
+        return result
     if policy.get("stopped", True):
-        # Keep all validation/safety cancellation semantics in the base path.
+        if tapering(g):
+            return _base({**g, "soc": g.get("target_soc"), "taper_to_zero": True}, ordinary_policy=_ordinary)
         result = _base({**g, "soc": g.get("target_soc")}, ordinary_policy=_ordinary)
         if result.get("reason") == "target_reached":
             result["reason"] = "target_hysteresis"
@@ -225,9 +241,9 @@ def describe_current_wait(g):
     """Read-only explanation of the next ordinary opportunity, never a promise.
 
     No permissions, journal entries or controller inputs are changed here.
-    A missing recovery observation cannot be turned into a countdown.
+    A missing current valid snapshot cannot be turned into a countdown.
     """
-    status = dict(current_hold_reason="policy_blocked", recovery_remaining_s=None,
+    status = dict(current_hold_reason="policy_blocked",
                   next_current_change_at=None,
                   initial_window_started=g.get("initial_window_started")
                   if isinstance(g.get("initial_window_started"), bool) else None,
@@ -257,7 +273,7 @@ def describe_current_wait(g):
         status["current_hold_reason"] = "pv_covers_charge_need" if reason == "pv_covers_charge_need" else "target_reached"
         return status
     if (g.get("hardware_ok") is not True or g.get("cheap_window") is not True
-            or result.get("safety") or result.get("need_a", 0) <= 0):
+            or result.get("safety") or result.get("need_a", 0) <= 0 and not tapering(g)):
         return status
     policy = g.get("current_policy", {})
     if not isinstance(policy, dict):
@@ -267,17 +283,13 @@ def describe_current_wait(g):
             or pending is not None and (not _finite(pending) or pending != 0)):
         status["current_hold_reason"] = "waiting_readback"
         return status
-    since, observed = policy.get("safe_since"), policy.get("observed_at")
-    status["current_hold_reason"] = "waiting_stable_measurements"
-    if (not _finite(since) or not 0 <= since <= now or not _finite(observed)
-            or not 0 <= now-observed <= 30):
+    status["current_hold_reason"] = "waiting_valid_measurements"
+    if not policy_ready(policy, now):
         return status
-    recovery = max(0, since+RECOVERY_SECONDS-now)
-    status["recovery_remaining_s"] = math.ceil(recovery)
-    eligible = max(now, since+RECOVERY_SECONDS)
+    eligible = now
     retry = now
     for key, delay in (("ordinary_last_positive_possible_ts", ORDINARY_INTERVAL_SECONDS),
-                       ("ordinary_last_possible_ts", RECOVERY_SECONDS),
+                       ("ordinary_last_possible_ts", COMMAND_SETTLE_SECONDS),
                        ("ordinary_last_not_sent_ts", 60)):
         if key not in g:
             status["current_hold_reason"] = "waiting_readback"
@@ -299,8 +311,7 @@ def describe_current_wait(g):
     initial = (g.get("current_a") == 0 and policy.get("initial_started", False) is False
                and policy.get("stopped", True) is False and policy.get("deadline") == g["policy_deadline"])
     candidate = eligible
-    status["current_hold_reason"] = ("waiting_stable_measurements" if recovery > 0 else
-                                     "waiting_retry" if retry > now else "initial_start" if initial else "ready")
+    status["current_hold_reason"] = ("waiting_retry" if retry > now else "initial_start" if initial else "ready")
     if candidate >= deadline.timestamp():
         return status
     status["next_current_change_at"] = datetime.fromtimestamp(candidate, deadline.tzinfo).isoformat()

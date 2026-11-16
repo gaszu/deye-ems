@@ -17,11 +17,11 @@ def snapshot(**changes):
 
 
 class ScheduledCurrent(unittest.TestCase):
-    def test_direct_start_uses_demand_not_twenty_amp_steps(self):
+    def test_direct_start_is_bounded_to_ten_amps(self):
         g = snapshot()
         result = calculate_grid_charge(g)
         self.assertTrue(result["write"])
-        self.assertEqual(result["next_a"], 55)
+        self.assertEqual(result["next_a"], 10)
         self.assertEqual(result["reason"], "initial_charge_start")
 
     def test_rolling_interval_has_no_half_hour_or_first_minute_restriction(self):
@@ -39,10 +39,10 @@ class ScheduledCurrent(unittest.TestCase):
         g["current_policy"]["observed_at"] = g["now_ts"]
         self.assertTrue(calculate_grid_charge(g)["write"])
 
-    def test_deadband_is_ten_amps_after_quantization_and_headroom(self):
+    def test_quantized_changes_stay_within_ten_amps(self):
         g = snapshot(current_a=50, last_attempt_a=50, last_attempt_ts=1,
                      ordinary_last_possible_ts=1)
-        self.assertEqual(calculate_grid_charge(g)["reason"], "scheduled_deadband")
+        self.assertLessEqual(abs(calculate_grid_charge(g)["next_a"]-50), 10)
         g["soc"] = 45
         result = calculate_grid_charge(g)
         self.assertTrue(result["write"])
@@ -135,41 +135,34 @@ class ScheduledCurrent(unittest.TestCase):
         for deadline in (None, "bad", "2026-11-16T07:00:00"):
             self.assertIsNone(describe({**g, "policy_deadline": deadline})["next_current_change_at"])
 
-    def test_bad_policy_and_observation_gap_restart_recovery(self):
+    def test_current_snapshot_replaces_invalid_or_old_observation(self):
         g = snapshot()
         for state in (None, {"observed_at": "oops"}, {"version": 1, "deadline": "x", "stopped": True,
                                                    "safe_since": g["now_ts"]-500, "observed_at": "oops"}):
             updated = update_policy(g, state)
-            self.assertEqual(updated["safe_since"], g["now_ts"])
+            self.assertEqual(updated["observed_at"], g["now_ts"])
         state = deepcopy(g["current_policy"])
         g["now_ts"] += 31
-        self.assertEqual(update_policy(g, state)["safe_since"], g["now_ts"])
+        self.assertEqual(update_policy(g, state)["observed_at"], g["now_ts"])
 
 
 class ScheduledRuntime(unittest.IsolatedAsyncioTestCase):
-    async def test_safety_readback_in_same_tick_restarts_stability_timer(self):
+    async def test_safety_readback_keeps_current_snapshot_and_command_history(self):
         h = Harness()
         h.active()
         h.set("grid_current_number", 60, "A")
         h.set("bms_charge_current", 10, "A")
         await h.tick()
         self.assertEqual(h.current_calls(), [10])
-        self.assertEqual(h.co._memory["current_policy"]["safe_since"], h.now.timestamp())
+        self.assertEqual(h.co._memory["current_policy"]["observed_at"], h.now.timestamp())
 
-    async def test_first_start_observes_two_minutes_without_waiting_for_next_boundary(self):
+    async def test_first_start_uses_fresh_snapshot_without_timer(self):
         h = Harness()
         h.co._memory["current_policy"] = {}
         h.active()
         await h.tick()
-        self.assertEqual(h.current_calls(), [])
-        for _ in range(11):
-            h.advance(10)
-            await h.tick()
-        self.assertEqual(h.current_calls(), [])
-        h.advance(10)
-        await h.tick()
         self.assertEqual(len(h.current_calls()), 1)
-        self.assertGreater(h.current_calls()[0], 20)
+        self.assertEqual(h.current_calls()[0], 10)
 
     async def test_latch_survives_restart_and_disables_grid(self):
         h = Harness()
@@ -181,7 +174,7 @@ class ScheduledRuntime(unittest.IsolatedAsyncioTestCase):
         h.set("soc", 84, "%")
         await h.co.async_initialize()
         self.assertTrue(h.co._memory["current_policy"]["stopped"])
-        self.assertIsNone(h.co._memory["current_policy"]["safe_since"])
+        self.assertIsNone(h.co._memory["current_policy"]["observed_at"])
         await h.tick()
         self.assertTrue(all(a == 0 for a in h.current_calls()))
 

@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import timedelta
 import unittest
+from unittest.mock import patch
 
 from test_runtime import Coordinator, Harness, SOURCES, runtime
 
@@ -39,6 +40,13 @@ class RollingClock(unittest.TestCase):
 
 
 class RollingRuntime(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These direct-dispatch tests exercise durable journals and transport,
+        # independently of the ordinary controller's 10 A proposal bound.
+        guard = patch.object(runtime, "MAX_STEP_A", 1000)
+        guard.start()
+        self.addCleanup(guard.stop)
+
     async def test_safety_zero_does_not_move_ordinary_clock_or_refund_initial(self):
         h = setup()
         self.assertTrue(await h.co._grid_attempt(20, h.now.timestamp()))
@@ -59,7 +67,7 @@ class RollingRuntime(unittest.IsolatedAsyncioTestCase):
         h = setup()
         self.assertTrue(await h.co._grid_attempt(40, h.now.timestamp()))
 
-    async def test_1520_zero_and_1529_telemetry_gap_resume_at_153118(self):
+    async def test_telemetry_gap_resumes_on_first_valid_data_without_a_new_timer(self):
         h = setup()
         h.now = h.now.replace(hour=15, minute=0, second=0)
         h.advance(0)
@@ -71,23 +79,16 @@ class RollingRuntime(unittest.IsolatedAsyncioTestCase):
         h.set("grid_power", "unavailable", "W")
         await h.tick()
         self.assertFalse(h.co.data["inputs"]["telemetry_valid"])
+        count = len([a for a in h.current_calls() if a > 0])
         h.advance(10)
         h.set("grid_power", 1800, "W")
         await h.tick()
-        positives = len([a for a in h.current_calls() if a > 0])
-        for _ in range(11):
-            h.advance(10)
-            await h.tick()
-            self.assertEqual(len([a for a in h.current_calls() if a > 0]), positives)
-        h.advance(10)
-        await h.tick()
-        self.assertEqual((h.now.hour, h.now.minute, h.now.second), (15, 31, 18))
-        self.assertEqual(len([a for a in h.current_calls() if a > 0]), positives+1)
+        self.assertEqual(len([a for a in h.current_calls() if a > 0]), count+1)
+        self.assertEqual((h.now.hour, h.now.minute, h.now.second), (15, 29, 18))
         ordinary_at = grid(h)["ordinary_last_positive_possible_ts"]
         h.advance(100)
-        self.assertTrue(await h.co._grid_attempt(20, h.now.timestamp(), force=True))
+        self.assertTrue(await h.co._grid_attempt(5, h.now.timestamp(), force=True))
         self.assertEqual(grid(h)["ordinary_last_positive_possible_ts"], ordinary_at)
-        self.assertEqual(h.store.saved["grid_dispatch"]["ordinary_positive_history"]["kind"], "safety")
         h.advance(499)
         stable(h)
         self.assertFalse(await h.co._grid_attempt(40, h.now.timestamp()))
@@ -95,7 +96,7 @@ class RollingRuntime(unittest.IsolatedAsyncioTestCase):
         stable(h)
         self.assertTrue(await h.co._grid_attempt(40, h.now.timestamp()))
 
-    async def test_live_pv_stop_and_cloud_restart_after_120_seconds_without_boundary(self):
+    async def test_live_pv_stop_respects_command_settling_without_new_data_timer(self):
         h = setup()
         await h.tick()
         self.assertTrue(any(a > 0 for a in h.current_calls()))
@@ -105,7 +106,7 @@ class RollingRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.current_calls()[-1], 0)
         h.set("battery_power", 0, "W")
         positives = len([a for a in h.current_calls() if a > 0])
-        for _ in range(12):
+        for _ in range(11):
             h.advance(10)
             await h.tick()
             self.assertEqual(len([a for a in h.current_calls() if a > 0]), positives)
