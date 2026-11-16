@@ -43,7 +43,7 @@ Godziny poniżej są podane w potwierdzonym zegarze taryfowym, a nie zawsze w cz
 | G12w ENEA |21:00–06:00 w dni robocze; całe weekendy/święta niższe. **Bez dziennego bloku13:00–15:00.** |
 | G12n PGE Dystrybucja |01:00–05:00 poniedziałek–sobota; całe niedziele/święta niższe. Zwykła sobota nie jest cała tańsza. |
 | G12r ENERGA |13:00–16:00 i22:00–07:00, każdy dzień, bez całodobowego weekendowego wyjątku. |
-| G13 TAURON | Szczyt rano07:00–13:00; wieczorem zimą16:00–21:00, latem19:00–22:00. Pozostałe godziny i całe weekendy/święta pozaszczytowe. |
+| G13 TAURON | Szczyt rano07:00–13:00; wieczorem zimą16:00–21:00, latem19:00–22:00. W EMS ten sam harmonogram obowiązuje codziennie, także w weekendy i święta; pozostałe godziny pozaszczytowe. Jest to reguła sterowania, nie opis rozliczeń OSD. |
 | G13s TAURON | Latem: dzienna pozaszczytowa09:00–17:00, noc21:00–07:00, szczyt07:00–09:00 i17:00–21:00. Zimą: dzienna pozaszczytowa10:00–15:00, noc21:00–07:00, szczyt07:00–10:00 i15:00–21:00. |
 | G12sezON ENEA | Zima22:00–06:00 i11:00–13:00; lato04:00–06:00 i09:00–17:00. Bez całodobowego weekendowego wyjątku. |
 | G13active ENEA | Miesięczny rozkład trzech stref, przedstawiony poniżej; bez całodobowego weekendowego wyjątku. |

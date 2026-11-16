@@ -29,7 +29,8 @@ class StableTauronClocks(unittest.TestCase):
                     self.assertEqual([r["time"] for r in program["rows"]], expected)
         self.assertTrue(all(row["zone"] == "flat" and row["tier"] == 0
                             for row in self.program("2026-11-10", "tauron_g11_2026")["rows"]))
-        self.assertTrue(all(row["grid_charge_allowed"] for row in self.program("2026-11-15")["rows"]))
+        self.assertEqual([row["grid_charge_allowed"] for row in self.program("2026-11-15")["rows"]],
+                         [True, True, False, True, False, True])
         self.assertFalse(self.program("2026-11-10")["rows"][2]["grid_charge_allowed"])
 
     def test_summer_approved_g11_g13_use_selected_season_not_next_working_day(self):
@@ -124,7 +125,10 @@ class SharedSlotTargets(unittest.TestCase):
             today = [r for r in result["tariff_slot_targets"] if r["start"].startswith("2026-11-14")]
             self.assertEqual([r["slot"] for r in today], [1, 2, 3, 4, 5, 6])
             targets = {r["deadline"]: r["soc_percent"] for r in result["targets"].values()}
-            self.assertEqual(len(targets), 1)
+            if profile == "tauron_g13_2026":
+                self.assertGreaterEqual(len(targets), 2)
+            else:
+                self.assertEqual(len(targets), 1)
             for row in result["tariff_slot_targets"]:
                 if row["deadline"] is not None:
                     self.assertIn(row["deadline"], targets)

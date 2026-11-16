@@ -69,15 +69,19 @@ class TariffCalendarTests(unittest.TestCase):
         self.assertEqual(result["current_interval"]["start"], "2026-07-10T19:00:00+02:00")
         self.assertEqual(result["current_interval"]["end"], "2026-07-10T22:00:00+02:00")
 
-    def test_verified_official_profile_treats_weekend_as_off_peak(self):
-        result = describe("2026-11-14T08:00:00+01:00", "tauron_g13_2026")
-        self.assertFalse(result["preview_only"])
-        self.assertTrue(result["runtime_allowed"])
-        self.assertEqual(len(result["today"]), 1)
-        self.assertEqual(result["current_zone"], "off_peak")
-        self.assertEqual(result["current_interval"]["reason"], "weekend")
-        self.assertNotIn("legacy_slot", result["current_interval"])
-        self.assertIn("2026", result["source_url"])
+    def test_g13_every_day_keeps_seasonal_protected_windows(self):
+        for month, evening in ((7, 19), (11, 16)):
+            for day in range(9, 16):
+                for hour, allowed in ((6, True), (7, False), (12, False),
+                                      (13, True), (evening, False), (23, True)):
+                    with self.subTest(month=month, day=day, hour=hour):
+                        offset = '+02:00' if month == 7 else '+01:00'
+                        result = describe(f'2026-{month:02d}-{day:02d}T{hour:02d}:00:00{offset}',
+                                          'tauron_g13_2026')
+                        self.assertEqual(len(result['today']), 5)
+                        self.assertEqual(result['current_interval']['grid_charge_allowed'], allowed)
+                        self.assertEqual(result['current_interval']['reason'],
+                                         'summer' if month == 7 else 'winter')
 
     def test_official_weekday_has_no_artificial_four_am_slot(self):
         result = describe("2026-11-13T03:00:00+01:00", "tauron_g13_2026")
@@ -94,8 +98,10 @@ class TariffCalendarTests(unittest.TestCase):
                 self.assertEqual(CALENDAR.polish_holiday(day), reason)
                 now = datetime.combine(day, datetime.min.time(), CALENDAR.WARSAW)
                 result = CALENDAR.describe_calendar(now, "tauron_g13_2026")
-                self.assertEqual(result["current_interval"]["reason"], "holiday:" + reason)
-                self.assertEqual(len(result["today"]), 1)
+                self.assertIn(result["current_interval"]["reason"], ("summer", "winter"))
+                self.assertEqual(len(result["today"]), 5)
+                peak = CALENDAR.describe_calendar(now.replace(hour=8), "tauron_g13_2026")
+                self.assertFalse(peak["current_interval"]["grid_charge_allowed"])
         self.assertIsNone(CALENDAR.polish_holiday(date(2024, 12, 24)))
         self.assertEqual(CALENDAR.polish_holiday(date(2025, 12, 24)), "christmas_eve")
 

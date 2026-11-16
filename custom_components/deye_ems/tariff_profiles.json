@@ -206,12 +206,8 @@
           ]
         ]
       },
-      "all_day_low_on": [
-        "saturday",
-        "sunday",
-        "statutory_holiday"
-      ],
-      "schedule_status": "verified_2026_document",
+      "all_day_low_on": [],
+      "schedule_status": "ems_every_day_policy",
       "zone_names": [
         "morning_peak",
         "afternoon_peak",
@@ -219,7 +215,7 @@
       ],
       "profile_id": "tauron_g13_2026",
       "label": "TAURON Dystrybucja — G13 (2026)",
-      "version": "2026-reviewed-2026-11-13",
+      "version": "2026-ems-every-day-2026-11-16",
       "valid_from": "2026-01-01",
       "valid_until": "2026-12-31",
       "source_url": "https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx",
@@ -229,7 +225,7 @@
       "clock_confirmation_required": true,
       "requires_contract_confirmation": false,
       "notice": "Wybranie profilu EMS nie zmienia umowy ani systemu opustów. Potwierdź grupę i zegar licznika z własną umową.",
-      "description": "Zweryfikowany kalendarz stref OSD; cele SoC i dopuszczenie ładowania podlegają osobnej polityce EMS."
+      "description": "Harmonogram sterowania EMS: wszystkie dni jednakowe, bez wyjątków weekendowych i świątecznych; sezonowe godziny G13 zachowane. Nie zmienia rozliczenia operatora."
     },
     {
       "operator": "tauron_dystrybucja",
