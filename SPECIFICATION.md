@@ -1,6 +1,6 @@
-# Specyfikacja Deye EMS 2.1.8
+# Specyfikacja Deye EMS 2.1.9
 
-## Podpis wyboru taryfy — 2.1.8
+## Podpis wyboru taryfy — 2.1.7
 
 Dostępne cztery taryfy TAURON nie są opisywane jako niedostępne do sterowania. Korekta dotyczy wyłącznie podpisu formularza; reguły wyboru, zegary, cele, tryb i zabezpieczenia pozostają jak w 2.1.6.
 
@@ -30,7 +30,7 @@ Dostępne cztery taryfy TAURON nie są opisywane jako niedostępne do sterowania
 ## Datowanie natywnych raportów — 2.1.3
 
 - Dwie poprawne wiadomości z tego samego połączenia i aktualnego przypisania nadal są wymagane. Najnowsza musi odpowiadać bieżącej wartości HA, urządzeniu, encji i jednostce; oba odbiory muszą mieścić się w dotychczasowym limicie wieku źródła.
-- `reported_at` oznacza najnowszy rzeczywisty odbiór i służy do świeżości wartości oraz istniejącej kontroli zgodności czasowej. `confirmed_at` oznacza wcześniejszy odbiór pary i pozostaje osobno walidowany: `confirmed_at <= reported_at <= now`, świeżość obu oraz wymagane przejście obu raportów po zdarzeniu unieważniającym. Natywny znacznik jest używany tylko wtedy, gdy jest późniejszy od poprawnego znacznika HA. Nie tworzy się sztucznych znaczników ani nie zmienia limitów 30 s mocy, 120 s napięcia i 10 s rozbieżności grupy mocy.
+- `reported_at` oznacza najnowszy rzeczywisty odbiór i służy do świeżości wartości oraz istniejącej kontroli zgodności czasowej. `confirmed_at` oznacza wcześniejszy odbiór pary i pozostaje osobno walidowany: `confirmed_at <= reported_at <= now`, świeżość obu oraz wymagane przejście obu raportów po zdarzeniu unieważniającym. Natywny znacznik jest używany tylko wtedy, gdy jest późniejszy od poprawnego znacznika HA. Nie tworzy się sztucznych znaczników ani nie zmienia limitów 30 s mocy, 120 s napięcia i 20 s rozbieżności grupy mocy.
 - Przerwa ponad dopuszczalny wiek, cofnięcie zegara, rozłączenie lub zmiana źródła unieważniają parę. Znaczniki są czasami odbioru przez EMS, a nie chwilą akwizycji Modbus. Pomiary, nastawy i ich potwierdzenia nadal przechodzą dotychczasowe kontrole.
 
 ## Wygląd panelu — 2.1.2
@@ -105,7 +105,7 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 - `C = max(-battery_power, 0)` jest zmierzonym ładowaniem DC. `G = max(grid_port_power, suma faz portu GRID, 0)` jest dodatnim dopływem AC do falownika. Kredyt nadwyżki lokalnej wynosi `max(C - G - 200 W, 0)`. Odjęcie całego G przy sprawności 1 jest zachowawcze; nie przypisuje strat prostowania do PV i uwzględnia GRID zasilający dom przez bypass. CT, całkowita produkcja PV i nastawa prądu nie zastępują tych pomiarów.
 - Kredyt pomniejsza wymagane tempo ładowania DC przed podzieleniem przez napięcie. Poniżej rezerwy żądane tempo łączne podnoszone jest do budżetu Deye/BMS, a dopiero potem odejmowany jest kredyt PV. Zwykły harmonogram zapisów i zatrzask SoC pozostają zachowane; pokrycie potrzeby przez PV nie oznacza osiągnięcia celu SoC.
 - Ścisłe limity nastawy zachowują Deye−5%, ogólny limit Deye/BMS, zakres encji oraz istniejące budżety mocy i faz. Zmierzone przekroczenie łącznej mocy baterii ponad budżet prądu razy napięcie, po tolerancji 200 W, może jedynie zmniejszyć nastawę. Różnica nastawy i rzeczywistej mocy nie daje prawa do zwiększenia.
-- Bateria i natywny GRID mają niezależne encje, poprawne jednostki, nieprzywrócone odczyty do 30 s i rozbieżność znaczników nie większą niż 10 s. Błąd unieważnia telemetrię ładowania. Potrzeba jest ponownie sprawdzana bezpośrednio przed zwiększeniem prądu i włączeniem GC, po oczekującym zapisie rejestru próby.
+- Bateria i natywny GRID mają niezależne encje, poprawne jednostki, nieprzywrócone odczyty do 30 s i rozbieżność znaczników nie większą niż 20 s. Błąd unieważnia telemetrię ładowania. Potrzeba jest ponownie sprawdzana bezpośrednio przed zwiększeniem prądu i włączeniem GC, po oczekującym zapisie rejestru próby.
 - Szacunek dotyczy nadwyżki po zasileniu odbiorów. Nie jest dokładnym licznikiem udziału źródeł; inne lokalne źródło DC również może uczestniczyć w bilansie. Obserwowany teraz wkład PV nie jest gwarancją produkcji do końca slotu. Regulator aktualizuje obliczenia z kolejnymi pomiarami.
 
 ## Pierwszy start ładowania — rozszerzenie 1.0.17
@@ -180,3 +180,14 @@ Uzgodniona podstawa wersji 1.0.0. Kolejne poprawki mają zachowywać opisane zac
 Panel pokazuje prognozę Solcast P50/P10 na dziś, pozostałą część dnia i jutro, datę w Europe/Warsaw oraz czas odczytu i dostępny znacznik pobrania API. Odróżnia API EMS, datowany cache i encje HA. Brak pełnego pokrycia pozostaje nieznany; nie zastępuje się go zerem. Widok nie wykonuje dodatkowych zapytań API i nie zmienia planowania ani sterowania. Niepełne pokrycie 48 godzin nadal blokuje użycie takiego zestawu przez planer, nawet gdy krótsze podsumowanie da się pokazać.
 
 Przy bezpośrednim pobieraniu przez EMS wyłącz osobną integrację Solcast w HA, aby nie dublować zapytań. Instancje korzystające z encji HA wymagają najpierw konfiguracji i weryfikacji API EMS.
+
+
+## Ładowanie i sekwencyjne pomiary — 2.1.9
+
+Kolejne pomiary RS485 mogą pochodzić z różnych części cyklu odczytu. Wspólna tolerancja różnicy znaczników grupy mocy baterii i portu GRID oraz kontroli CT wynosi teraz 20 s. Maksymalny wiek mocy nadal wynosi 30 s, napięcia 120 s. Jednostki, zakresy, brak raportów, alarmy BMS i limity mocy pozostają sprawdzane. Panel zachowuje ostatnio wykryte źródło i przyczynę problemu także po odzyskaniu prawidłowych pomiarów; zapis historyczny nie zastępuje aktualnej walidacji. Nie wymaga to zmiany firmware ESPHome.
+
+Po osiągnięciu celu histereza wznowienia wynosi 5 p.p. SoC. W ostatniej godzinie taniego okna silnik może jednokrotnie zwolnić tę blokadę, gdy SoC jest poniżej celu. Następne osiągnięcie celu ponownie zatrzymuje ładowanie. Nie podnosi to ustawionego celu ani maksymalnego SoC.
+
+Małe, jeszcze nierozpoczęte doładowanie (obliczona potrzeba do 10 A) można odłożyć bliżej końca taniego okna. Silnik uwzględnia aktualny limit prądu, napięcie, sprawność, obserwowane rozładowywanie i zapas rezerwy; pozostawia co najmniej godzinę oraz margines czasu. Niski limit lub zagrożenie rezerwy powodują wcześniejszy start. Rozpoczęte ładowanie nie jest zatrzymywane wyłącznie przez ten mechanizm odkładania. Nagła zmiana obciążenia może zmienić termin; osiągnięcie celu nie jest gwarantowane.
+
+Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga 120 s stabilnych warunków. Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.

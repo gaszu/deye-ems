@@ -1,6 +1,10 @@
 # Przejście z innego EMS i powrót z kopii
 
-## Przejście na 2.1.8
+## Przejście na 2.1.9
+
+Zachowaj kopię konfiguracji bez danych dostępu oraz ZIP 2.1.8. Sprawdź konfigurację HA, zatrzymaj sterowanie i potwierdź odczyt 0 A oraz wyłączone GC przed wymaganym restartem. Po uruchomieniu sprawdź wersję, pomiary, dotychczasowe przypisania, rezerwę, zegary i topologię; przywróć wcześniejszy tryb po spełnieniu warunków. W razie problemu zatrzymaj sterowanie, przywróć pliki 2.1.8, wykonaj jeden kontrolowany restart i ponownie sprawdź warunki przed wznowieniem. Cofnięcie plików nie cofa historii ani ustawień.
+
+## Przejście na 2.1.7
 
 Wydanie poprawia wyłącznie mylący podpis czterech dostępnych taryf TAURON. Nie wymaga zmiany ustawień ani ponownego wyboru taryfy. Zachowaj kopię bez danych dostępu i ZIP 2.1.6, sprawdź konfigurację, wykonaj wymagany restart i zweryfikuj załadowaną wersję, dotychczasowy tryb oraz ustawienia. Powrót do 2.1.6 przywraca poprzedni podpis; reguły silnika pozostają takie same.
 
@@ -144,3 +148,14 @@ Falownik może zachować ostatnie nastawy i harmonogram podczas restartu HA. Wy�
 ## Podgląd prognoz 2.1.8
 
 Zachowaj kopię ustawień bez danych dostępu i poprzedni ZIP 2.1.7, sprawdź konfigurację przed restartem i dotychczasowy tryb po starcie. Wydanie nie zmienia źródeł ani limitów. Wyłączenie osobnego Solcast jest oddzielną czynnością; nie wyłączaj jedynego źródła encji HA przed przejściem na API EMS.
+
+
+## Ładowanie i sekwencyjne pomiary — 2.1.9
+
+Kolejne pomiary RS485 mogą pochodzić z różnych części cyklu odczytu. Wspólna tolerancja różnicy znaczników grupy mocy baterii i portu GRID oraz kontroli CT wynosi teraz 20 s. Maksymalny wiek mocy nadal wynosi 30 s, napięcia 120 s. Jednostki, zakresy, brak raportów, alarmy BMS i limity mocy pozostają sprawdzane. Panel zachowuje ostatnio wykryte źródło i przyczynę problemu także po odzyskaniu prawidłowych pomiarów; zapis historyczny nie zastępuje aktualnej walidacji. Nie wymaga to zmiany firmware ESPHome.
+
+Po osiągnięciu celu histereza wznowienia wynosi 5 p.p. SoC. W ostatniej godzinie taniego okna silnik może jednokrotnie zwolnić tę blokadę, gdy SoC jest poniżej celu. Następne osiągnięcie celu ponownie zatrzymuje ładowanie. Nie podnosi to ustawionego celu ani maksymalnego SoC.
+
+Małe, jeszcze nierozpoczęte doładowanie (obliczona potrzeba do 10 A) można odłożyć bliżej końca taniego okna. Silnik uwzględnia aktualny limit prądu, napięcie, sprawność, obserwowane rozładowywanie i zapas rezerwy; pozostawia co najmniej godzinę oraz margines czasu. Niski limit lub zagrożenie rezerwy powodują wcześniejszy start. Rozpoczęte ładowanie nie jest zatrzymywane wyłącznie przez ten mechanizm odkładania. Nagła zmiana obciążenia może zmienić termin; osiągnięcie celu nie jest gwarantowane.
+
+Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga 120 s stabilnych warunków. Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.

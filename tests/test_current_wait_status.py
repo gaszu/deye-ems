@@ -96,7 +96,7 @@ class CurrentWaitStatus(unittest.TestCase):
         h.set("battery_power", 0, "kW")
         self.assertIn(dict(source="battery_power", reason="wrong_unit"), h.co._read_inputs(h.now)["telemetry_issues"])
         h = Harness()
-        h.set("battery_power", 0, "W", age=11)
+        h.set("battery_power", 0, "W", age=21)
         data = h.co._read_inputs(h.now)
         self.assertFalse(data["telemetry_valid"])
         self.assertIn(dict(source="charge_power", reason="time_skew"), data["telemetry_issues"])

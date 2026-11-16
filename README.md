@@ -4,7 +4,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.1.8
+## Instalacja wersji 2.1.9
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -17,12 +17,12 @@ Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcze
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.1.8** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj **v2.1.9** i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
 
-Alternatywnie pobierz [deye-ems-2.1.8.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.8/deye-ems-2.1.8.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.8.md).
+Alternatywnie pobierz [deye-ems-2.1.9.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.9/deye-ems-2.1.9.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.9.md).
 
 ## Plan baterii w kartach
 
@@ -44,7 +44,7 @@ Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połącze
 
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.8 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.9 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
 
@@ -155,3 +155,14 @@ python build_release.py
 ## Wersja1.0.7: układ z CT i odbiorami przed falownikiem
 
 Opcjonalna topologia **LOAD + odbiory między GRID a CT** zachowujeZero Export To CT. Odróżnia wymianę z siecią mierzoną naCT od portuGRID falownika. Do zużycia i prognozy dodaje bilansCT−GRID do natywnegoLOAD, bez podwójnego liczenia CWU. Wspólna moc znamionowa dotyczy całego falownika. Konfiguracja wymaga oddzielnych sum i faz obu pomiarów, obserwacji i jawnego wznowienia; pełne wymagania są w[INSTALL.md](INSTALL.md). Brak wdrożenia i potwierdzenia pomiarów sprzętowych.
+
+
+## Ładowanie i sekwencyjne pomiary — 2.1.9
+
+Kolejne pomiary RS485 mogą pochodzić z różnych części cyklu odczytu. Wspólna tolerancja różnicy znaczników grupy mocy baterii i portu GRID oraz kontroli CT wynosi teraz 20 s. Maksymalny wiek mocy nadal wynosi 30 s, napięcia 120 s. Jednostki, zakresy, brak raportów, alarmy BMS i limity mocy pozostają sprawdzane. Panel zachowuje ostatnio wykryte źródło i przyczynę problemu także po odzyskaniu prawidłowych pomiarów; zapis historyczny nie zastępuje aktualnej walidacji. Nie wymaga to zmiany firmware ESPHome.
+
+Po osiągnięciu celu histereza wznowienia wynosi 5 p.p. SoC. W ostatniej godzinie taniego okna silnik może jednokrotnie zwolnić tę blokadę, gdy SoC jest poniżej celu. Następne osiągnięcie celu ponownie zatrzymuje ładowanie. Nie podnosi to ustawionego celu ani maksymalnego SoC.
+
+Małe, jeszcze nierozpoczęte doładowanie (obliczona potrzeba do 10 A) można odłożyć bliżej końca taniego okna. Silnik uwzględnia aktualny limit prądu, napięcie, sprawność, obserwowane rozładowywanie i zapas rezerwy; pozostawia co najmniej godzinę oraz margines czasu. Niski limit lub zagrożenie rezerwy powodują wcześniejszy start. Rozpoczęte ładowanie nie jest zatrzymywane wyłącznie przez ten mechanizm odkładania. Nagła zmiana obciążenia może zmienić termin; osiągnięcie celu nie jest gwarantowane.
+
+Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga 120 s stabilnych warunków. Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.

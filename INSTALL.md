@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.8
+# Instalacja i obsługa Deye EMS 2.1.9
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.** Profil baterii „Deye” korzysta z danych falownika; „YamBMS” jest opcjonalny. W panelu, w sekcji „Źródła danych”, wybierz prefiks i profil, sprawdź encje, a następnie osobno zapisz przypisania w obserwacji.
 
@@ -14,14 +14,14 @@ Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.8**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.9**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.8.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.8/deye-ems-2.1.8.zip).
+1. Pobierz [deye-ems-2.1.9.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.9/deye-ems-2.1.9.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
@@ -161,7 +161,7 @@ Nie wpisuje się już „Modelowego limitu ładowania”. Prognoza korzysta z og
 
 ## Priorytet PV w bieżącym sterowaniu — od 1.0.16
 
-Istniejące przypisania **battery_power** i natywnego **grid_power** oraz faz GRID służą do oszacowania nadwyżki lokalnej pomniejszającej potrzebę ładowania z sieci. Bateria ma znak minus podczas ładowania; port GRID ma znak plus przy dopływie do falownika. Nie przypisuj CT zamiast portu GRID ani jednej encji do obu pomiarów. Wymagane są niezależne, poprawne odczyty W do 30 s, rozbieżne czasowo najwyżej o 10 s. Brak poprawnych danych blokuje ładowanie sieciowe zamiast przyjmować PV równe zero.
+Istniejące przypisania **battery_power** i natywnego **grid_power** oraz faz GRID służą do oszacowania nadwyżki lokalnej pomniejszającej potrzebę ładowania z sieci. Bateria ma znak minus podczas ładowania; port GRID ma znak plus przy dopływie do falownika. Nie przypisuj CT zamiast portu GRID ani jednej encji do obu pomiarów. Wymagane są niezależne, poprawne odczyty W do 30 s, rozbieżne czasowo najwyżej o 20 s. Brak poprawnych danych blokuje ładowanie sieciowe zamiast przyjmować PV równe zero.
 
 Panel pokazuje zachowawczy szacunek nadwyżki i potrzebę doładowania po stronie baterii. Nie są to odczyty dokładnej produkcji PV ani AC importu. Pokrycie potrzeby przez PV może zatrzymać doładowanie bez osiągnięcia celu SoC; wznowienie nadal respektuje co najmniej 600 s między zwykłymi dodatnimi nastawami oraz stabilizację pomiarów. Fizyczne ładowanie z PV pozostaje sterowane przez falownik.
 

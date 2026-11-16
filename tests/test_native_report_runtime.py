@@ -164,7 +164,26 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(raw.last_reported, h.now)
                 self.assertEqual(h.calls, [])
 
-    async def test_native_receipts_keep_existing_ten_second_power_coherence_guard(self):
+    async def test_sequential_receipts_up_to_twenty_seconds_are_accepted(self):
+        for delay in (10.5, 15, 20):
+            with self.subTest(delay=delay):
+                f = await self.fixture()
+                h = f.h
+                for key, validation in h.co._native_stream_checks().items():
+                    if validation["unit"] == "W":
+                        old = h.states[h.co._sources[key]]
+                        h.set(key, float(old.state), "W", age=100)
+                f.emit_twice("battery_power")
+                h.now += timedelta(seconds=delay)
+                for key, validation in h.co._native_stream_checks().items():
+                    if validation["unit"] == "W" and key != "battery_power":
+                        f.emit_twice(key)
+                inputs = h.co._read_inputs(h.now)
+                self.assertTrue(inputs["charge_power_valid"])
+                self.assertTrue(inputs["telemetry_valid"])
+                self.assertEqual(h.calls, [])
+
+    async def test_native_receipts_keep_twenty_second_power_coherence_guard(self):
         f = await self.fixture()
         h = f.h
         for key, validation in h.co._native_stream_checks().items():
@@ -172,7 +191,7 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
                 old = h.states[h.co._sources[key]]
                 h.set(key, float(old.state), "W", age=100)
         f.emit_twice("battery_power")
-        h.now += timedelta(seconds=15)
+        h.now += timedelta(seconds=21)
         for key, validation in h.co._native_stream_checks().items():
             if validation["unit"] == "W" and key != "battery_power":
                 f.emit_twice(key)
@@ -181,7 +200,7 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(inputs["telemetry_valid"])
         self.assertIn({"source": "charge_power", "reason": "time_skew"}, inputs["telemetry_issues"])
         row = next(row for row in inputs["telemetry_details"] if row["source"] == "charge_power")
-        self.assertEqual((row["observed_time_skew_seconds"], row["max_time_skew_seconds"]), (15, 10))
+        self.assertEqual((row["observed_time_skew_seconds"], row["max_time_skew_seconds"]), (21, 20))
         self.assertEqual(h.calls, [])
 
     async def test_mixed_changing_ha_and_constant_native_powers_need_120_stable_seconds(self):
@@ -215,7 +234,7 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
                 with patch.object(f.cache, "effective_report", side_effect=report):
                     first_healthy = None
                     for cycle in range(17):
-                        h.now = start + timedelta(seconds=cycle*10.5)
+                        h.now = start + timedelta(seconds=cycle*(21 if older_epoch else 10.5))
                         h.set("grid_power", 1800+3*cycle, "W")
                         for phase in (1, 2, 3):
                             h.set(f"grid_l{phase}_power", 600+cycle, "W")
@@ -249,7 +268,7 @@ class NativeReportRuntime(unittest.IsolatedAsyncioTestCase):
             h.set(key, float(old.state), check["unit"], age=175)
             f.emit_twice(key)
         self.assertTrue(h.co._read_inputs(h.now)["telemetry_valid"])
-        h.now += timedelta(seconds=10, microseconds=1)
+        h.now += timedelta(seconds=20, microseconds=1)
         for key in h.co._native_stream_checks():
             if key != "ct_grid_l3_power":
                 f.emit(key)

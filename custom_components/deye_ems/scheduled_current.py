@@ -16,7 +16,7 @@ ORDINARY_INTERVAL_SECONDS = 600
 RECOVERY_SECONDS = 120
 DEADBAND_A = 10
 QUANTUM_A = 5
-SOC_HYSTERESIS = 2
+SOC_HYSTERESIS = 5
 
 
 def _finite(value):
@@ -76,7 +76,7 @@ def initial_dispatch_ready(g):
 def update_policy(g, previous):
     """Target latch belongs to one tariff deadline, with a fresh safety timer.
 
-    Unknown/corrupt state is treated as stopped until target-2pp (or reserve
+    Unknown/corrupt state is treated as stopped until target-5pp (or reserve
     emergency). A changed target alone does not erase a reached-target latch.
     """
     now, soc, target = g.get("now_ts"), g.get("soc"), g.get("target_soc")
@@ -89,6 +89,7 @@ def update_policy(g, previous):
             and isinstance(previous.get("stopped"), bool)
             and isinstance(previous.get("deadline"), str))
     stopped = previous.get("stopped", False) if known else True
+    final_seen = previous.get("final_window_seen") is True if previous.get("deadline") == key else False
     if valid:
         if known and previous.get("deadline") != key:
             stopped = soc >= target
@@ -97,6 +98,11 @@ def update_policy(g, previous):
         elif soc <= target - SOC_HYSTERESIS or (_finite(g.get("minimum_soc_percent"))
                                                and soc < g["minimum_soc_percent"]):
             stopped = False
+        hours = g.get("remaining_h")
+        if _finite(hours) and 0 < hours <= 1 and not final_seen:
+            if soc < target:
+                stopped = False
+            final_seen = True
     # Safety-only uses exactly the existing LOAD/GRID/BMS/converter validation.
     safety = _base({**g, "safety_only": True})
     healthy = (valid and safety["telemetry_ok"] and safety["grid_within_limits"]
@@ -113,7 +119,7 @@ def update_policy(g, previous):
     if not isinstance(initial, bool):
         initial = (previous.get("initial_started", False) if previous.get("deadline") == key else False)
     return dict(version=1, deadline=key if isinstance(key, str) else "",
-                stopped=bool(stopped), safe_since=since, observed_at=now,
+                stopped=bool(stopped), safe_since=since, observed_at=now, final_window_seen=final_seen,
                 initial_started=initial if isinstance(initial, bool) else True)
 
 
@@ -161,6 +167,35 @@ def _ordinary(g, result):
     return result
 
 
+def batch_window(g, cap):
+    """Defer small optional charging, retaining time and reserve headroom.
+
+    Reserve recovery is never delayed. A low instantaneous cap opens the
+    window earlier, rather than assuming maximum inverter power at dawn.
+    No forecast, service, state mutation or permission is introduced here.
+    """
+    values = [g.get(k) for k in ("remaining_h", "soc", "target_soc", "capacity_kwh",
+                               "minimum_soc_percent", "battery_voltage_v")]
+    if not all(_finite(v) for v in values) or not _finite(cap) or cap <= 0:
+        return False, g.get("remaining_h")
+    hours, soc, target, capacity, reserve, voltage = values
+    eta = g.get("charge_storage_efficiency", .95)
+    if not _finite(eta) or not .5 <= eta <= 1 or not 0 < hours <= 24 or voltage <= 0:
+        return False, hours
+    if soc <= reserve + 5:
+        return False, hours
+    gap = max(target-soc, 0) * capacity / 100
+    rate = cap * voltage * eta / 1000
+    battery = g.get("battery_power_w")
+    discharge = max(battery, 0) / 1000 if _finite(battery) else rate
+    # Include observed battery depletion during a possible wait. Demand at
+    # LOAD is not added again: it is already constrained by the cap model.
+    lead = max(1., (gap + discharge * hours) * 1.5 / rate + .25)
+    reserve_energy = max(soc-reserve-5, 0) * capacity / 100
+    reserve_urgent = discharge > 0 and reserve_energy <= discharge * max(hours-lead, 0)
+    return hours > lead and not reserve_urgent, min(hours, max(1., lead))
+
+
 def calculate_grid_charge(g):
     if g.get("safety_only") is True:
         return _base(g)
@@ -171,7 +206,19 @@ def calculate_grid_charge(g):
         if result.get("reason") == "target_reached":
             result["reason"] = "target_hysteresis"
         return result
-    return _base(g, ordinary_policy=_ordinary)
+    result = _base(g, ordinary_policy=_ordinary)
+    if result.get("safety") or not result.get("telemetry_ok") or g.get("cheap_window") is not True:
+        return result
+    if result.get("need_a", 0) > 10:
+        return result
+    defer, pace_hours = batch_window(g, result.get("cap_a"))
+    if defer and g.get("current_a") == 0:
+        # A deliberate wait is distinct from a telemetry failure. The usual
+        # stop path journals a zero only when the setting actually changes.
+        stop = _base({**g, "soc": g.get("target_soc")}, ordinary_policy=_ordinary)
+        stop["reason"] = "batch_wait"
+        return stop
+    return _base({**g, "remaining_h": pace_hours}, ordinary_policy=_ordinary)
 
 
 def describe_current_wait(g):
@@ -191,6 +238,18 @@ def describe_current_wait(g):
         return status
     result = calculate_grid_charge(g)
     reason = result.get("reason")
+    if reason == "batch_wait" and g.get("telemetry_valid") is True and g.get("soc_valid") is True:
+        _, pace = batch_window(g, result.get("cap_a"))
+        if _finite(pace) and _finite(g.get("remaining_h")):
+            at = now + max(g["remaining_h"]-pace, 0) * 3600
+            status["current_hold_reason"] = "batch_wait"
+            try:
+                deadline = datetime.fromisoformat(g["policy_deadline"])
+                if deadline.tzinfo is not None and now <= at < deadline.timestamp() <= now+15*86400:
+                    status["next_current_change_at"] = datetime.fromtimestamp(at, deadline.tzinfo).isoformat()
+            except (KeyError, TypeError, ValueError, OverflowError):
+                pass
+        return status
     if g.get("telemetry_valid") is not True or g.get("soc_valid") is not True or not result.get("telemetry_ok"):
         status["current_hold_reason"] = "telemetry_invalid"
         return status

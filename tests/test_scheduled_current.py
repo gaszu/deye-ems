@@ -70,7 +70,7 @@ class ScheduledCurrent(unittest.TestCase):
         g = snapshot(last_attempt_a=40, last_attempt_ts=1, ordinary_last_possible_ts=1)
         self.assertLessEqual(calculate_grid_charge(g)["next_a"], 40)
 
-    def test_target_latches_until_two_pp_below_or_reserve_emergency(self):
+    def test_target_latches_until_five_pp_below_or_reserve_emergency(self):
         g = snapshot(soc=85)
         state = update_policy(g, {})
         self.assertTrue(state["stopped"])
@@ -78,7 +78,7 @@ class ScheduledCurrent(unittest.TestCase):
         state = update_policy(g, state)
         self.assertTrue(state["stopped"])
         self.assertEqual(calculate_grid_charge({**g, "current_policy": state})["next_a"], 0)
-        g["soc"] = 83
+        g["soc"] = 80
         self.assertFalse(update_policy(g, state)["stopped"])
         g.update(target_soc=40, minimum_soc_percent=40, soc=39)
         self.assertFalse(update_policy(g, state)["stopped"])
@@ -88,8 +88,52 @@ class ScheduledCurrent(unittest.TestCase):
         state = update_policy(g, {})
         g["target_soc"] = 86
         self.assertTrue(update_policy(g, state)["stopped"])
-        g["target_soc"] = 87
+        g["target_soc"] = 90
         self.assertFalse(update_policy(g, state)["stopped"])
+
+    def test_small_topup_waits_but_final_hour_and_reserve_do_not(self):
+        g = snapshot(soc=73, target_soc=75, capacity_kwh=16, minimum_soc_percent=18,
+                     remaining_h=4.5, battery_power_w=0)
+        result = calculate_grid_charge(g)
+        self.assertEqual((result["reason"], result["next_a"], result["write"]), ("batch_wait", 0, False))
+        g["remaining_h"] = 1
+        result = calculate_grid_charge(g)
+        self.assertTrue(result["write"])
+        self.assertGreater(result["next_a"], 0)
+        self.assertLessEqual(result["next_a"], result["cap_a"])
+        g.update(remaining_h=4.5, minimum_soc_percent=70)
+        self.assertNotEqual(calculate_grid_charge(g)["reason"], "batch_wait")
+
+    def test_batch_never_stops_an_existing_charge_or_delays_low_cap(self):
+        g = snapshot(soc=73, target_soc=75, capacity_kwh=16, minimum_soc_percent=18,
+                     remaining_h=4.5, battery_power_w=0)
+        self.assertEqual(calculate_grid_charge(g)["reason"], "batch_wait")
+        self.assertNotEqual(calculate_grid_charge({**g, "current_a": 5})["reason"], "batch_wait")
+        self.assertNotEqual(calculate_grid_charge({**g, "bms_cap_a": 1})["reason"], "batch_wait")
+        failed = calculate_grid_charge({**g, "current_a": 5, "telemetry_valid": False})
+        self.assertTrue(failed["safety"])
+        self.assertEqual(failed["next_a"], 0)
+
+    def test_final_hour_releases_latch_once_then_keeps_five_pp_band(self):
+        g = snapshot(soc=75, target_soc=75, remaining_h=4)
+        state = update_policy(g, {})
+        self.assertTrue(state["stopped"])
+        g.update(soc=73, remaining_h=1)
+        state = update_policy(g, state)
+        self.assertFalse(state["stopped"])
+        g["soc"] = 75
+        state = update_policy(g, state)
+        g["soc"] = 74
+        self.assertTrue(update_policy(g, state)["stopped"])
+        g["soc"] = 70
+        self.assertFalse(update_policy(g, state)["stopped"])
+
+    def test_wait_description_rejects_malformed_deadline(self):
+        g = snapshot(soc=73, target_soc=75, capacity_kwh=16, minimum_soc_percent=18,
+                     remaining_h=4.5, battery_power_w=0)
+        describe = runtime.describe_current_wait
+        for deadline in (None, "bad", "2026-11-16T07:00:00"):
+            self.assertIsNone(describe({**g, "policy_deadline": deadline})["next_current_change_at"])
 
     def test_bad_policy_and_observation_gap_restart_recovery(self):
         g = snapshot()
