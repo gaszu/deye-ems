@@ -28,9 +28,10 @@ from .grid_control import (calculate_grid_charge_cap, calculate_grid_charge_incr
 from .scheduled_current import (calculate_grid_charge, update_policy, dispatch_ready, initial_dispatch_ready,
                                 describe_current_wait, policy_ready, tapering, DEADBAND_A, QUANTUM_A, MAX_STEP_A)
 from .planner import (plan_energy, tariff_context, tariff_identity, tariff_target_items,
-                      physical_tariff_tou, tariff_slot_targets)
+                      physical_tariff_tou, tariff_slot_targets, remember_tariff_slot_targets)
 from .solcast import forecast_summary
 from .slot_meter import update_slot_measurements
+from .slot_history import add_actual_soc
 from .topology import ct_load_balance
 from .soc_policy import reserve_lower_bound
 from .inverter_models import hardware_profile, applied_limits
@@ -111,7 +112,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "slot_measurements": {}, "safety_raise": {},
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
                         "grid_dispatch": {}, "current_policy": {}, "initial_charge_window": {},
-                        "metering_context": {}, "soc_floor_guard": {}}
+                        "metering_context": {}, "soc_floor_guard": {}, "tariff_slot_history": {}}
+        self._soc_history = {}
         self._last_save_ts = 0
         self._last_error = None
         self._tariff_runtime_cache = {}
@@ -698,6 +700,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     async def _background_plan(self, now, inputs):
         try:
             await self._make_plan(now, inputs)
+            await self._refresh_soc_history(now)
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -2142,6 +2145,30 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if permitted and control.get("next_a", 0) > 0 and not readback_ready:
             control["runtime_reason"] = "waiting_setting_readback"
 
+    async def _refresh_soc_history(self, now):
+        """Observation only: Recorder work stays outside the control loop."""
+        source = self._sources.get("soc")
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.history import get_significant_states
+            start = now.astimezone(_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+            job = partial(get_significant_states, self.hass, start.astimezone(_UTC),
+                          now.astimezone(_UTC), entity_ids=[source],
+                          include_start_time_state=True, significant_changes_only=False)
+            records = await asyncio.wait_for(get_instance(self.hass).async_add_executor_job(job), 10)
+            samples = []
+            for state in records.get(source, []):
+                value = _number(state.state)
+                valid = (value is not None and 0 <= value <= 100 and
+                         state.attributes.get("unit_of_measurement") == "%" and
+                         not state.attributes.get("restored"))
+                samples.append((state.last_updated.isoformat(), value if valid else None))
+            if not self._stopped and source == self._sources.get("soc"):
+                self._soc_history = {"source": source, "through": now.isoformat(), "samples": samples}
+        except Exception:
+            # Missing/excluded Recorder history must never affect charging.
+            pass
+
     async def _recorder_statistics(self, now, load_entity, pc_entity):
         """Read recorder in its executor; never run database work on HA's loop."""
         from homeassistant.components.recorder import get_instance
@@ -2729,17 +2756,22 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             elif active:
                 await self._run_driver(inputs, control, target, emergency, now)
             active = self.mode == "active"
+            target_key = self._target_key(now)
+            target_deadline = (datetime.fromtimestamp(self._deadlines(now)[target_key], _TZ).isoformat()
+                               if target_key is not None else None)
+            public_plan = deepcopy(plan)
+            public_plan["tariff_slot_targets"] = remember_tariff_slot_targets(now,
+                {**self._options, "_soc_source": self._sources.get("soc")},
+                tariff_slot_targets(now, self._options, public_plan,
+                    inputs["soc"] if inputs["soc_valid"] else None, floor),
+                self._memory["tariff_slot_history"])
+            history = self._soc_history if self._soc_history.get("source") == self._sources.get("soc") else {}
+            public_plan["tariff_slot_targets"] = add_actual_soc(public_plan["tariff_slot_targets"], history)
             if now.timestamp()-self._last_save_ts >= 60:
                 try:
                     await self._save()
                 except Exception:
                     self._last_error = "periodic_store_failed"
-            target_key = self._target_key(now)
-            target_deadline = (datetime.fromtimestamp(self._deadlines(now)[target_key], _TZ).isoformat()
-                               if target_key is not None else None)
-            public_plan = deepcopy(plan)
-            public_plan["tariff_slot_targets"] = tariff_slot_targets(now, self._options, public_plan,
-                inputs["soc"] if inputs["soc_valid"] else None, floor)
             return {"mode": self.mode, "owner": {"active": active, "conflicts": self._owner_conflicts()},
                     "status": control.get("runtime_reason", "active" if active else "shadow"),
                     "error": self._last_error, "conflicts": conflicts,

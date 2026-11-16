@@ -738,6 +738,35 @@ def tariff_slot_targets(now, options, plan, soc, reserve):
     return result
 
 
+def remember_tariff_slot_targets(now, options, rows, history):
+    """Retain the last actual calculation per dated interval, never backfill."""
+    context = [options.get("tariff_profile", "legacy_g13"), options.get("tariff_clock_basis", "local"), options.get("_soc_source")]
+    if history.get("context") != context:
+        history.clear()
+        history.update(context=context, slots={})
+    stored = history.setdefault("slots", {})
+    allowed = ("charge_target_soc_percent", "reserve_soc_percent", "projected_soc_start_percent",
+               "projected_soc_end_percent", "projection_from", "deadline")
+    result = []
+    keep = set()
+    for row in rows[:96]:
+        key = row["start"] + "/" + row["end"]
+        keep.add(key)
+        saved = stored.get(key)
+        if row["quality"] == "past":
+            if isinstance(saved, dict) and saved.get("grid_charge_allowed") == row.get("grid_charge_allowed"):
+                row = {**row, **{k: saved.get(k) for k in allowed},
+                       "quality": "historical", "calculated_at": saved.get("calculated_at"),
+                       "reason": "saved_calculation"}
+        elif row["quality"] in ("forecast", "fallback"):
+            stored[key] = {**{k: row.get(k) for k in allowed},
+                           "grid_charge_allowed": row.get("grid_charge_allowed"),
+                           "calculated_at": now.isoformat()}
+        result.append(row)
+    history["slots"] = {k: v for k, v in stored.items() if k in keep}
+    return result
+
+
 def _plan_tariff(inputs):
     raw = inputs.get("config", {})
     try:

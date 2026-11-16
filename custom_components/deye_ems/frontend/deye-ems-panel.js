@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-10";
-const PANEL_VERSION = "2.1.10";
+const PANEL_TAG = "deye-ems-panel-2-1-11";
+const PANEL_VERSION = "2.1.11";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -615,23 +615,23 @@ class DeyeEMSPanel extends HTMLElement {
     return '<div class="slot-plan-heading"><h3>Plan baterii według taryfy</h3><p>Koła pokazują cel ładowania albo minimalny zapas. Nie są pomiarem aktualnego naładowania baterii.</p></div>'+[...groups].map(([date,items])=>{
       const label=date===today?'Dziś':date===tomorrow?'Jutro':new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",day:"numeric",month:"long"}).format(new Date(items[0].start));
       return '<div class="slot-day"><h3>'+label+'</h3><div class="slot-grid">'+items.map(row=>{
-      const start=updateTimestamp(row.start),end=updateTimestamp(row.end),past=row.quality==="past"||end<=now;
-      const forecast=!past&&row.quality==="forecast",fallback=!past&&row.quality==="fallback",known=forecast||fallback;
+      const start=updateTimestamp(row.start),end=updateTimestamp(row.end),past=row.quality==="past"||row.quality==="historical"||end<=now;
+      const historical=past&&row.quality==="historical",forecast=!past&&row.quality==="forecast",fallback=!past&&row.quality==="fallback",known=forecast||fallback||historical;
       const cheap=row.grid_charge_allowed===true,protectedSlot=row.grid_charge_allowed===false;
-      const target=known&&cheap?soc(row.charge_target_soc_percent):null,reserve=!past?soc(row.reserve_soc_percent):null;
-      const from=updateTimestamp(row.projection_from),projection=forecast&&from!==null&&from>=start&&from<end;
+      const target=known&&cheap?soc(row.charge_target_soc_percent):null,reserve=!past||historical?soc(row.reserve_soc_percent):null;
+      const from=updateTimestamp(row.projection_from),projection=(forecast||historical)&&from!==null&&from>=start&&from<end;
       const projectedStart=projection?soc(row.projected_soc_start_percent):null,projectedEnd=projection?soc(row.projected_soc_end_percent):null;
       const completeProjection=projection&&projectedStart!==null&&projectedEnd!==null;
       const current=!past&&start<=now&&now<end;
-      const ringLabel=past?'Przedział miniony':protectedSlot?'Minimalny zapas':'Cel ładowania';
-      const gaugeValue=past?null:protectedSlot?reserve:target;
+      const ringLabel=past&&!historical?'Przedział miniony':protectedSlot?'Minimalny zapas':'Cel ładowania';
+      const gaugeValue=past&&!historical?null:protectedSlot?reserve:target;
       const permission=cheap?'Możliwe doładowanie z sieci':protectedSlot?'Bez doładowania z sieci':'Zgoda na doładowanie niepotwierdzona';
       const deadline=known&&updateTimestamp(row.deadline)!==null?time(row.deadline):null;
       return '<article class="slot-card '+(past?'is-past':current?'is-current':'')+'" data-tariff-slot="true"'+(current?' aria-current="time"':'')+'><div class="slot-card-top"><span class="slot-zone">'+esc(this.tariffZone(row))+'</span>'+(current?'<span class="slot-badge current">Teraz</span>':past?'<span class="slot-badge">Zakończony</span>':'')+'</div><h4 title="'+esc(this.tariffInterval(row))+'">'+esc(this.tariffSlotHours(row))+'</h4><p class="slot-permission '+(cheap?'charge-allowed':'charge-protected')+'">'+permission+'</p>'+this.slotGaugeHtml(gaugeValue,ringLabel,cheap?'charge':'reserve')+'<p class="slot-role">'+ringLabel+'</p>'+
-        (past?'<p class="slot-explanation">Przedział miniony — brak historycznej prognozy.</p>':protectedSlot?'<p class="slot-explanation">'+(reserve!==null?'Dom może korzystać z baterii do tego poziomu.':'Brak potwierdzonego minimalnego zapasu.')+'</p>':target!==null?'<p class="slot-explanation">'+(deadline?'Cel na '+esc(deadline):'Cel wybranego planu')+'</p>':'<p class="slot-explanation">Cel jeszcze niewyliczony.</p>')+
+        (past?'<p class="slot-explanation">'+(historical?'Wcześniej wyliczony SoC'+(deadline?' · cel na '+esc(deadline):'')+'.':'Przedział miniony — brak zapisanych wyliczeń.')+'</p>':protectedSlot?'<p class="slot-explanation">'+(reserve!==null?'Dom może korzystać z baterii do tego poziomu.':'Brak potwierdzonego minimalnego zapasu.')+'</p>':target!==null?'<p class="slot-explanation">'+(deadline?'Cel na '+esc(deadline):'Cel wybranego planu')+'</p>':'<p class="slot-explanation">Cel jeszcze niewyliczony.</p>')+
         (fallback&&target!==null?'<p class="slot-badge fallback">Cel zachowawczy</p>':'')+
-        (!past&&cheap?'<p class="slot-reserve">Rezerwa: '+num(reserve)+(reserve!==null?'%':'')+'</p>':'')+
-        '<div class="slot-projection"><span>Prognoza baterii</span><b>'+(completeProjection?num(projectedStart)+' → '+num(projectedEnd)+'%':'—')+'</b><small>'+(completeProjection?'od '+esc(time(row.projection_from)):past?'Brak danych historycznych':fallback?'Brak wyliczonej projekcji':'Brak prognozy dla tego przedziału')+'</small></div></article>';
+        ((!past||historical)&&cheap?'<p class="slot-reserve">Rezerwa: '+num(reserve)+(reserve!==null?'%':'')+'</p>':'')+
+        '<div class="slot-projection"><span>'+(historical?'Wcześniejsza prognoza baterii':'Prognoza baterii')+'</span><b>'+(completeProjection?num(projectedStart)+' → '+num(projectedEnd)+'%':'—')+'</b><small>'+(completeProjection?'od '+esc(time(row.projection_from)):past?'Brak danych historycznych':fallback?'Brak wyliczonej projekcji':'Brak prognozy dla tego przedziału')+'</small></div>'+ (past?'<div class="slot-projection slot-actual"><span>Rzeczywisty SoC · historia HA</span><b>'+num(soc(row.actual_soc_start_percent))+' → '+num(soc(row.actual_soc_end_percent))+'%</b><small>Stan na początku → na końcu okna; — oznacza brak danych</small></div>':'')+'</article>';
     }).join("")+'</div></div>';
     }).join("")+'<p class="legend slot-plan-note">Cel ładowania dotyczy terminu planu pokazanego na karcie; nie musi wypadać na końcu przedziału. Samo zezwolenie taryfy nie oznacza ładowania — decydują także zapas baterii, słońce i limity instalacji. Prognoza opisuje model od podanej chwili, nie pomiar historyczny.</p>';
   }
