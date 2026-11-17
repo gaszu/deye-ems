@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.12
+# Instalacja i obsługa Deye EMS 2.1.13
 
 
 ## Rampa prądu i zakończenie ładowania
@@ -24,14 +24,14 @@ Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.12**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj **v2.1.13**. Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.12.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.12/deye-ems-2.1.12.zip).
+1. Pobierz [deye-ems-2.1.13.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.13/deye-ems-2.1.13.zip).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
