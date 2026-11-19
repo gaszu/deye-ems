@@ -4,6 +4,7 @@ import unittest
 
 from test_runtime import Harness, SOURCES, runtime
 calculate_grid_charge = runtime.calculate_grid_charge
+_ordinary = calculate_grid_charge.__globals__["_ordinary"]
 update_policy = runtime.update_policy
 dispatch_ready = runtime.dispatch_ready
 
@@ -55,6 +56,27 @@ class ScheduledCurrent(unittest.TestCase):
             self.assertLessEqual(result["next_a"], cap)
             if result["write"] and cap >= 5:
                 self.assertEqual(result["next_a"] % 5, 0)
+
+    def test_ordinary_five_amp_corrections_hold_the_confirmed_setting(self):
+        for current, demand in ((15, 20), (20, 15), (70, 75)):
+            with self.subTest(current=current, demand=demand):
+                g = snapshot(current_a=current, last_attempt_a=current,
+                             ordinary_last_possible_ts=1)
+                result = _ordinary(g, {"need_a": demand, "cap_a": 100})
+                self.assertEqual((result["next_a"], result["write"], result["reason"]),
+                                 (current, False, "scheduled_deadband"))
+
+    def test_taper_steps_down_from_an_off_grid_setting(self):
+        g = snapshot(current_a=12, last_attempt_a=12,
+                     ordinary_last_possible_ts=1, taper_to_zero=True)
+        result = _ordinary(g, {"need_a": 0, "cap_a": 100})
+        self.assertEqual((result["next_a"], result["write"], result["reason"]),
+                         (5, True, "target_taper"))
+
+    def test_material_increase_can_align_to_the_grid_within_the_ramp(self):
+        g = snapshot(current_a=3, last_attempt_a=3, ordinary_last_possible_ts=1)
+        result = _ordinary(g, {"need_a": 50, "cap_a": 100})
+        self.assertEqual((result["next_a"], result["write"]), (10, True))
 
     def test_safety_bypasses_schedule_and_deadband(self):
         g = snapshot(current_a=60, last_attempt_a=60, bms_cap_a=59)

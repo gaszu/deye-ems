@@ -14,7 +14,7 @@ from .grid_control import calculate_grid_charge as _base, calculate_grid_charge_
 
 ORDINARY_INTERVAL_SECONDS = 600
 COMMAND_SETTLE_SECONDS = 120
-DEADBAND_A = 5
+DEADBAND_A = 10
 MAX_STEP_A = 10
 QUANTUM_A = 5
 SOC_HYSTERESIS = 5
@@ -165,11 +165,14 @@ def _ordinary(g, result):
         candidate = math.floor(min(wanted, upper))
     # Ordinary corrections are bounded in both directions; safety bypasses this path.
     current = g["current_a"]
+    material_change = abs(candidate - current) >= DEADBAND_A
     if candidate > current:
         candidate = min(candidate, math.floor((current + MAX_STEP_A) / QUANTUM_A) * QUANTUM_A)
     elif candidate < current:
         candidate = max(candidate, math.ceil(max(current - MAX_STEP_A, 0) / QUANTUM_A) * QUANTUM_A)
-    if abs(candidate - g["current_a"]) < DEADBAND_A and not (g["current_a"] == 0 and candidate > 0 or g.get("taper_to_zero") and candidate == 0):
+    starting = current == 0 and candidate > 0
+    tapering_down = g.get("taper_to_zero") is True and candidate < current
+    if candidate == current or not (material_change or starting or tapering_down):
         result["reason"] = "scheduled_deadband"
         return result
     result.update(next_a=candidate, write=True,
