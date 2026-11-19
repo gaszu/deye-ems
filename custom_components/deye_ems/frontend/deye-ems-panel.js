@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-13";
-const PANEL_VERSION = "2.1.13";
+const PANEL_TAG = "deye-ems-panel-2-1-14";
+const PANEL_VERSION = "2.1.14";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -203,7 +203,7 @@ class DeyeEMSPanel extends HTMLElement {
   runtimeErrorHtml(){
     const code=this.payload?.data?.error;
     if(typeof code!=="string"||!code)return "";
-    const messages={restored_active_preflight_failed:"Po uruchomieniu nie wznowiono sterowania. Sprawdź świeże pomiary i plan, a następnie włącz sterowanie jawnie.",ownership_conflict:"Działa inny sterownik. EMS pozostaje w obserwacji.",battery_low_soc_unavailable:"Brak poprawnego odczytu Battery low SOC. Sprawdź diagnostykę i przypisanie encji."};
+    const messages={last_moment_current_guard:"EMS wstrzymał zmianę prądu ładowania z sieci, ponieważ końcowa kontrola bezpieczeństwa jej nie dopuściła.",restored_active_preflight_failed:"Po uruchomieniu nie wznowiono sterowania. Sprawdź świeże pomiary i plan, a następnie włącz sterowanie jawnie.",ownership_conflict:"Działa inny sterownik. EMS pozostaje w obserwacji.",battery_low_soc_unavailable:"Brak poprawnego odczytu Battery low SOC. Sprawdź diagnostykę i przypisanie encji."};
     const message=Object.hasOwn(messages,code)?messages[code]:/^[a-zA-Z0-9_:.-]{1,120}$/.test(code)?"Błąd silnika: "+code:"Silnik zgłasza błąd. Sprawdź diagnostykę.";
     return '<div role="alert" class="notice error" data-runtime-error="true">'+(!this.snapshotFresh()?'Ostatnio zgłoszony błąd; stan silnika wymaga odświeżenia. ':'')+esc(message)+'</div>';
   }
