@@ -281,7 +281,7 @@ test("open admin panel synchronizes only its older installed repository metadata
   assert.equal(calls.length,3);assert.equal(reloads(),0);assert.equal(panel.busy,false);
   assert.match(panel.updatesHtml(),/Marketplace otrzymał aktualne metadane/);
   assert.ok(calls.every(message=>!JSON.stringify(message).match(/install|download|restart|version\"|mode/)));
-  panel.payload.updates.latest_version="2.1.17";successfulStore(panel,calls);
+  panel.payload.updates.latest_version="2.1.18";successfulStore(panel,calls);
   assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,6);
 });
 
@@ -358,7 +358,7 @@ test("metadata responses after unmount cancellation or release changes never tri
     panel._hass.callWS=message=>{calls.push(message);return new Promise(resolve=>{finish=resolve;});};
     const pending=panel.syncStoreMetadata();
     if(reason==="disconnect"){panel.isConnected=false;panel.disconnectedCallback();}
-    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.17";else panel.payload.updates.stale=true;
+    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.18";else panel.payload.updates.stale=true;
     finish([storeRow()]);assert.equal(await pending,false);assert.equal(calls.length,1);
   }
 });
