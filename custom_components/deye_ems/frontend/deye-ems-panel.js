@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-19";
-const PANEL_VERSION = "2.1.19";
+const PANEL_TAG = "deye-ems-panel-2-1-20";
+const PANEL_VERSION = "2.1.20";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -757,7 +757,7 @@ class DeyeEMSPanel extends HTMLElement {
       let note="";
       if(value("p50_kwh")===null) note=" · Brak pełnego pokrycia prognozą";
       else if(Number.isFinite(row.estimated_minutes)&&row.estimated_minutes>0) note=" · Szacunek (uzupełniono "+num(row.estimated_minutes,0)+" min)";
-      return '<article><span class="label">'+label+'</span><strong>'+num(value("p50_kwh"),1)+' <small>kWh</small></strong><p class="legend">P10: '+num(value("p10_kwh"),1)+' kWh'+note+'</p></article>';};
+      return '<article><span class="label">'+label+'</span><strong>P10: '+num(value("p10_kwh"),1)+' <small>kWh</small></strong><p class="legend">P50: '+num(value("p50_kwh"),1)+' kWh'+note+'</p></article>';};
     const source=solcast.status==="ha_entities"?'Encje HA':solcast.status==="cached"?'Datowany cache Solcast':'Solcast API';
     return '<section aria-label="Prognoza Solcast"><h3>Prognoza Solcast</h3><div class="grid">'+card('Dziś','today')+card('Jutro','tomorrow')+'</div><p class="legend">'+esc(source)+' · Dzień prognozy: '+(valid?esc(summary.date):'—')+' · Europe/Warsaw. P50: prognoza typowa; P10: wariant ostrożny.</p><p class="legend">Odczyt prognozy: '+(valid?esc(time(summary.as_of)):'—')+' · Ostatnie pobranie API: '+(valid&&summary.source_updated_at?esc(time(summary.source_updated_at)):'brak znacznika źródła')+'. Dziś obejmuje czas od odczytu prognozy do północy. To prognoza, nie zmierzona produkcja.</p></section>';
   }
