@@ -29,7 +29,7 @@ _ISSUE_REASONS = frozenset(("missing", "restored", "invalid", "future", "wrong_u
     "alias", "stale", "time_skew", "invalid_or_unsupported", "provider_unavailable"))
 _PLAN_SOURCES = frozenset(("own_deterministic_planner", "own_conservative_fallback"))
 _PLAN_REASONS = frozenset(("planned", "unreachable", "forecast_energy_or_power_deficit",
-    "incomplete_48h_forecast", "invalid_forecast_row", "stale_or_discontinuous_forecast_axis",
+    "incomplete_24h_forecast", "incomplete_48h_forecast", "invalid_forecast_row", "stale_or_discontinuous_forecast_axis",
     "invalid_aware_timestamp", "invalid_pv_p10_kw", "invalid_pv_p50_kw", "invalid_load_kw",
     "pv_p10_exceeds_p50", "forecast_capacity_mismatch", "forecast_missing_protected_window",
     "missing_next_night_or_peak_deadline"))

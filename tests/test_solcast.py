@@ -126,6 +126,13 @@ class SolcastTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["reason"], "forecast_coverage_incomplete")
         self.assertEqual(result["periods"], [])
 
+    async def test_24_hours_of_coverage_is_sufficient(self):
+        h = Harness()
+        h.responses = [dict(status=200, headers={}, data=forecast(count=48))]
+        result = await h.client.async_forecast(config(), NOW)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(len(result["periods"]), 48)
+
     async def test_missing_p10_rejects_response_and_applies_cooldown(self):
         h = Harness()
         broken = forecast(); del broken["forecasts"][0]["pv_estimate10"]

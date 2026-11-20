@@ -362,7 +362,7 @@ class PostSaveTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_active_status_explains_known_conservative_plan_with_controlled_reason_only(self):
         for source, reason, expected_source, expected_reason in (
-            ("own_conservative_fallback", "incomplete_48h_forecast", "own_conservative_fallback", "incomplete_48h_forecast"),
+            ("own_conservative_fallback", "incomplete_24h_forecast", "own_conservative_fallback", "incomplete_24h_forecast"),
             ("own_deterministic_planner", "planned", "own_deterministic_planner", "planned"),
             ("own_conservative_fallback", "synthetic-private-secret", "own_conservative_fallback", None),
             ("synthetic-private-secret", "planned", None, None)):

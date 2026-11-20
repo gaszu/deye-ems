@@ -15,7 +15,7 @@ def fixture(now="2026-11-10T01:00:00+01:00", soc=75, load=.5, pv=0):
     clock = datetime.fromisoformat(now)
     base = int(clock.timestamp() // 1800) * 1800
     rows = []
-    for i in range(96):
+    for i in range(48):
         t = datetime.fromtimestamp(base + i * 1800, timezone.utc)
         rows.append(dict(timestamp=t.isoformat(), pv_p10_kw=pv, pv_p50_kw=pv, load_kw=load))
     return dict(now=now, soc_percent=soc, forecast=rows,
@@ -30,7 +30,7 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(result["quality"], "valid")
         self.assertEqual(result["targets"]["night"]["soc_percent"], 75)
         self.assertEqual(result["targets"]["night"]["deadline"], "2026-11-10T07:00:00+01:00")
-        self.assertEqual(len(result["rows"]), 96)
+        self.assertEqual(len(result["rows"]), 48)
 
     def test_winter_strong_solar_lowers_weather_target(self):
         result = plan_energy(fixture(load=.2, pv=1))
@@ -93,7 +93,7 @@ class PlannerTests(unittest.TestCase):
         self.assertIsNone(result["p10"])
         self.assertEqual(result["targets"]["night"]["soc_percent"], 86)
 
-    def test_stale_axis_rejected_even_with96rows(self):
+    def test_stale_axis_rejected_even_with_48_rows(self):
         inputs = fixture()
         for r in inputs["forecast"]:
             r["timestamp"] = (datetime.fromisoformat(r["timestamp"]) - timedelta(days=1)).isoformat()
@@ -193,6 +193,7 @@ class PlannerTests(unittest.TestCase):
             discharge_max_kw=30, grid_import_max_kw=30)
         result = plan_energy(inputs)
         self.assertEqual(result["quality"], "valid")
+        self.assertEqual(set(result["targets"]), {"peak"})
         protected = [row for row in result["rows"] if row["protected"]]
         self.assertTrue(protected)
         self.assertAlmostEqual(protected[0]["battery_discharge_kw"] * .96, 12)

@@ -10,7 +10,7 @@ uses GET /rooftop_sites; explicitly supplied resource IDs need no discovery.
 The provider's default10-call limit is per UTC day. The Warsaw calendar-day
 counter is informational. We persist counters before EVERY HTTP attempt and
 refuse a clock rollback. This tracks only this client, not other clients
-sharing the same Solcast account. All selected sites must cover the full48h;
+sharing the same Solcast account. All selected sites must cover the full 24 hours;
 a missing site/period is never substituted with zero.
 
 DI: fetch_json(url, *, headers, params) -> await {status, data, headers}.
@@ -328,7 +328,7 @@ class SolcastClient:
             except (TypeError, ValueError):
                 return {"status": "unavailable", "reason": reason if reason not in ("ok", "poll_interval") else "site_cache_missing",
                         "coverage_reason": "site_cache_missing", "periods": [], "sites": [], "quota": self._quota(cfg, now)}
-        required = {start+i*1800 for i in range(96)}
+        required = {start+i*1800 for i in range(48)}
         common = set.intersection(*(set(rows) for rows in per_site)) if per_site else set()
         coverage_valid = required <= common
         periods = []

@@ -1,4 +1,4 @@
-"""Small diagnostic states. Full 48-hour rows are served over authenticated WS."""
+"""Small diagnostic states. Full 24-hour rows are served over authenticated WS."""
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import EntityCategory
 from .entity import DeyeEMSEntity

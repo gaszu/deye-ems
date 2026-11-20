@@ -1,7 +1,7 @@
 """Deterministic Deye energy planning, independent of HA and EMHASS.
 
 ``plan_energy`` accepts ``now`` (aware datetime or ISO string), ``soc_percent``,
-and exactly 96 chronological half-hour ``forecast`` records with ``timestamp``,
+and exactly 48 chronological half-hour ``forecast`` records with ``timestamp``,
 ``pv_p10_kw``, ``pv_p50_kw`` and ``load_kw``. LOAD already includes the complete
 heat pump: this module never adds PC/today/yesterday energy a second time.
 The first timestamp is the Unix half-hour containing now. Explicit offsets
@@ -160,8 +160,8 @@ def _forecast(inputs, now, cfg):
     if installed is None or specific and reference is None:
         raise ValueError("pv_capacity_missing")
     rows = inputs.get("forecast")
-    if not isinstance(rows, (list, tuple)) or len(rows) != 96:
-        raise ValueError("incomplete_48h_forecast")
+    if not isinstance(rows, (list, tuple)) or len(rows) != 48:
+        raise ValueError("incomplete_24h_forecast")
     start = int(now.timestamp() // 1800) * 1800
     result = []
     for i, row in enumerate(rows):
@@ -200,12 +200,13 @@ def _prefix_need(rows, item, cfg):
 
 def _weather(rows, item, cfg):
     begin = item["at"].timestamp()
-    end = begin + 86400
+    horizon_end = rows[-1].get("end_epoch", rows[-1]["epoch"] + 1800)
+    end = item["end"].timestamp()
+    if item.get("virtual_checkpoint"):
+        end = min(end, horizon_end)
     clear = cfg["minimum_soc_percent"] + cfg["margin_soc_percent"]
     weak = max(cfg["winter_weather_soc_percent"], clear)
-    if rows[-1].get("end_epoch", rows[-1]["epoch"] + 1800) < end:
-        # Tail projection only: no invented post-horizon PV. The two public
-        # upcoming deadlines always have the full following 24h in the input.
+    if end <= begin or end > horizon_end:
         return weak, None, "tail_conservative_weather"
     pv = load = 0.
     for row in rows:
@@ -506,8 +507,6 @@ def plan_energy(inputs: dict) -> dict:
             target["projected_p10_protected_import_kwh"] = obs["protected_import_kwh"]
             if target["key"] not in public:
                 public[target["key"]] = _public(target)
-        if set(public) != {"night", "peak"}:
-            raise ValueError("missing_next_night_or_peak_deadline")
         unreachable = (any(t["unreachable"] for t in public.values())
                        or risk["protected_import_kwh"] > TOLERANCE_KWH
                        or risk["grid_limit_excess_kwh"] > TOLERANCE_KWH)
@@ -582,7 +581,7 @@ def tariff_target_items(now, options, *, horizon_end=None):
     if horizon_end is None:
         result = result[:4]
     # During a long all-cheap weekend, the next real deadline can fall outside
-    # the 48h forecast. Do not invent post-horizon energy to size its reserve.
+    # the 24-hour forecast. Do not invent post-horizon energy to size its reserve.
     if not result or (horizon_end is None and result[0]["at"].timestamp() - now.timestamp() > 86400):
         at = now.replace(hour=7, minute=0, second=0, microsecond=0)
         if at.timestamp() <= now.timestamp():

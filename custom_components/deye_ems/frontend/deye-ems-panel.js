@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-16";
-const PANEL_VERSION = "2.1.16";
+const PANEL_TAG = "deye-ems-panel-2-1-17";
+const PANEL_VERSION = "2.1.17";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -146,6 +146,7 @@ class DeyeEMSPanel extends HTMLElement {
   postSavePending(){return ["waiting","checking"].includes(this.postSaveState().status);}
   planReasonText(reason){
     const messages={
+      incomplete_24h_forecast:"Brak kompletnej prognozy produkcji i zużycia na 24 godziny.",
       incomplete_48h_forecast:"Brak kompletnej prognozy produkcji i zużycia na 48 godzin.",
       invalid_forecast_row:"Część danych prognozy jest nieprawidłowa.",
       stale_or_discontinuous_forecast_axis:"Prognoza ma przerwy albo nie obejmuje właściwego czasu.",
@@ -193,7 +194,7 @@ class DeyeEMSPanel extends HTMLElement {
     const fallback={waiting:"Oczekiwanie na sprawdzenie zapisanej konfiguracji.",checking:"Sprawdzanie warunków automatycznego włączenia.",active:this.payload?.mode==="active"?"Sterowanie zostało włączone.":"Odczyt trybu po sprawdzeniu wymaga odświeżenia.",blocked:"Nie można automatycznie włączyć sterowania. EMS pozostaje w obserwacji.",cancelled:"Automatyczne włączenie zostało anulowane."};
     let message=Object.hasOwn(messages,state.reason)?messages[state.reason]:fallback[state.status];
     if(state.status==="active"&&this.payload?.mode!=="active")message=fallback.active;
-    const issueNames={missing:"brak odczytu",restored:"odczyt przywrócony po uruchomieniu",wrong_unit:"błędna jednostka",invalid:"nieprawidłowy odczyt",future:"czas odczytu w przyszłości",stale:"odczyt jest za stary",time_skew:"odczyty z różnych chwil",alias:"powtórzone przypisanie",telemetry_invalid:"brak poprawnych pomiarów",bms_blocked:"blokada ładowania",incomplete_48h_forecast:"brak kompletnej prognozy",unavailable:"brak danych",invalid_or_unsupported:"niepoprawna lub nieobsługiwana konfiguracja",provider_unavailable:"źródło danych jest niedostępne"};
+    const issueNames={missing:"brak odczytu",restored:"odczyt przywrócony po uruchomieniu",wrong_unit:"błędna jednostka",invalid:"nieprawidłowy odczyt",future:"czas odczytu w przyszłości",stale:"odczyt jest za stary",time_skew:"odczyty z różnych chwil",alias:"powtórzone przypisanie",telemetry_invalid:"brak poprawnych pomiarów",bms_blocked:"blokada ładowania",incomplete_24h_forecast:"brak kompletnej prognozy",incomplete_48h_forecast:"brak kompletnej prognozy",unavailable:"brak danych",invalid_or_unsupported:"niepoprawna lub nieobsługiwana konfiguracja",provider_unavailable:"źródło danych jest niedostępne"};
     const names={...sourceLabels,charge_power:"Zgodność czasowa pomiarów mocy",reserve:"Rezerwa SoC",forecast:"Prognoza",plan:"Plan",hardware:"Model falownika",battery_alarm:"Alarm baterii",battery_fault:"Błąd baterii",topology:"Układ pomiarowy",grid_setting:"Nastawa ładowania",tariff:"Profil taryfy"};
     for(const kind of ["grid","load","ct_grid"])for(let i=1;i<=3;i++)names[kind+"_l"+i+"_power"]=(kind==="ct_grid"?"CT":kind.toUpperCase())+" L"+i;
     const issues=(Array.isArray(state.issues)?state.issues:[]).slice(0,24).filter(issue=>issue&&typeof issue==="object"&&Object.hasOwn(names,issue.source)&&Object.hasOwn(issueNames,issue.reason));
@@ -660,7 +661,7 @@ class DeyeEMSPanel extends HTMLElement {
   tariffCalendarHtml(){
     const calendar=this.payload?.options?.tariff_calendar;
     const heading='<section aria-label="Harmonogram taryfy"><h2>Plan na dziś i jutro</h2>';
-    if(!calendar||typeof calendar!=="object"||Array.isArray(calendar))return heading+'<p>Oczekiwanie na zapisany kalendarz silnika.</p>'+this.tariffEditorHtml()+'</section>';
+    if(!calendar||typeof calendar!=="object"||Array.isArray(calendar))return heading+'<p>Oczekiwanie na zapisany kalendarz silnika.</p></section>';
     const operator=calendar.operator_label||this.tariffCatalog?.operators?.find(row=>row.operator_id===(calendar.operator_id||calendar.operator))?.label||calendar.operator||"Dotychczasowy profil własny";
     const rows=values=>(Array.isArray(values)?values:[]).slice(0,48).filter(row=>row&&typeof row==="object"&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start)).map(row=>'<tr><td>'+esc(this.tariffInterval(row))+'</td><td>'+esc(this.tariffZone(row))+'</td><td>'+this.tariffPermission(row.grid_charge_allowed)+'</td><td>'+esc(this.tariffReason(row.reason))+'</td></tr>').join("");
     const tables=[["Dziś",calendar.today],["Jutro",calendar.tomorrow]].map(([label,values])=>'<h3>'+label+'</h3><div class="table"><table><thead><tr><th>Przedział</th><th>Strefa operatora</th><th>Sieć → bateria</th><th>Reguła</th></tr></thead><tbody>'+(rows(values)||'<tr><td colspan="4">Brak poprawnych przedziałów.</td></tr>')+'</tbody></table></div>').join("");
@@ -674,7 +675,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<p>Aktualna strefa: '+esc(this.snapshotFresh()?this.tariffZone({zone:calendar.current_zone,zone_label:calendar.current_interval?.zone_label}):"brak bieżącego odczytu")+' · następna zmiana: '+esc(time(this.snapshotFresh()?calendar.next_change:null))+'.</p>'+
       (calendar.valid===false||calendar.preview_only===true||calendar.runtime_allowed===false||calendar.within_validity===false?'<p class="notice warning">'+esc(warning)+' Ten podgląd nie potwierdza zgody na sterowanie.</p>':'')+
       (calendar.profile_id==="legacy_g13"?'<p class="notice">Zachowany własny harmonogram G13 z wcześniejszej wersji. Reguły operatora zaczną obowiązywać po wyborze i potwierdzeniu taryfy.</p>':'')+
-      this.tariffEditorHtml()+(targetTable||tables)+'<p class="legend">'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny: Europe/Warsaw. Wersja reguł: '+esc(calendar.version||"niepotwierdzona")+'.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+'</section>';
+      (targetTable||tables)+'<p class="legend">'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny: Europe/Warsaw. Wersja reguł: '+esc(calendar.version||"niepotwierdzona")+'.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+'</section>';
   }
   panelThemeNames(){return Object.keys(this._hass?.themes?.themes||{}).sort((a,b)=>a.localeCompare(b));}
   savedPanelTheme(){return typeof this.payload?.appearance?.theme==="string"?this.payload.appearance.theme:"";}
@@ -1433,6 +1434,7 @@ class DeyeEMSPanel extends HTMLElement {
       '</section>'+
       this.pvPriorityHtml()+this.solcastForecastHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
       '<section aria-label="O panelu"><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div></section>'+
+      '<section><h2>Taryfa energii</h2>'+this.tariffEditorHtml()+'</section>'+
       this.topologyHtml()+this.hardwareHtml()+this.updatesHtml()+ 
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       this.sourcesHtml()+

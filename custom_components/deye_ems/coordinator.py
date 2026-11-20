@@ -629,7 +629,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                            else "activation_conditions_failed", inputs)
         plan = self._memory.get("plan", {})
         generated = _stamp(plan.get("generated_at"))
-        missing_forecast = {"incomplete_48h_forecast", "invalid_forecast_row", "stale_or_discontinuous_forecast_axis",
+        missing_forecast = {"incomplete_24h_forecast", "incomplete_48h_forecast", "invalid_forecast_row", "stale_or_discontinuous_forecast_axis",
             "invalid_aware_timestamp", "invalid_pv_p10_kw", "invalid_pv_p50_kw", "invalid_load_kw",
             "pv_p10_exceeds_p50", "forecast_capacity_mismatch", "forecast_missing_protected_window",
             "missing_next_night_or_peak_deadline"}
@@ -2436,7 +2436,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         points = await self._solar_points(now)
         rows = []
         start = int(now.timestamp() // 1800) * 1800
-        for index in range(96):
+        for index in range(48):
             at = start + index * 1800
             when = datetime.fromtimestamp(at, _TZ)
             point = points.get(str(at))

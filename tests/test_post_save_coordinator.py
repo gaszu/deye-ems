@@ -167,7 +167,7 @@ class PostSaveCoordinator(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["ready"], result)
         self.assertTrue(result["recalculated"])
         self.assertEqual(result["plan_source"], "own_conservative_fallback")
-        self.assertEqual(result["plan_reason"], "incomplete_48h_forecast")
+        self.assertEqual(result["plan_reason"], "incomplete_24h_forecast")
         self.assertEqual(h.co.mode, "shadow")
         self.assertEqual(h.calls, [])
 
