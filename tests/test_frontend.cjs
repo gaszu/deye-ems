@@ -358,7 +358,7 @@ test("metadata responses after unmount cancellation or release changes never tri
     panel._hass.callWS=message=>{calls.push(message);return new Promise(resolve=>{finish=resolve;});};
     const pending=panel.syncStoreMetadata();
     if(reason==="disconnect"){panel.isConnected=false;panel.disconnectedCallback();}
-    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.19";else panel.payload.updates.stale=true;
+    else if(reason==="changed_release")panel.payload.updates.latest_version="2.1.20";else panel.payload.updates.stale=true;
     finish([storeRow()]);assert.equal(await pending,false);assert.equal(calls.length,1);
   }
 });
