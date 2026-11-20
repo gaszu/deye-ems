@@ -424,18 +424,35 @@ def forecast_summary(rows, now, updated_at=None):
             points[stamp] = values
         except (KeyError, TypeError, ValueError, AttributeError):
             invalid = True
+    estimated = set()
+    if not invalid:
+        ordered = sorted(points)
+        for left, right in zip(ordered, ordered[1:]):
+            steps = int((right - left) / 1800)
+            if steps not in (2, 3):
+                continue
+            for step in range(1, steps):
+                at = left + step * 1800
+                fraction = step / steps
+                points[at] = tuple((1 - fraction) * a + fraction * b
+                                   for a, b in zip(points[left], points[right]))
+                estimated.add(at)
+
     def total(start, stop):
         start, stop = start.timestamp(), stop.timestamp()
-        covered, p50, p10 = 0., 0., 0.
+        covered, p50, p10, estimated_seconds = 0., 0., 0., 0.
         for at, values in points.items():
             seconds = max(0, min(stop, at + 1800) - max(start, at))
             covered += seconds
+            if at in estimated:
+                estimated_seconds += seconds
             p50 += values[0] * seconds / 3600
             p10 += values[1] * seconds / 3600
         complete = not invalid and abs(covered - (stop - start)) < .01
         return {"p50_kwh": round(p50, 3) if complete else None,
                 "p10_kwh": round(p10, 3) if complete else None,
-                "complete": complete}
+                "complete": complete,
+                "estimated_minutes": math.ceil(estimated_seconds / 60) if complete else 0}
     return {"date": local.date().isoformat(), "timezone": "Europe/Warsaw",
             "as_of": now.isoformat(), "source_updated_at": updated_at,
             "today": total(today, tomorrow), "remaining_today": total(now, tomorrow),

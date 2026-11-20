@@ -29,6 +29,29 @@ def forecast(now=NOW, p10=1.2, p50=2., count=150):
                            for i in range(count)]}
 
 
+class ForecastSummaryTests(unittest.TestCase):
+    def test_only_short_bounded_gaps_are_estimated(self):
+        start = NOW.replace(hour=0)
+        rows = [
+            dict(period_start=(start + timedelta(minutes=30*i)).isoformat(),
+                 pv_estimate=float(i), pv_estimate10=i / 2)
+            for i in range(48)
+        ]
+        expected = module.forecast_summary(rows, NOW)["today"]
+        for missing, minutes in [({23}, 30), ({24, 25}, 60),
+                                 ({24, 25, 26}, 0), ({0}, 0), ({47}, 0)]:
+            with self.subTest(missing=missing):
+                summary = module.forecast_summary(
+                    [row for i, row in enumerate(rows) if i not in missing], NOW)
+                today = summary["today"]
+                self.assertEqual(today["estimated_minutes"], minutes)
+                self.assertEqual(today["complete"], bool(minutes))
+                for key in ("p50_kwh", "p10_kwh"):
+                    self.assertEqual(today[key], expected[key] if minutes else None)
+                if missing == {23}:
+                    self.assertEqual(summary["remaining_today"]["estimated_minutes"], 0)
+
+
 class Harness:
     def __init__(self, state=None):
         self.history, self.requests, self.responses = [], [], []
