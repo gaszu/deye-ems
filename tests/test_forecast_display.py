@@ -10,7 +10,7 @@ class ForecastDisplay(unittest.TestCase):
     def test_energy_and_partial_current_period(self):
         start=datetime(2026,11,15,tzinfo=ZoneInfo("Europe/Warsaw")).astimezone(timezone.utc)
         result=forecast_summary(self.rows(start,96), start+timedelta(hours=12,minutes=15))
-        self.assertEqual(result["today"]["p50_kwh"],48)
+        self.assertEqual(result["today"]["p50_kwh"],23.5)
         self.assertEqual(result["remaining_today"]["p50_kwh"],23.5)
         self.assertEqual(result["tomorrow"]["p10_kwh"],24)
     def test_missing_period_is_unknown_not_zero(self):

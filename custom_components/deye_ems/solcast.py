@@ -410,11 +410,14 @@ def forecast_summary(rows, now, updated_at=None):
     today = local.replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow = today + timedelta(days=1)
     end = tomorrow + timedelta(days=1)
+    earliest_anchor = now.timestamp() - 3600
     points = {}
     invalid = False
     for row in rows:
         try:
             at = datetime.fromisoformat(row["period_start"].replace("Z", "+00:00"))
+            if at.tzinfo is not None and at.timestamp() < earliest_anchor:
+                continue
             values = (row["pv_estimate"], row["pv_estimate10"])
             if at.tzinfo is None or at.timestamp() % 1800 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in values) or values[1] > values[0]:
                 raise ValueError
@@ -453,7 +456,8 @@ def forecast_summary(rows, now, updated_at=None):
                 "p10_kwh": round(p10, 3) if complete else None,
                 "complete": complete,
                 "estimated_minutes": math.ceil(estimated_seconds / 60) if complete else 0}
+    remaining_today = total(now, tomorrow)
     return {"date": local.date().isoformat(), "timezone": "Europe/Warsaw",
             "as_of": now.isoformat(), "source_updated_at": updated_at,
-            "today": total(today, tomorrow), "remaining_today": total(now, tomorrow),
+            "today": remaining_today, "remaining_today": dict(remaining_today),
             "tomorrow": total(tomorrow, end)}

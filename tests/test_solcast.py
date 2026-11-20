@@ -38,18 +38,29 @@ class ForecastSummaryTests(unittest.TestCase):
             for i in range(48)
         ]
         expected = module.forecast_summary(rows, NOW)["today"]
-        for missing, minutes in [({23}, 30), ({24, 25}, 60),
-                                 ({24, 25, 26}, 0), ({0}, 0), ({47}, 0)]:
+        for missing, minutes in [(set(range(24)), 0), ({23}, 0), ({24}, 30),
+                                 ({24, 25}, 60), ({22, 23, 24}, None),
+                                 ({24, 25, 26}, None), ({47}, None)]:
             with self.subTest(missing=missing):
                 summary = module.forecast_summary(
                     [row for i, row in enumerate(rows) if i not in missing], NOW)
                 today = summary["today"]
-                self.assertEqual(today["estimated_minutes"], minutes)
-                self.assertEqual(today["complete"], bool(minutes))
+                self.assertEqual(today["estimated_minutes"], minutes or 0)
+                self.assertEqual(today["complete"], minutes is not None)
+                self.assertEqual(today, summary["remaining_today"])
                 for key in ("p50_kwh", "p10_kwh"):
-                    self.assertEqual(today[key], expected[key] if minutes else None)
-                if missing == {23}:
-                    self.assertEqual(summary["remaining_today"]["estimated_minutes"], 0)
+                    self.assertEqual(today[key], expected[key] if minutes is not None else None)
+
+    def test_current_period_cannot_use_anchor_older_than_one_hour(self):
+        rows = [
+            dict(period_start=(NOW + timedelta(minutes=30*i)).isoformat(),
+                 pv_estimate=2., pv_estimate10=1.)
+            for i in [-2, *range(1, 24)]
+        ]
+        at_boundary = module.forecast_summary(rows, NOW)["today"]
+        self.assertEqual(at_boundary["estimated_minutes"], 30)
+        after_boundary = module.forecast_summary(rows, NOW + timedelta(minutes=1))["today"]
+        self.assertFalse(after_boundary["complete"])
 
 
 class Harness:
