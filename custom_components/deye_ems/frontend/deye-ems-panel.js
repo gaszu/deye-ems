@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-22";
-const PANEL_VERSION = "2.1.22";
+const PANEL_TAG = "deye-ems-panel-2-1-23";
+const PANEL_VERSION = "2.1.23";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -183,6 +183,7 @@ class DeyeEMSPanel extends HTMLElement {
   unavailablePlanHtml(){
     const plan=this.payload?.data?.plan||{};
     const text=!this.snapshotFresh()?'Brak aktualnego planu. Poczekaj na świeży odczyt z Home Assistanta.':
+      this.payload?.data?.waiting_for_plan_inputs===true?'EMS czeka na poprawne dane potrzebne do prognozy baterii. Przyczynę znajdziesz w diagnostyce pomiarów.':
       plan.source==="own_conservative_fallback"||plan.status==="fallback"?this.fallbackPlanText(plan.reason):
       this.payload?.data?.planning===true?'Trwa obliczanie planu. Dotychczasowe ograniczenia pozostają zachowane.':this.planReasonText(plan.reason);
     return '<div role="status" class="notice" data-plan-notice="true">'+esc(text)+'</div>';

@@ -98,6 +98,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._lock = asyncio.Lock()
         self._store_lock = asyncio.Lock()
         self._plan_task = None
+        self._startup_plan_deadline = 0
+        self._waiting_for_plan_inputs = False
         self._planning_revision = 0
         self._stopped = False
         self._report_provider = report_provider
@@ -244,6 +246,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     async def async_initialize(self):
         """Load state only. The caller performs the first coordinator refresh."""
+        self._startup_plan_deadline = asyncio.get_running_loop().time() + 60
         self._ensure_report_configuration()
         saved = await self._store.async_load()
         if isinstance(saved, dict):
@@ -2428,6 +2431,24 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._memory["forecast_cache"] = saved
         return saved
 
+    async def _read_planning_inputs(self):
+        """Let startup sources settle without blocking setup or control refreshes."""
+        loop = asyncio.get_running_loop()
+        try:
+            while True:
+                inputs = self._read_inputs(self._now())
+                remaining = self._startup_plan_deadline - loop.time()
+                if (remaining <= 0 or
+                        (inputs["soc_valid"] and inputs["telemetry_valid"] and inputs["bms_valid"]
+                         and all(inputs[key] is not None for key in (
+                             "bms_cap_a", "deye_max_charge_current_a",
+                             "deye_grid_charge_limit_a", "grid_charge_actuator_max_a")))):
+                    return inputs
+                self._waiting_for_plan_inputs = True
+                await asyncio.sleep(min(5, remaining))
+        finally:
+            self._waiting_for_plan_inputs = False
+
     async def _make_plan(self, now, inputs):
         revision = self._planning_revision
         options = deepcopy(self._options)
@@ -2459,7 +2480,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             rated = min(rated, hardware_limits["combined_output_limit_kw"])
         # Hardware limits can change while slow history/PV reads are awaited.
         # They inform planning; the service path independently rechecks them.
-        charging_inputs = self._read_inputs(self._now())
+        charging_inputs = await self._read_planning_inputs()
         # General Deye/BMS current limits cover PV and grid together. The
         # grid-only register and its 95% ceiling must not cap PV a second time.
         total_caps = [charging_inputs["bms_cap_a"], charging_inputs["deye_max_charge_current_a"], self._catalog_battery_cap()]
@@ -2481,7 +2502,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                   "margin_soc_percent": self._options["reserve_margin_soc_percent"],
                   "grid_import_max_kw": self._options["grid_import_limit_kw"],
                   "inverter_max_kw": rated, "grid_export_max_kw": min(9, rated)})
-        plan = self._planner({"now": now, "soc_percent": inputs["soc"], "soc_valid": inputs["soc_valid"],
+        soc_inputs = inputs if inputs["soc_valid"] else charging_inputs
+        plan = self._planner({"now": now, "soc_percent": soc_inputs["soc"], "soc_valid": soc_inputs["soc_valid"],
                               "forecast": rows, "config": config,
                               "retained_targets": self._memory["target_cache"]})
         async with self._lock:
@@ -2786,6 +2808,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "profiles": deepcopy(self._memory["load_profiles"]),
                     "effective_loads": self.effective_loads, "loads_revision": self.loads_revision,
                     "planning": self._plan_task is not None and not self._plan_task.done(),
+                    "waiting_for_plan_inputs": self._waiting_for_plan_inputs,
                     "post_save_activation": self._post_save_status(),
                     "solcast": {**self._redact(self._solcast_status),
                         "api_configured": bool(self._options.get("solcast", {}).get("api_key")),
