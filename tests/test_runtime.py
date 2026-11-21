@@ -438,12 +438,15 @@ class RuntimeSafety(unittest.IsolatedAsyncioTestCase):
         self.assertIn(0, h.current_calls())
         self.assertFalse(any(data["entity_id"] == SOURCES["energy_priority"] for _, _, data in h.calls))
 
-    async def test_restored_active_requires_complete_preflight(self):
+    async def test_restored_active_requires_complete_preflight_before_writes(self):
         h = Harness()
         h.store.saved = {"mode": "active"}
         h.set("tou_enabled", "off")
         await h.co.async_initialize()
-        self.assertEqual(h.co.mode, "shadow")
+        await h.co.async_request_refresh()
+        self.assertEqual(h.co.mode, "active")
+        self.assertFalse(h.co.data["owner"]["active"])
+        self.assertEqual(h.co.data["status"], "waiting_for_startup_control")
         self.assertEqual(h.calls, [])
 
     async def test_future_ledger_blocks_writes(self):
