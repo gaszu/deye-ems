@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
 const PANEL_TAG = "deye-ems-panel-2-1-21";
-const PANEL_VERSION = "2.1.21";
+const PANEL_VERSION = "2.1.22";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -638,7 +638,7 @@ class DeyeEMSPanel extends HTMLElement {
         (past?'<p class="slot-explanation">'+(historical?'Wcześniej wyliczony SoC'+(deadline?' · cel ładowania na '+esc(deadline):'')+'.':'Przedział miniony — brak zapisanych wyliczeń.')+'</p>':protectedSlot?'<p class="slot-explanation">'+(reserve!==null?'Dom może korzystać z baterii do tego poziomu.':'Brak potwierdzonego minimalnego zapasu.')+'</p>':target!==null?'<p class="slot-explanation">'+(deadline?'Cel ładowania na '+esc(deadline):'Cel wybranego planu')+'</p>':'<p class="slot-explanation">Cel jeszcze niewyliczony.</p>')+
         (fallback&&target!==null?'<p class="slot-badge fallback">Cel zachowawczy</p>':'')+
         ((!past||historical)&&cheap?'<p class="slot-reserve">Rezerwa: '+num(reserve)+(reserve!==null?'%':'')+'</p>':'')+
-        '<div class="slot-projection"><span>'+(historical?'Wcześniejsza prognoza baterii':'Prognoza baterii')+'</span><b>'+(completeProjection?num(projectedStart)+' → '+num(projectedEnd)+'%':'—')+'</b><small>'+(completeProjection?'od '+esc(time(row.projection_from)):past?'Brak danych historycznych':fallback?'Brak wyliczonej projekcji':'Brak prognozy dla tego przedziału')+'</small></div>'+'</article>';
+        '<div class="slot-projection"><span>'+(historical?'Zapisana prognoza naładowania baterii':'Prognoza naładowania baterii')+'</span><b>'+(completeProjection?num(projectedStart)+'% → '+num(projectedEnd)+'%':'—')+'</b><small>'+(completeProjection?'Poziom o '+esc(time(row.projection_from))+' → przewidywany na koniec slotu o '+esc(time(row.end)):past?'Brak zapisanej prognozy':fallback?'Brak wyliczonej prognozy':'Brak prognozy dla tego przedziału')+'</small></div>'+'</article>';
     }).join("")+'</div></div>';
     }).join("")+'<p class="legend slot-plan-note">Cel ładowania dotyczy terminu planu pokazanego na karcie; nie musi wypadać na końcu przedziału. Samo zezwolenie taryfy nie oznacza ładowania — decydują także zapas baterii, słońce i limity instalacji. Prognoza opisuje model od podanej chwili, nie pomiar historyczny.</p>';
   }
