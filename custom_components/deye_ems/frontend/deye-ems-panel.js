@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-20";
-const PANEL_VERSION = "2.1.20";
+const PANEL_TAG = "deye-ems-panel-2-1-21";
+const PANEL_VERSION = "2.1.21";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -628,14 +628,14 @@ class DeyeEMSPanel extends HTMLElement {
       const completeProjection=projection&&projectedStart!==null&&projectedEnd!==null;
       const calculatedValue=projectedEnd!==null?projectedEnd:target;
       const calculatedLabel=projectedEnd!==null||target===null?'Wyliczony SoC':'Wyliczony cel SoC';
-      const calculatedGauge='<div>'+this.slotGaugeHtml(calculatedValue,calculatedLabel,'charge')+'<p class="slot-role">'+calculatedLabel+'</p><p class="slot-explanation">'+(projectedEnd!==null?'Prognoza na koniec okna':target!==null?'Cel planu'+(historical?' zapisany wcześniej':'')+'; brak projekcji końca okna':'Brak zapisanych wyliczeń')+'</p></div>';
+      const calculatedGauge='<div>'+this.slotGaugeHtml(calculatedValue,calculatedLabel,'charge')+'<p class="slot-role">'+calculatedLabel+'</p><p class="slot-explanation">'+(projectedEnd!==null?'Prognoza SoC na '+esc(time(row.end)):target!==null?'Cel planu'+(historical?' zapisany wcześniej':'')+'; brak projekcji końca okna':'Brak zapisanych wyliczeń')+'</p></div>';
       const current=!past&&start<=now&&now<end;
       const ringLabel=past&&!historical?'Przedział miniony':protectedSlot?'Minimalny zapas':'Cel ładowania';
       const gaugeValue=past&&!historical?null:protectedSlot?reserve:target;
       const permission=cheap?'Możliwe doładowanie z sieci':protectedSlot?'Bez doładowania z sieci':'Zgoda na doładowanie niepotwierdzona';
       const deadline=known&&updateTimestamp(row.deadline)!==null?time(row.deadline):null;
       return '<article class="slot-card '+(past?'is-past':current?'is-current':'')+'" data-tariff-slot="true"'+(current?' aria-current="time"':'')+'><div class="slot-card-top"><span class="slot-zone">'+esc(this.tariffZone(row))+'</span>'+(current?'<span class="slot-badge current">Teraz</span>':past?'<span class="slot-badge">Zakończony</span>':'')+'</div><h4 title="'+esc(this.tariffInterval(row))+'">'+esc(this.tariffSlotHours(row))+'</h4><p class="slot-permission '+(cheap?'charge-allowed':'charge-protected')+'">'+permission+'</p>'+(past?'<div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap">'+calculatedGauge+'<div>'+this.slotGaugeHtml(soc(row.actual_soc_end_percent),'Rzeczywisty SoC','reserve')+'<p class="slot-role">Rzeczywisty SoC</p></div></div><p class="slot-explanation">Na koniec okna</p>':'<div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap"><div>'+this.slotGaugeHtml(gaugeValue,ringLabel,cheap?'charge':'reserve')+'<p class="slot-role">'+ringLabel+'</p></div>'+calculatedGauge+'</div>')+
-        (past?'<p class="slot-explanation">'+(historical?'Wcześniej wyliczony SoC'+(deadline?' · cel na '+esc(deadline):'')+'.':'Przedział miniony — brak zapisanych wyliczeń.')+'</p>':protectedSlot?'<p class="slot-explanation">'+(reserve!==null?'Dom może korzystać z baterii do tego poziomu.':'Brak potwierdzonego minimalnego zapasu.')+'</p>':target!==null?'<p class="slot-explanation">'+(deadline?'Cel na '+esc(deadline):'Cel wybranego planu')+'</p>':'<p class="slot-explanation">Cel jeszcze niewyliczony.</p>')+
+        (past?'<p class="slot-explanation">'+(historical?'Wcześniej wyliczony SoC'+(deadline?' · cel ładowania na '+esc(deadline):'')+'.':'Przedział miniony — brak zapisanych wyliczeń.')+'</p>':protectedSlot?'<p class="slot-explanation">'+(reserve!==null?'Dom może korzystać z baterii do tego poziomu.':'Brak potwierdzonego minimalnego zapasu.')+'</p>':target!==null?'<p class="slot-explanation">'+(deadline?'Cel ładowania na '+esc(deadline):'Cel wybranego planu')+'</p>':'<p class="slot-explanation">Cel jeszcze niewyliczony.</p>')+
         (fallback&&target!==null?'<p class="slot-badge fallback">Cel zachowawczy</p>':'')+
         ((!past||historical)&&cheap?'<p class="slot-reserve">Rezerwa: '+num(reserve)+(reserve!==null?'%':'')+'</p>':'')+
         '<div class="slot-projection"><span>'+(historical?'Wcześniejsza prognoza baterii':'Prognoza baterii')+'</span><b>'+(completeProjection?num(projectedStart)+' → '+num(projectedEnd)+'%':'—')+'</b><small>'+(completeProjection?'od '+esc(time(row.projection_from)):past?'Brak danych historycznych':fallback?'Brak wyliczonej projekcji':'Brak prognozy dla tego przedziału')+'</small></div>'+'</article>';
