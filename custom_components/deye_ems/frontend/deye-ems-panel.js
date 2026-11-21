@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-1-23";
-const PANEL_VERSION = "2.1.23";
+const PANEL_TAG = "deye-ems-panel-2-2-01";
+const PANEL_VERSION = "2.2.01";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -59,7 +59,7 @@ const esc = v => String(v ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"
 const numeric = v => (typeof v === "number" || typeof v === "string" && v.trim() !== "") && Number.isFinite(Number(v)) ? Number(v) : null;
 const num = (v,d=1) => numeric(v) === null ? "—" : numeric(v).toLocaleString("pl-PL",{maximumFractionDigits:d});
 const time = v => v && Number.isFinite(new Date(v).getTime()) ? new Date(v).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—";
-const releaseVersion = value => typeof value==="string"&&/^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})$/.test(value)?value:null;
+const releaseVersion = value => typeof value==="string"&&/^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|0[1-9]|[1-9]\d{0,4})$/.test(value)?value:null;
 const compareVersions = (a,b) => {const left=a.split(".").map(Number),right=b.split(".").map(Number);for(let i=0;i<3;i++)if(left[i]!==right[i])return Math.sign(left[i]-right[i]);return 0;};
 const updateTimestamp = value => typeof value==="string"&&/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
 const STORE_REPOSITORY_ID="1451991710",STORE_REPOSITORY_NAME="gaszu/deye-ems";
@@ -212,6 +212,11 @@ class DeyeEMSPanel extends HTMLElement {
     const message=Object.hasOwn(messages,code)?messages[code]:/^[a-zA-Z0-9_:.-]{1,120}$/.test(code)?"Błąd silnika: "+code:"Silnik zgłasza błąd. Sprawdź diagnostykę.";
     return '<div role="alert" class="notice error" data-runtime-error="true">'+(!this.snapshotFresh()?'Ostatnio zgłoszony błąd; stan silnika wymaga odświeżenia. ':'')+esc(message)+'</div>';
   }
+  startupControlHtml(){
+    const issue=this.payload?.data?.startup_control_issue;
+    if(typeof issue!=="string"||!issue)return "";
+    return '<div role="status" class="notice warning">Sterowanie jest włączone. EMS czeka, aż kontrola startowa dopuści wysyłanie poleceń. '+esc(issue)+'</div>';
+  }
   snapshotFresh(){const at=this.payload?.data?.updated_at;if(!at)return false;const age=Date.now()-new Date(at).getTime();return Number.isFinite(age)&&age>=0&&age<=30000;}
   measurement(key){const input=this.payload?.data?.inputs;if(!this.snapshotFresh()||!input)return null;if(key==="soc"?input.soc_valid!==true:input.telemetry_valid!==true)return null;return numeric(input[key]);}
   telemetryIssueText(){
@@ -341,6 +346,7 @@ class DeyeEMSPanel extends HTMLElement {
     const p=this.payload||{},d=p.data||{},c=d.control||{},input=d.inputs||{};
     if(p.mode!=="active")return "Tryb obserwacji — EMS nie steruje ładowaniem.";
     if(!this.snapshotFresh())return "Brak aktualnego stanu sterowania. Oczekiwanie na świeży odczyt.";
+    if(reason==="waiting_for_startup_control")return "Oczekiwanie na spełnienie warunków sterowania po starcie.";
     const plain=String(reason).replace(/^safety_/,"");
     const hard=new Set(["bms_blocked","hardware_mode_mismatch","owner_conflict","ownership_conflict","grid_headroom","inverter_grid_headroom","deye_charge_cap","actuator_cap","converter_cap","battery_charge_headroom"]);
     if(hard.has(plain)&&Object.hasOwn(reasons,plain))return reasons[plain];
@@ -1422,7 +1428,7 @@ class DeyeEMSPanel extends HTMLElement {
       "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}header,article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){header{flex-direction:column;gap:10px}.mode-controls{width:100%;justify-content:space-between}.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
       '</style><main><header aria-label="Sterowanie EMS"><div class="mode-controls"><div class="pill '+(active?'':'shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div></header>'+
       (this.actionError?'<div role="alert" class="notice error" data-action-error="true"><p><b>Ostatnia nieudana akcja</b></p><p>'+esc(this.actionError.message)+'</p><button id="action-error-dismiss" class="secondary">Zamknij komunikat</button></div>':'')+
-      (this.error&&this.error!==this.actionError?.message?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+this.runtimeErrorHtml()+this.postSaveHtml()+
+      (this.error&&this.error!==this.actionError?.message?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+this.runtimeErrorHtml()+this.startupControlHtml()+this.postSaveHtml()+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Następny cel baterii",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+

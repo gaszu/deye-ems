@@ -100,6 +100,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._plan_task = None
         self._startup_plan_deadline = 0
         self._waiting_for_plan_inputs = False
+        self._startup_control_issue = None
         self._planning_revision = 0
         self._stopped = False
         self._report_provider = report_provider
@@ -287,12 +288,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._memory["mode"] = "shadow"
             await self._save()
         if self.mode == "active":
-            try:
-                self._preflight()
-            except ValueError:
-                self._memory["mode"] = "shadow"
-                self._last_error = "restored_active_preflight_failed"
-                await self._save()
+            self._check_startup_control()
+
+    def _check_startup_control(self):
+        try:
+            self._preflight()
+        except ValueError as error:
+            self._startup_control_issue = str(error)
+        else:
+            self._startup_control_issue = None
 
     async def async_shutdown(self):
         """Cancel future work, without emitting hardware commands on unload."""
@@ -554,7 +558,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         self._memory["initial_charge_window"] = {"version": 1,
                             "deadline": deadline.isoformat(), "at": now.timestamp(),
                             "id": uuid4().hex, "spent": False}
-            elif self.mode == "active" and not self._owner_conflicts():
+            elif self.mode == "active" and self._startup_control_issue is None and not self._owner_conflicts():
                 # Explicit relinquishing is cleaned up while we still own the
                 # hardware. A conflict is different: never touch another owner.
                 await self._disable_gc()
@@ -587,6 +591,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 # An explicit, validated activation with a successful mode
                 # save supersedes only this historical startup diagnostic.
                 self._last_error = None
+            self._startup_control_issue = None
         await self.async_request_refresh()
 
     async def async_prepare_activation(self, *, recalculate=True):
@@ -1486,6 +1491,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                                history.get("ordinary_positive_at")))
 
     async def _service(self, entity_id, action, value=None):
+        if self._startup_control_issue is not None:
+            return False
         if (self._soc_lower_bound() is None and entity_id != self._sources["grid_current_number"]
                 and action != "turn_off"):
             self._last_error = "battery_low_soc_unavailable"
@@ -2728,12 +2735,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._ensure_forecast_context()
             inputs = self._read_inputs(now)
             self._record_slot_measurements(now, inputs)
+            if self.mode == "active" and self._startup_control_issue is not None:
+                self._check_startup_control()
             conflicts = self._owner_conflicts()
-            if self.mode == "active" and conflicts:
+            if self.mode == "active" and self._startup_control_issue is None and conflicts:
                 self._memory["mode"] = "shadow"
                 self._last_error = "ownership_conflict"
                 await self._save()
-            active = self.mode == "active"
+            active = self.mode == "active" and self._startup_control_issue is None
             floor = self._effective_min_soc()
             safety = self._controller(self._grid_input(inputs, now, floor, False, safety_only=True))
             modes_ok = self._hardware_modes_ok()
@@ -2770,14 +2779,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             control = self._controller(request_grid)
             control.update(describe_current_wait(request_grid))
             modes_ok = self._hardware_modes_ok()
-            active = self.mode == "active"
-            if active and not modes_ok:
+            if self.mode == "active" and self._startup_control_issue is not None:
+                control["runtime_reason"] = "waiting_for_startup_control"
+            elif active and not modes_ok:
                 await self._disable_gc()
                 await self._grid_attempt(0, now.timestamp(), force=True, reason="hardware_mode_mismatch")
                 control["runtime_reason"] = "hardware_mode_mismatch"
             elif active:
                 await self._run_driver(inputs, control, target, emergency, now)
-            active = self.mode == "active"
+            active = self.mode == "active" and self._startup_control_issue is None
             target_key = self._target_key(now)
             target_deadline = (datetime.fromtimestamp(self._deadlines(now)[target_key], _TZ).isoformat()
                                if target_key is not None else None)
@@ -2797,6 +2807,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return {"mode": self.mode, "owner": {"active": active, "conflicts": self._owner_conflicts()},
                     "status": control.get("runtime_reason", "active" if active else "shadow"),
                     "error": self._last_error, "conflicts": conflicts,
+                    "startup_control_issue": self._startup_control_issue if self.mode == "active" else None,
                     "inputs": inputs, "plan": public_plan, "tariff_calendar": self.options["tariff_calendar"],
                     "command_diagnostics": deepcopy(self._command_diagnostics),
                     "control": {**control, "target_soc": target,

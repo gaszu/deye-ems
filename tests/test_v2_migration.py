@@ -79,7 +79,8 @@ class V2Migration(unittest.IsolatedAsyncioTestCase):
                 h = Harness(options={**deepcopy(LEGACY_OPTIONS), **damaged})
                 h.store.saved = {"mode": "active"}
                 await h.co.async_initialize()
-                self.assertEqual(h.co.mode, "shadow")
+                self.assertEqual(h.co.mode, "active")
+                self.assertIsNotNone(h.co._startup_control_issue)
                 readings = h.co._read_inputs(h.now)
                 self.assertFalse(readings["hardware_valid"])
                 self.assertFalse(readings["telemetry_valid"])

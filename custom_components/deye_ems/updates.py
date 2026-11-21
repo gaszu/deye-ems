@@ -22,7 +22,7 @@ REQUEST_TIMEOUT_SECONDS = 10
 AUTO_CHECK_INTERVAL_SECONDS = 3600
 STARTUP_DELAY_SECONDS = 30
 _UTC = timezone.utc
-_VERSION = re.compile(r"^v?(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$")
+_VERSION = re.compile(r"^v?(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|0[1-9]|[1-9][0-9]{0,5})$")
 
 
 def _version(value):
@@ -177,7 +177,7 @@ class UpdateManager:
             return self.status
         latest, running = _version(tag), _version(VERSION)
         state = "available" if latest > running else "ahead" if latest < running else "current"
-        self._state.update(status=state, latest_version=".".join(map(str, latest)),
+        self._state.update(status=state, latest_version=tag.removeprefix("v"),
                            reason=None, release_url=RELEASE_ORIGIN + tag, stale=False)
         self._notify()
         return self.status

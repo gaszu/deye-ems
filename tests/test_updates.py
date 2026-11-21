@@ -93,7 +93,7 @@ class Updates(unittest.IsolatedAsyncioTestCase):
     async def test_manual_check_validates_version_order_and_builds_fixed_links(self):
         for tag, expected in (("v1.0.18", "available"), ("1.0.17", "current"),
                               ("v1.0.9", "ahead"), ("v1.0.100", "available"),
-                              ("v2.0.0", "available")):
+                              ("v2.0.0", "available"), ("v2.2.01", "available")):
             with self.subTest(tag=tag):
                 _, manager, session = self.fixture(Response(release(tag,
                     html_url="https://untrusted.invalid", body="private-provider-body")))
