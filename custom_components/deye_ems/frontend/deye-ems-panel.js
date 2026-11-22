@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-2-01";
-const PANEL_VERSION = "2.2.01";
+const PANEL_TAG = "deye-ems-panel-2-2-02";
+const PANEL_VERSION = "2.2.02";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -59,6 +59,7 @@ const esc = v => String(v ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"
 const numeric = v => (typeof v === "number" || typeof v === "string" && v.trim() !== "") && Number.isFinite(Number(v)) ? Number(v) : null;
 const num = (v,d=1) => numeric(v) === null ? "—" : numeric(v).toLocaleString("pl-PL",{maximumFractionDigits:d});
 const time = v => v && Number.isFinite(new Date(v).getTime()) ? new Date(v).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—";
+const soc = value => {const n=numeric(value);return n!==null&&n>=0&&n<=100?n:null;};
 const releaseVersion = value => typeof value==="string"&&/^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|0[1-9]|[1-9]\d{0,4})$/.test(value)?value:null;
 const compareVersions = (a,b) => {const left=a.split(".").map(Number),right=b.split(".").map(Number);for(let i=0;i<3;i++)if(left[i]!==right[i])return Math.sign(left[i]-right[i]);return 0;};
 const updateTimestamp = value => typeof value==="string"&&/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
@@ -179,6 +180,55 @@ class DeyeEMSPanel extends HTMLElement {
   }
   fallbackPlanText(reason){
     return 'Silnik używa planu zachowawczego. '+this.planReasonText(reason)+' Cele zachowawcze nie są wyliczoną projekcją baterii. Brak wyliczenia nie jest prognozą zerowego zużycia. Nadal obowiązują świeże pomiary i wszystkie ograniczenia.';
+  }
+  modelChartHtml(rows,floor){
+    if(!rows.length)return this.unavailablePlanHtml();
+    const last=rows.length-1;
+    const points=rows.map((row,index)=>(960*index/Math.max(last,1)).toFixed(1)+","+
+      (220-2*(soc(row.soc_percent)??0)).toFixed(1)).join(" ");
+    const ticks=[...new Set([0,Math.round(last/3),Math.round(last*2/3),last])];
+    return '<div class="model-chart"><div class="model-chart-scale" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>'+
+      '<div class="model-chart-body"><div class="model-chart-plot">'+
+      '<svg id="model-chart" viewBox="0 20 960 200" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC w procentach w czasie lokalnym">'+
+      (floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+
+      '<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/>'+
+      '<g id="model-chart-crosshair" visibility="hidden" aria-hidden="true"><line x1="0" x2="0" y1="20" y2="220"/><line x1="0" x2="960" y1="20" y2="20"/></g>'+
+      '</svg><output id="model-chart-readout" aria-live="off" hidden></output></div>'+
+      '<div class="model-chart-times">'+ticks.map(index=>'<time style="left:'+(100*index/Math.max(last,1))+'%">'+esc(time(rows[index].timestamp))+'</time>').join("")+'</div>'+
+      '<p class="legend">Czas lokalny (data i godzina)</p></div></div>'+
+      '<div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>';
+  }
+  bindModelChart(rows){
+    const plot=this.shadowRoot.getElementById("model-chart");
+    if(!plot)return;
+    const crosshair=this.shadowRoot.getElementById("model-chart-crosshair");
+    const [vertical,horizontal]=crosshair.children;
+    const readout=this.shadowRoot.getElementById("model-chart-readout");
+    const hide=()=>{crosshair.setAttribute("visibility","hidden");readout.hidden=true;};
+    const move=event=>{
+      const {left,top,width,height}=plot.getBoundingClientRect();
+      const x=(event.clientX-left)/width,y=(event.clientY-top)/height;
+      if(!Number.isFinite(x)||!Number.isFinite(y)||x<0||x>1||y<0||y>1){hide();return;}
+      const position=x*(rows.length-1),index=Math.floor(position),fraction=position-index;
+      const first=rows[index],next=rows[index+1]??first;
+      const start=updateTimestamp(first.timestamp),end=updateTimestamp(next.timestamp);
+      const startSoc=soc(first.soc_percent),endSoc=soc(next.soc_percent);
+      const at=start!==null&&end!==null?start+(end-start)*fraction:null;
+      const projected=startSoc!==null&&endSoc!==null?startSoc+(endSoc-startSoc)*fraction:null;
+      vertical.setAttribute("x1",960*x);vertical.setAttribute("x2",960*x);
+      horizontal.setAttribute("y1",20+200*y);horizontal.setAttribute("y2",20+200*y);
+      crosshair.setAttribute("visibility","visible");
+      const stamp=at===null?"":time(new Date(at))+" · ";
+      readout.textContent=stamp+"Kursor "+Math.round(100*(1-y))+"% SoC"+
+        (projected!==null?" · Prognoza "+Math.round(projected)+"%":"");
+      readout.style.left=x<.5?"auto":"0";
+      readout.style.right=x<.5?"0":"auto";
+      readout.hidden=false;
+    };
+    plot.addEventListener("pointermove",move);
+    plot.addEventListener("pointerdown",move);
+    plot.addEventListener("pointerleave",hide);
+    plot.addEventListener("pointercancel",hide);
   }
   unavailablePlanHtml(){
     const plan=this.payload?.data?.plan||{};
@@ -518,7 +568,11 @@ class DeyeEMSPanel extends HTMLElement {
     const d=this.payload?.data,c=d?.control;
     const ready=this.snapshotFresh()&&d?.inputs?.telemetry_valid===true;
     const power=key=>ready&&typeof c?.[key]==="number"&&Number.isFinite(c[key])&&c[key]>=0?c[key]/1000:null;
-    return '<div aria-label="Priorytet PV"><p><b>Nadwyżka PV do ładowania — szacunek zachowawczy:</b> '+num(power("pv_surplus_credit_w"))+' kW · <b>Wyliczona potrzeba doładowania z sieci:</b> '+num(power("net_grid_need_w"))+' kW.</p><p class="legend">PV po zasileniu domu zmniejsza potrzebę ładowania z sieci. Obie wartości dotyczą mocy po stronie baterii. Szacunek wynika z bilansu baterii i portu GRID; nie jest osobnym pomiarem energii PV. Potrzeba mocy z sieci jest pokazywana przed ograniczeniami sprzętowymi.</p></div>';
+    const card=(label,key)=>'<article><span class="label">'+label+'</span><strong class="model-power-value">'+num(power(key))+' <small>kW</small></strong></article>';
+    return '<div class="model-power" aria-label="Priorytet PV"><div class="grid">'+
+      card("Nadwyżka PV do ładowania (szacunek zachowawczy)","pv_surplus_credit_w")+
+      card("Wyliczona potrzeba doładowania z sieci","net_grid_need_w")+
+      '</div><p class="legend">PV po zasileniu domu zmniejsza potrzebę ładowania z sieci. Obie wartości dotyczą mocy po stronie baterii. Szacunek wynika z bilansu baterii i portu GRID; nie jest osobnym pomiarem energii PV. Potrzeba mocy z sieci jest pokazywana przed ograniczeniami sprzętowymi.</p></div>';
   }
   topologyKw(key){
     const topology=this.payload?.options?.topology,input=this.payload?.data?.inputs;
@@ -617,7 +671,6 @@ class DeyeEMSPanel extends HTMLElement {
     const raw=this.payload?.data?.plan?.tariff_slot_targets;
     if(!Array.isArray(raw)||!raw.length)return "";
     if(!this.snapshotFresh())return '<p class="notice warning">Brak bieżącej tabeli celów SoC. Poczekaj na aktualny odczyt, zanim ocenisz plan.</p>';
-    const soc=value=>{const n=numeric(value);return n!==null&&n>=0&&n<=100?n:null;};
     const rows=raw.slice(0,96).filter(row=>row&&typeof row==="object"&&!Array.isArray(row)&&updateTimestamp(row.start)!==null&&updateTimestamp(row.end)>updateTimestamp(row.start));
     if(!rows.length)return '<p>Brak poprawnych przedziałów celów SoC.</p>';
     rows.sort((a,b)=>updateTimestamp(a.start)-updateTimestamp(b.start));
@@ -1408,7 +1461,6 @@ class DeyeEMSPanel extends HTMLElement {
     const ctTopology=o.topology==="load_with_external_ct",loadTopology=o.topology==="load_only";
     const selectedTopology=this.drafts.topology??o.topology??"load_only";
     const savedTopologyLabel=o.topology==="load_with_external_ct"?"Zero Export To CT":o.topology==="load_only"?"Zero Export To Load":"brak odczytu";
-    const points=rows.map((r,i)=>(i/(Math.max(rows.length-1,1))*960).toFixed(1)+","+(220-Number(r.soc_percent||0)*2).toFixed(1)).join(" ");
     const card=(name,value,unit,sub)=>'<article><span class="label">'+esc(name)+'</span><strong>'+esc(value)+'<small>'+esc(unit)+'</small></strong><span class="sub">'+esc(sub||"")+'</span></article>';
     const reason=c.runtime_reason||c.reason||d.reason||d.status||"initializing";
     const owners=d.owner?.conflicts||d.owner?.blocking||d.conflicts||[];
@@ -1422,6 +1474,8 @@ class DeyeEMSPanel extends HTMLElement {
     const phaseModel=o.hardware_profile?.phases===1?"Falownik jednofazowy — faza "+(o.hardware_profile.inverter_phase||"niepotwierdzona"):fresh&&d.inputs?.grid_charge_balanced===true?"Bilansowanie poboru GRID potwierdzone":"Wariant zachowawczy — bilansowanie GRID niepotwierdzone";
     const basicField=(key,button)=>{const r=key==="min_soc_percent"?[boundValid?lowerBound:40,90,1]:ranges[key],value=Object.hasOwn(this.drafts,key)?this.drafts[key]:(key==="min_soc_percent"?Math.max(numeric(o[key])??40,r[0]):o[key]??"");return '<label>'+esc(labels[key])+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" '+(this.busy||key==="min_soc_percent"&&!boundValid?'disabled':'')+'>'+esc(button)+'</button></label>';};
     this.shadowRoot.innerHTML='<style>'+
+      ".model-power{margin-top:16px}.model-power .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.model-power .label{font-size:14px}.model-power .model-power-value{font-size:clamp(27px,3.5vw,36px)}.model-power-value small{font-size:16px}@media(max-width:480px){.model-power .grid{grid-template-columns:1fr}}"+
+      ".model-chart{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;margin-top:12px}.model-chart-scale{position:relative;height:230px;color:var(--secondary-text-color);font-size:12px}.model-chart-scale span{position:absolute;right:0;transform:translateY(-50%)}.model-chart-scale{min-width:36px}.model-chart-scale span:nth-child(2){top:50%}.model-chart-scale span:last-child{top:100%}.model-chart-plot{position:relative;border-left:1px solid var(--divider-color);border-bottom:1px solid var(--divider-color)}#model-chart{cursor:crosshair;touch-action:pan-y}#model-chart-crosshair line{stroke:var(--secondary-text-color);stroke-dasharray:4 4;vector-effect:non-scaling-stroke}#model-chart-readout{position:absolute;top:4px;margin:4px;padding:6px 8px;border-radius:6px;background:var(--card-background-color,var(--primary-background-color));color:var(--primary-text-color);border:1px solid var(--divider-color);font-size:12px;pointer-events:none}.model-chart-times{position:relative;height:19px;margin-top:6px;color:var(--secondary-text-color);font-size:12px}.model-chart-times time{position:absolute;white-space:nowrap;transform:translateX(-50%)}.model-chart-times time:first-child{transform:none}.model-chart-times time:last-child:not(:first-child){transform:translateX(-100%)}.model-chart-body>p{margin:0 0 8px}@media(max-width:520px){.model-chart-times time:not(:first-child):not(:last-child){display:none}}"+
       ":host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color,#fafafa));color:var(--primary-text-color,#212121);font:15px var(--primary-font-family,var(--ha-font-family-body,system-ui))}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:var(--ha-border-radius-pill,100px);background:var(--label-badge-background-color,var(--secondary-background-color));color:var(--label-badge-text-color,var(--primary-text-color));border:1px solid var(--divider-color);font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}header,article,section{background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:var(--ha-card-backdrop-filter,none);border-width:var(--ha-card-border-width,1px);border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));box-shadow:var(--ha-card-box-shadow,none);color:var(--primary-text-color);padding:22px}.label,.sub{display:block;color:var(--secondary-text-color);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,12px);line-height:1.6;margin:18px 0}.warning{border-inline-start:4px solid var(--warning-color)}.error{border-inline-start:4px solid var(--error-color)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}"+
       "button,.button-link{font:inherit;display:inline-flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;line-height:normal;cursor:pointer;border:1px solid transparent;border-radius:var(--ha-button-border-radius,var(--ha-border-radius-pill,20px));padding:11px 16px;background:var(--ems-button-background,var(--ha-color-fill-primary-normal-resting,var(--secondary-background-color)));color:var(--ems-button-text,var(--ha-color-on-primary-normal,var(--primary-color)));font-weight:var(--ha-font-weight-medium,600);box-shadow:var(--ha-button-box-shadow,none)}button.secondary,.button-link.secondary{background:transparent;color:var(--primary-color);border-color:var(--divider-color)}button:hover:not(:disabled),.button-link:hover{background:var(--ems-button-hover,var(--ha-color-fill-primary-normal-hover,var(--secondary-background-color)))}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ha-color-focus,var(--primary-color));outline-offset:3px}button:disabled,input:disabled,select:disabled{opacity:1;color:var(--input-disabled-ink-color,var(--secondary-text-color));background:var(--input-disabled-fill-color,var(--secondary-background-color));border-color:var(--divider-color);cursor:not-allowed} .mode-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%}.mode-controls button{white-space:normal}svg{width:100%;height:230px;display:block}svg polyline{stroke:var(--primary-color)}svg line{stroke:var(--warning-color,var(--secondary-text-color))}.legend{font-size:12px;color:var(--secondary-text-color)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}label{display:block;font-size:13px;color:var(--input-label-ink-color,var(--secondary-text-color))}input,select{margin-top:7px;width:100%;border:1px solid var(--input-idle-line-color,var(--divider-color));border-radius:var(--ha-border-radius-md,8px);background:var(--input-fill-color,var(--ha-color-form-background,var(--secondary-background-color)));color:var(--input-ink-color,var(--primary-text-color));padding:10px;font:inherit;caret-color:var(--primary-color);accent-color:var(--primary-color)}select option,optgroup{background:var(--primary-background-color,Canvas);color:var(--primary-text-color,CanvasText)}select option:disabled{color:var(--secondary-text-color,GrayText)}label button{margin-top:8px;padding:7px 10px;font-size:12px}.table{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;white-space:nowrap;padding:9px 12px;border-bottom:1px solid var(--divider-color)}th:first-child,td:first-child{text-align:left}footer{color:var(--secondary-text-color);font-size:12px;line-height:1.7;margin-top:24px}a{color:var(--primary-color);text-underline-offset:3px}summary{cursor:pointer;padding:18px 2px;font-weight:650}.reserve label{max-width:320px}.loads{list-style:none;padding:0}.load-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--divider-color);padding:14px 0}.load-row .actions{margin:0;flex-shrink:0}.load-switch{display:flex;align-items:center;gap:7px;min-width:65px}.load-switch input{width:20px;height:20px;margin:0}code{overflow-wrap:anywhere}fieldset{border:0;padding:0;margin:0}.check{display:flex;align-items:center;gap:10px;margin-top:20px}.check input{width:auto;margin:0}form,.solcast-editor{border-top:1px solid var(--divider-color);margin-top:18px;padding-top:6px}.solcast-note{white-space:pre-line}"+
       ".slot-plan-heading{margin-top:24px}.slot-plan-heading h3{font-size:21px;margin-bottom:6px}.slot-plan-heading p,.slot-plan-note{line-height:1.6;color:var(--secondary-text-color);font-size:13px;max-width:760px}.slot-day{margin-top:22px}.slot-day>h3{font-size:16px;margin:0 0 12px}.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}.slot-card{padding:18px 14px;text-align:center;min-width:0;box-shadow:none;border-radius:16px}.slot-card.is-current{border-color:var(--primary-color);background:var(--ha-color-fill-primary-quiet-resting,var(--ha-card-background,var(--card-background-color,#fff)))}.slot-card.is-past{background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;text-align:left;min-height:26px}.slot-zone{font-size:12px;font-weight:650;color:var(--secondary-text-color)}.slot-card h4{font-size:15px;line-height:1.5;margin:10px 0 6px}.slot-permission{font-size:12px;min-height:36px;line-height:1.5;margin:0 0 10px;color:var(--secondary-text-color)}.slot-badge{display:inline-block;font-size:10px;line-height:1.5;font-weight:650;padding:3px 7px;border-radius:20px;background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-badge.current{background:var(--ha-color-primary-90,var(--secondary-background-color));color:var(--primary-text-color)}.slot-badge.fallback{background:var(--ha-color-warning-90,var(--secondary-background-color));color:var(--primary-text-color);margin:6px 0}.slot-gauge{position:relative;width:112px;height:112px;margin:0 auto;color:var(--primary-color)}.slot-gauge.reserve{color:var(--secondary-text-color)}.slot-gauge svg{width:112px;height:112px;transform:rotate(-90deg);overflow:visible}.slot-gauge circle{fill:none;stroke-width:8}.gauge-track{stroke:var(--divider-color)}.gauge-value{stroke:currentColor;stroke-linecap:round}.gauge-reading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:2px;color:var(--primary-text-color)}.gauge-reading b{font-size:29px;font-weight:650;letter-spacing:-1px}.gauge-reading span{font-size:13px;color:var(--secondary-text-color)}.slot-role{font-size:13px;font-weight:650;margin:10px 0 4px}.slot-explanation{font-size:11px;line-height:1.5;color:var(--secondary-text-color);min-height:33px;margin:0}.slot-reserve{font-size:11px;color:var(--secondary-text-color);margin:7px 0}.slot-projection{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider-color)}.slot-projection span,.slot-projection small{display:block;color:var(--secondary-text-color);font-size:11px;line-height:1.5}.slot-projection b{display:block;font-size:15px;line-height:1.7;font-weight:600}.slot-plan-note{margin-bottom:0}.stats article{padding:18px}.stats strong{font-size:28px;overflow-wrap:anywhere}.stats .sub{line-height:1.5}.slot-grid article strong{font-size:28px}details>summary{font-size:17px;line-height:1.5}details{border-top:1px solid var(--divider-color);margin-top:24px}details[open]>summary{margin-bottom:4px}@media(max-width:480px){.slot-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.slot-card{padding:14px 9px}.slot-card h4{font-size:13px}.slot-zone{font-size:10px}.slot-card-top{align-items:flex-start;flex-direction:column}.slot-gauge,.slot-gauge svg{width:100px;height:100px}.slot-explanation{min-height:48px}.stats strong{font-size:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}"+
@@ -1440,9 +1494,9 @@ class DeyeEMSPanel extends HTMLElement {
       this.tariffCalendarHtml()+
 
       '<section><h2>Prognoza modelu</h2>'+this.modelTargetsHtml()+
-      (rows.length?'<svg viewBox="0 0 960 230" preserveAspectRatio="none" role="img" aria-label="Prognozowany SoC">'+(floor!==null?'<line x1="0" x2="960" y1="'+(220-floor*2)+'" y2="'+(220-floor*2)+'" stroke-dasharray="7 7"/>':'')+'<polyline points="'+points+'" fill="none" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="legend">Linia ciągła: projekcja SoC · Przerywana: stała rezerwa · To prognoza, nie pomiar.</div>':this.unavailablePlanHtml())+
+      this.modelChartHtml(rows,floor)+this.pvPriorityHtml()+
       '</section>'+
-      this.pvPriorityHtml()+this.solcastForecastHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
+      this.solcastForecastHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
       '<section aria-label="O panelu"><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div></section>'+
       '<section><h2>Taryfa energii</h2>'+this.tariffEditorHtml()+'</section>'+
       this.topologyHtml()+this.hardwareHtml()+this.updatesHtml()+ 
@@ -1476,6 +1530,7 @@ class DeyeEMSPanel extends HTMLElement {
         if(this.settingsElement===details)this.settingsExpanded=details.open;
       });
     }
+    this.bindModelChart(rows);
     this.bindLoads();
     this.bindSolcast();
     this.bindSources();
