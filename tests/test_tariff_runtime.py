@@ -200,7 +200,23 @@ class OperatorRuntime(unittest.IsolatedAsyncioTestCase):
         h.advance(int((h.now.replace(hour=7, minute=0, second=0) + timedelta(days=1) - h.now).total_seconds()))
         await h.tick()
         self.assertEqual(h.current_calls()[-1], 0)
-        self.assertTrue(all(h.co._state(f"tou_gc_{i}").state == "off" for i in range(1, 7)))
+        self.assertEqual([h.co._state(f"tou_gc_{i}").state for i in range(1, 7)],
+                         ["on" if h.co._slot_charge_eligible(h.now, i) else "off" for i in range(1, 7)])
+
+    async def test_winter_and_summer_program_every_grid_charge_flag_during_peak(self):
+        for month in (7, 11):
+            with self.subTest(month=month):
+                h = Harness(when=datetime(2026, month, 10, 10, tzinfo=TZ), options=options("tauron_g13_2026"))
+                program = h.co._tou_program(h.now)
+                for row in program["rows"]:
+                    h.set(f"tou_time_{row['slot']}", row["time"])
+                h.active()
+                await h.tick()
+                self.assertFalse(h.co._slot_charge_eligible(h.now, h.co._window(h.now)[4]))
+                for row in program["rows"]:
+                    self.assertEqual(h.co._state(f"tou_gc_{row['slot']}").state,
+                                     "on" if row["grid_charge_allowed"] else "off")
+                self.assertFalse(any(h.current_calls()))
 
     async def test_real_window_does_not_use_old_midday_or_old_night_boundaries(self):
         for hour, expected in ((13, False), (20, False), (21, True), (5, True), (6, False)):
