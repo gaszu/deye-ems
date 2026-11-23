@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
 const PANEL_TAG = "deye-ems-panel-2-2-02";
-const PANEL_VERSION = "2.2.02";
+const PANEL_VERSION = "2.2.03";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -257,6 +257,9 @@ class DeyeEMSPanel extends HTMLElement {
     if(typeof code!=="string"||!code)return "";
     if(code==="last_moment_charge_need_guard"){
       return '<div role="status" class="notice" data-runtime-status="true">Ostatnie wstrzymane polecenie: EMS ponownie przeliczył potrzebny prąd ładowania z sieci i wstrzymał zmianę nastawy.</div>';
+    }
+    if(code==="last_moment_dispatch_guard"){
+      return '<div role="status" class="notice" data-runtime-status="true">EMS wstrzymał ostatnią zmianę limitu prądu ładowania z sieci po ponownym sprawdzeniu warunków.</div>';
     }
     const messages={last_moment_current_guard:"EMS wstrzymał zmianę prądu ładowania z sieci, ponieważ końcowa kontrola bezpieczeństwa jej nie dopuściła.",restored_active_preflight_failed:"Po uruchomieniu nie wznowiono sterowania. Sprawdź świeże pomiary i plan, a następnie włącz sterowanie jawnie.",ownership_conflict:"Działa inny sterownik. EMS pozostaje w obserwacji.",battery_low_soc_unavailable:"Brak poprawnego odczytu Battery low SOC. Sprawdź diagnostykę i przypisanie encji."};
     const message=Object.hasOwn(messages,code)?messages[code]:/^[a-zA-Z0-9_:.-]{1,120}$/.test(code)?"Błąd silnika: "+code:"Silnik zgłasza błąd. Sprawdź diagnostykę.";

@@ -1886,6 +1886,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                      and history.get("possible_at") is not None and report > history["possible_at"])
         if confirmed and self._memory["grid_dispatch"] and own is None:
             self._memory["grid_dispatch"]["unconfirmed_upper_a"] = possible
+            not_sent_at = history.get("not_sent_at")
+            if (self._last_error == "last_moment_dispatch_guard" and not_sent_at is not None
+                    and history["possible_at"] > not_sent_at):
+                self._last_error = None
         gc = self._state(f"tou_gc_{active_slot}")
         gc_report = _stamp(getattr(gc, "last_reported", None) or getattr(gc, "last_updated", None))
         charging = (gc is not None and gc.state == "on" and not gc.attributes.get("restored", False)
