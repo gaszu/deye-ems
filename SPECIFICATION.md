@@ -1,5 +1,18 @@
 # Specyfikacja Deye EMS 2.1.10
 
+## Sterowanie w potwierdzonej taryfie od 2.3.01
+
+W aktywnym slocie dozwolonym przez taryfę Grid Charge pozostaje włączony również
+przy bezpiecznie potwierdzonej nastawie 0 A. Prąd reguluje zapotrzebowanie,
+a wyłączenie Grid Charge nadal zabezpiecza koniec okna, zmianę zegara i sytuacje,
+w których nie ma pewności, że bieżąca lub oczekująca nastawa jest bezpieczna.
+
+Między 21:00 a 07:00 w dozwolonym oknie prąd rośnie do bieżącego bezpiecznego
+limitu, pod warunkiem wiarygodnego odczytu i zachowania odstępu 120 s między
+możliwymi dodatnimi poleceniami. Redukcje ochronne są natychmiastowe. Osiągnięcie
+celu ustawia 0 A. Doładowanie wraca po spadku o 5 p.p. lub poniżej rezerwy.
+Poza tą porą obowiązuje zwykła regulacja opisana poniżej.
+
 
 ## Rampa prądu i zakończenie ładowania
 

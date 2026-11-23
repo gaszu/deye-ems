@@ -1488,7 +1488,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return False
         return (history.get("ordinary_positive_known") is True and
                 dispatch_ready(now.timestamp(), history.get("possible_at"), history.get("not_sent_at"),
-                               history.get("ordinary_positive_at")))
+                               history.get("ordinary_positive_at"), fast=self._fast_night_charge(now)))
 
     async def _service(self, entity_id, action, value=None):
         if self._startup_control_issue is not None:
@@ -1516,7 +1516,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         winter, night, afternoon, _, active_slot = self._window(now)
         target, emergency, _ = self._target(now)
         floor = self._effective_min_soc()
-        allowed = (night or afternoon) and self._tariff_control_ok(now) and (winter or emergency or
+        fast = self._fast_night_charge(now)
+        allowed = (night or afternoon) and self._tariff_control_ok(now) and (winter or emergency or fast or
                    inputs["soc"] is not None and inputs["soc"] < floor)
         live_grid = self._grid_input(inputs, now, target, emergency)
         cap = calculate_grid_charge_cap(live_grid)
@@ -1552,7 +1553,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 if (not self._ordinary_dispatch_ready(now, own_attempt=context)
                         or inputs["current_a"] is None
                         or not (starting_small or delta >= DEADBAND_A)
-                        or delta > MAX_STEP_A
+                        or delta > MAX_STEP_A and not (fast and value > inputs["current_a"])
                         or value >= QUANTUM_A and value % QUANTUM_A != 0
                         or self._memory["current_policy"].get("stopped", True) and not taper
                         or not self._current_policy_ready(now)):
@@ -1571,6 +1572,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 self._last_error = "last_moment_current_guard"
                 return False
         if action == "turn_on":
+            if (entity_id == self._sources[f"tou_gc_{active_slot}"]
+                    and self._slot_charge_eligible(now, active_slot)
+                    and self._zero_current_gc_ready(inputs, live_grid, now, active_slot)):
+                return await self._send_service(entity_id, action, value)
             if self._memory["current_policy"].get("stopped", True):
                 return False
             requested = self._memory["ledger"].get(self._sources["grid_current_number"], {}).get("a", 0)
@@ -1606,6 +1611,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     or state.attributes.get("restored", False) for i in range(1, 7)):
                 self._last_error = "last_moment_tariff_program_guard"
                 return False
+        return await self._send_service(entity_id, action, value)
+
+    async def _send_service(self, entity_id, action, value):
         domain = entity_id.split(".", 1)[0]
         data = {"entity_id": entity_id}
         if value is not None:
@@ -1845,6 +1853,18 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return any(row["slot"] == slot and row["grid_charge_allowed"] is True
                    for row in self._tou_program(now).get("rows", []))
 
+    def _fast_night_charge(self, now):
+        local = now.astimezone(_TZ)
+        return (self._real_tariff() and (local.hour >= 21 or local.hour < 7)
+                and self._window(now)[1])
+
+    def _zero_current_gc_ready(self, inputs, grid, now, slot):
+        setting = self._measurement(f"tou_soc_{slot}", now, unit="%", low=0, high=100)
+        return (self._real_tariff() and inputs["current_a"] == 0 and grid["pending_current_a"] in (None, 0)
+                and grid["ordinary_history_known"]
+                and self._tariff_control_ok(now) and self._hardware_modes_ok() and self._clocks_ok(now)
+                and setting is not None and abs(setting - self._options["grid_max_soc_percent"]) < 2)
+
     def _window(self, now):
         if self._real_tariff():
             context, program = self._tariff_context(now), self._tou_program(now)
@@ -1903,7 +1923,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             items = tariff_target_items(now, self._calendar_options())
             if items:
                 remaining = min(24, remaining, (items[0]["at"].timestamp()-now.timestamp())/3600)
+        fast = self._fast_night_charge(now)
         return {"now_ts": now.timestamp(), "winter": winter, "cheap_window": night or afternoon,
+                "fast_night_charge": fast,
                 "tariff_window_valid": self._tariff_control_ok(now) if self._real_tariff() else False,
                 "inverter_phases": self._options.get("inverter_phases", 3),
                 "connection_phases": self._options.get("connection_phases", 3),
@@ -1924,7 +1946,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "grid_charge_enabled": (gc.state == "on" if gc is not None and gc.state in ("on", "off")
                     and not gc.attributes.get("restored", False) and gc_report is not None
                     and gc_report <= now.timestamp() and inputs["telemetry_valid"] else None),
-                "emergency_allowed": emergency, "safety_only": safety_only,
+                "emergency_allowed": emergency or fast, "safety_only": safety_only,
                 "soc_valid": inputs["soc_valid"], "soc": inputs["soc"], "target_soc": target,
                 "remaining_h": remaining,
                 "minimum_soc_percent": self._effective_min_soc(),
@@ -2086,7 +2108,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             control["runtime_reason"] = "tariff_program_updated"
             return  # Fresh control/SoC observations are required after conversion.
         floor = self._effective_min_soc()
-        if control.get("write"):
+        arm_before_start = (self._real_tariff() and control.get("write") and not control.get("safety")
+                            and inputs["current_a"] == 0 and control.get("next_a", 0) > 0)
+        if control.get("write") and not arm_before_start:
             await self._grid_attempt(control["next_a"], now.timestamp(), force=control.get("safety", False),
                                      reason=control.get("reason"))
         times = [row["time"] for row in program["rows"]]
@@ -2101,6 +2125,14 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if old is not None and abs(old - value) >= 2:
                 await self._attempt(self._sources[f"tou_soc_{slot}"], "set_value", value,
                                     now.timestamp(), cooldown=600, force=old < floor)
+        if arm_before_start:
+            live_now = self._now()
+            live_inputs = self._read_inputs(live_now)
+            live_grid = self._grid_input(live_inputs, live_now, target, emergency)
+            if (self._slot_charge_eligible(live_now, active_slot)
+                    and self._zero_current_gc_ready(live_inputs, live_grid, live_now, active_slot)):
+                await self._gc(active_slot, True)
+            await self._grid_attempt(control["next_a"], now.timestamp(), reason=control.get("reason"))
         # Re-read settings after commands; they remain readbacks of registers,
         # not a claim that the inverter has physically delivered the energy.
         observed = self._read_inputs(self._now())
@@ -2110,9 +2142,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         ready = (ready and inputs["soc_valid"] and soc_read is not None and abs(soc_read - hardware_target) < 2
                  and clock_read is not None and clock_read.state == times[active_slot - 1]
                  and control.get("telemetry_ok", False) and self._hardware_modes_ok() and self._clocks_ok(self._now()))
-        current_winter, current_night, current_afternoon, _, _ = self._window(self._now())
-        permitted = (current_night or current_afternoon) and self._tariff_control_ok(self._now()) and (current_winter or emergency or
-                                              observed["soc"] is not None and observed["soc"] < floor)
+        current_winter, current_night, current_afternoon, _, live_slot = self._window(self._now())
+        slot_open = (current_night or current_afternoon) and self._tariff_control_ok(self._now())
+        permitted = slot_open and (current_winter or emergency or self._fast_night_charge(self._now())
+                                   or observed["soc"] is not None and observed["soc"] < floor)
         active_gc = self._state(f"tou_gc_{active_slot}")
         observed_grid = self._grid_input(observed, self._now(), target, emergency)
         cap = calculate_grid_charge_cap(observed_grid)
@@ -2149,8 +2182,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                       soc_read is not None and abs(soc_read - hardware_target) < 2 and
                       clock_read is not None and clock_read.state == times[active_slot - 1] and
                       self._hardware_modes_ok() and self._clocks_ok(self._now()))
+        if self._real_tariff():
+            # The plan controls amperage. Short-lived changes to demand or its
+            # readback cannot revoke a physically safe active slot.
+            continuing = (
+                active_gc is not None and active_gc.state == "on" and not active_gc.attributes.get("restored", False)
+                and observed_grid["ordinary_history_known"] and potential_hard_safe
+                and cap["telemetry_ok"] and cap["grid_within_limits"] and observed["soc_valid"]
+                and observed["current_a"] is not None and observed["current_a"] <= cap["hard_current_cap_a"]
+                and soc_read is not None and abs(soc_read - hardware_target) < 2
+                and self._hardware_modes_ok() and self._clocks_ok(self._now()))
+        idle = self._zero_current_gc_ready(observed, observed_grid, self._now(), active_slot)
+        enabled = idle or permitted and ready or continuing and (permitted or self._real_tariff() and slot_open)
         for slot in range(1, 7):
-            await self._gc(slot, bool((ready or continuing) and permitted and slot == active_slot and self._slot_charge_eligible(self._now(), slot)))
+            await self._gc(slot, bool(enabled and slot == active_slot == live_slot and self._slot_charge_eligible(self._now(), slot)))
         control["setting_settled"] = bool(readback_ready)
         control["reduction_pending"] = pending_reduction
         control["actual_battery_w"] = observed["battery_power"]
@@ -2748,7 +2793,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._save()
             active = self.mode == "active" and self._startup_control_issue is None
             floor = self._effective_min_soc()
-            safety = self._controller(self._grid_input(inputs, now, floor, False, safety_only=True))
+            safety_grid = self._grid_input(inputs, now, floor, False, safety_only=True)
+            safety = self._controller(safety_grid)
             modes_ok = self._hardware_modes_ok()
             if active and not modes_ok:
                 await self._disable_gc()
@@ -2756,8 +2802,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             elif active:
                 if safety.get("write"):
                     await self._grid_attempt(safety["next_a"], now.timestamp(), force=True, reason=safety.get("reason"))
-                _, night, afternoon, _, _ = self._window(now)
-                if not (night or afternoon) or not inputs["telemetry_valid"]:
+                _, night, afternoon, _, slot = self._window(now)
+                if (not (night or afternoon) or not inputs["telemetry_valid"] and
+                        not self._zero_current_gc_ready(inputs, safety_grid, now, slot)):
                     await self._disable_gc()
                 await self._repair_floor(now)
             plan = self._memory.get("plan", {})
