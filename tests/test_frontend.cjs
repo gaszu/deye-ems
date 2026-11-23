@@ -41,7 +41,7 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:(fn,ms)=>{const timer={id:++timerId,fn,ms,cleared:false};timers.push(timer);return timer.id;},clearTimeout:id=>{const timer=timers.find(t=>t.id===id);if(timer)timer.cleared=true;},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-2-02");
+  const Panel = registry.get("deye-ems-panel-2-2-03");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
@@ -93,7 +93,7 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-2-02"),LegacyPanel);
+  assert.notEqual(registry.get("deye-ems-panel-2-2-03"),LegacyPanel);
   assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.2\.03/);
 });
 
