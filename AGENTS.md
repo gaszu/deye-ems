@@ -13,3 +13,9 @@
 - Run meaningful checks for changed behavior. Build the standalone ZIP with build_release.py and verify published sources against the tested files. Describe publication and live deployment separately.
 - Document non-obvious behavior as part of each code change. Explain why an invariant, safety check, ordering rule, or fallback exists where it is implemented. Keep affected comments and public documentation in sync with behavior, and avoid restating obvious code.
 - For each release, keep the version in the README release label and repository layout description aligned with the integration manifest, and include it in the release commit title. Include the relevant version in commit titles that update the public file descriptions.
+
+## Whole-repository consistency
+
+Before closing any fix or release, review the complete public repository for affected references, including code comments, README in both languages, INSTALL, MIGRATION, SPECIFICATION, TARIFFS, VALIDATION, preview, tests, Marketplace metadata and release notes. Update every affected file in the same work and verify the result on GitHub. Preserve accurate files as they are.
+
+For each release, check that the manifest, backend and panel version and registration, package, release notes, visible documentation version labels and release commit title agree. Verify the checks, published tag and asset, and the version actually loaded on the production instance. Preserve compatibility, saved settings and source mappings, and retain a rollback path. Report anything still pending or unverified.
