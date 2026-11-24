@@ -13,6 +13,10 @@
 3. **Zabezpieczenia.** Ustawienia rezerwy, stan baterii, aktualność pomiarów i zgodność odczytów z konfiguracją ograniczają działanie regulatora. Tryb obserwacji pokazuje plan i diagnostykę bez przejmowania sterowania falownikiem.
 4. **TOP BALANCE.** Operator może zadać własny cel SoC do 100%, w zakresie akceptowanym przez falownik, i uruchomić ładowanie z sieci także w drogiej strefie. EMS respektuje limity instalacji i BMS. Po osiągnięciu celu lub ręcznym zakończeniu przywraca nastawy slotu i wraca do zwykłego planu. Balansowaniem ogniw zajmuje się BMS.
 
+### Zintegrowany Solcast
+
+Deye EMS ma własnego klienta Solcast API, dostępnego z panelu Home Assistant. Można skonfigurować jedną lub kilka instalacji PV, ustalić odstęp pobierania i dopasować budżet zapytań do konta. Panel pokazuje prognozy P50 i P10 na dziś, pozostałą część dnia i jutro oraz wskazuje, czy dane pochodzą z API, lokalnego cache czy encji Home Assistant. EMS sprawdza aktualność i pokrycie prognozy przed użyciem jej do planowania. Można też korzystać z prognozy udostępnianej przez istniejące encje Home Assistant. [Konfiguracja Solcast](INSTALL.md#solcast--konfiguracja-w-panelu)
+
 ### Falowniki i układy pomiarowe
 
 Katalog zawiera profile wybranych europejskich, niskonapięciowych falowników hybrydowych Deye. Przy konfiguracji wybierz dokładny model z listy.
@@ -52,6 +56,10 @@ Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego 
 2. **Control.** In slots that allow grid charging, EMS manages the inverter’s Grid Charge setting and adjusts the charge current. It uses live measurements, available power, inverter and service connection limits, and BMS constraints. During an eligible overnight window, it prioritises the morning SoC target. After reaching the target, hysteresis avoids frequent restarts.
 3. **Safeguards.** The battery reserve, battery status, measurement freshness and consistency with the configured installation all constrain control. Observation mode shows the plan and diagnostics without taking control of the inverter.
 4. **TOP BALANCE.** An operator can set an SoC target up to 100%, within the inverter’s accepted range, and start grid charging even during an expensive tariff period. EMS respects installation and BMS limits. When the target is reached or the operator stops the session, EMS restores the slot settings and resumes the normal plan. The BMS handles cell balancing.
+
+### Built-in Solcast
+
+Deye EMS includes a Solcast API client configured from its Home Assistant panel. You can configure one or more PV sites, set the polling interval and match the request budget to your account. The panel shows P50 and P10 forecasts for today, the rest of today and tomorrow, and identifies whether the data came from the API, the local cache or Home Assistant entities. EMS checks forecast freshness and coverage before using it to plan charging. Forecasts exposed by existing Home Assistant entities are also supported. [Solcast setup](INSTALL.md#solcast--konfiguracja-w-panelu)
 
 ### Inverters and metering layouts
 
