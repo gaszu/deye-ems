@@ -1,105 +1,31 @@
-# Kalendarz taryf i sloty TOU
+# Taryfy i harmonogram sterowania Deye EMS
 
-W podglądzie planu rodzaj dnia i okna taryfowe są podawane osobno. Dla TAURON G13 EMS stosuje w każdym dniu danego sezonu te same godziny sterowania. G12w zachowuje całodobową niską strefę w weekendy i święta zgodnie z profilem taryfy.
+Opis dotyczy wydania [Deye EMS 2.3.07](https://github.com/gaszu/deye-ems/releases/tag/v2.3.07). Nową konfigurację można zapisać dla **TAURON Dystrybucja G11, G12, G12w lub G13**. Wybierz profil zgodny z umową i potwierdź zegar licznika. EMS używa profilu do planowania i sterowania ładowaniem. Rozliczenie energii odbywa się zgodnie z umową z dostawcą. [Dostępne profile](custom_components/deye_ems/tariff_settings.py)
 
-Nowy wybór w instalatorze i panelu obejmuje wyłącznie **TAURON Dystrybucja: G11, G13, G12w i G12**. Wymaga jawnego potwierdzenia grupy na umowie oraz zegara licznika. EMS nie zmienia umowy, operatora, grupy taryfowej ani zasad rozliczeń. Nie oblicza cen, uprawnień do ulg ani salda wirtualnego magazynu.
+## Godziny zapisane w profilach EMS
 
-Pełny dotychczasowy katalog pięciu operatorów pozostaje w silniku dla zgodności zapisanych konfiguracji i historii. Poniższe zestawienie innych grup jest dokumentacją archiwalnego zakresu, a nie listą nowych wyborów. Aktualizacja nie zastępuje obcej taryfy ani `legacy_g13` Tauronem i nie blokuje zapisu niezwiązanych ustawień. Zmiana archiwalnej konfiguracji taryfy wymaga jawnego wyboru jednej z czterech dostępnych grup TAURON. `legacy_g13` zachowuje dotychczasowy harmonogram, również w weekendy i święta.
+Godziny w tabeli odnoszą się do wybranego zegara taryfowego. Profile TAURON w tej wersji mają zakres ważności od 1 stycznia do 31 grudnia 2026 r. Po upływie ważności EMS blokuje sterowanie oparte na wygasłym profilu do czasu wyboru i potwierdzenia aktualnego kalendarza. [Katalog profili i źródeł](custom_components/deye_ems/tariff_profiles.json)
 
-## Zakres katalogu
+| Profil | Okna taryfowe używane przez EMS | Weekendy i święta ustawowe |
+| --- | --- | --- |
+| **G11** | Jedna strefa przez całą dobę. | Ta sama strefa każdego dnia. Panel opisuje ją jako taryfę jednostrefową. |
+| **G12** | Niższa strefa 13:00–15:00 oraz 22:00–06:00. | Te same godziny każdego dnia. |
+| **G12w** | W dni robocze niższa strefa 13:00–15:00 oraz 22:00–06:00. | Niższa strefa przez całe soboty, niedziele i święta ustawowe w zegarze licznika. |
+| **G13** | Szczyt poranny 07:00–13:00. Szczyt wieczorny 16:00–21:00 od października do marca oraz 19:00–22:00 od kwietnia do września. Pozostałe godziny są pozaszczytowe w harmonogramie EMS. | EMS stosuje te same godziny sterowania przez cały dany sezon. |
 
-| Operator | Potwierdzone kalendarze | Pozycje wymagające odrębnego źródła |
-|---|---|---|
-| PGE Dystrybucja | G11, G12, G12w, G12n, G12as | G12e: wymagany właściwy obszar i jego oficjalny harmonogram. |
-| TAURON Dystrybucja | G11, G12, G12w, G12as, G13, G13s | G14dynamic: wymagane aktualne dane Energetycznego Kompasu. |
-| ENEA Operator | G11, G11p, G11pewna, G12, G12p, G12w, G12as, G12sezON, G13active | Brak dodatkowego, domyślnie włączanego kalendarza. |
-| ENERGA-OPERATOR | G11, G11f, G12, G12w, G12r, G12as | Brak klasycznej G13 w zweryfikowanej taryfie. |
-| PGE Energetyka Kolejowa Operator | G11, G12, G12w, G12as | Brak G13 w zweryfikowanej taryfie. |
+## Zegar licznika i rodzaj dnia
 
-To 30 potwierdzonych kalendarzy operatorów, dwie jawnie zablokowane pozycje informacyjne oraz zachowany profil legacy. „Potwierdzony kalendarz” oznacza potwierdzone godziny, a nie automatyczne zakwalifikowanie każdej umowy do każdej oferty sprzedawcy. Warianty przedpłatowe i szczególne grupy jednostrefowe zachowują własne nazwy; kalendarz nie odwzorowuje ich pozostałych warunków finansowych.
+- **Czas lokalny** stosuje godziny stref bezpośrednio w strefie Europe/Warsaw, z automatyczną zmianą czasu.
+- **Stały CET** stosuje UTC+01:00 przez cały rok. Latem granice stref mogą wypadać o godzinę później na lokalnym zegarze. Doba widoczna w panelu jest warszawska, więc przy stałym CET może obejmować fragmenty dwóch dat taryfowych.
 
-G12as ma potwierdzoną noc22:00–06:00, ale preferencyjna opłata dotyczy przyrostu zużycia względem odpowiedniego okresu bazowego. EMS nie uznaje, że cały nocny pobór otrzyma taką ulgę. G13s wymaga spełnienia warunków tej grupy, m.in. właściwego licznika i rozliczenia; wybór w EMS nie jest wnioskiem o zmianę umowy. Nie wykryto w odczytanych warunkach godzin zakazu zachowania opustów przez sam wybór powyższych grup, ale zgodność konkretnej umowy musi potwierdzić użytkownik.
+W sekcji **Plan na dziś i jutro** panel oznacza dzień roboczy, weekend albo święto ustawowe według daty lokalnej. Komunikat **Tania strefa przez całą dobę** pojawia się, gdy niska strefa potwierdzonego harmonogramu faktycznie pokrywa całą dobę widoczną w panelu. Dzień wolny udzielony indywidualnie przez pracodawcę nie jest świętem ustawowym w kalendarzu EMS.
 
-## Zegar, sezon i dni wolne
+## Wpływ taryfy na plan i falownik
 
-Wszystkie pięć taryf opisuje podstawowo zegar ustawiony na **stały czas zimowy CET**, z wyjątkiem urządzeń automatycznie utrzymujących opublikowane godziny stref w okresach letnim i zimowym. Dlatego przy wyborze rzeczywistego profilu trzeba jawnie potwierdzić jeden wariant:
+Kalendarz wskazuje, w których przedziałach planer może rozważyć ładowanie z sieci. Planer wylicza cele SoC na podstawie prognozy PV, historii zużycia i rezerwy baterii. Jeżeli ma odpowiednią historię, może wyliczyć inny cel dla weekendu nawet przy jednakowych godzinach sterowania G13. Prognoza zużycia nie zmienia reguł taryfy.
 
-- `local`: licznik zachowuje wskazane lokalne godziny przy zmianach czasu; kalendarz `Europe/Warsaw`.
-- `fixed_cet`: UTC+01:00 przez cały rok; podczas czasu letniego panel pokazuje granice o godzinę później na zegarku lokalnym.
+Sześć slotów TOU falownika odwzorowuje techniczny szablon doby. Podział na sloty może rozdzielić jedną strefę taryfową na kilka części. Grid Charge zależy od dopuszczenia danego slotu oraz warunków sterowania. Bieżący prąd EMS dobiera z uwzględnieniem celu i limitów instalacji oraz BMS. Sam komunikat o taniej strefie przez całą dobę nie oznacza ciągłego ładowania. [Opis regulacji i konfiguracji](INSTALL.md)
 
-Datę, miesiąc, dzień tygodnia i święto rozstrzyga się w **wybranym zegarze taryfowym**. Przy stałym CET lokalna pierwsza godzina letniej doby należy jeszcze do poprzedniej daty licznika. Doby widoczne w panelu mają pełne pokrycie rzeczywistych23/24/25godzin. Sezon taryfy, najczęściej1kwietnia–30września, jest odrębny od marcowej i październikowej zmiany DST.
+## Istniejące profile i archiwum
 
-Kalendarz świąt uwzględnia ustawowe święta stałe, Wielkanoc i Poniedziałek Wielkanocny, Zielone Świątki i Boże Ciało, a także Wigilię od2025r. Dzień wolny przyznany przez pracodawcę za święto sobotnie nie staje się świętem taryfowym. Sobota jest uwzględniana osobno tylko w grupach, które ją wskazują. TAURON dopuszcza zachowanie poprzednich godzin lub katalogu świąt w starszych, jeszcze nieprzeprogramowanych licznikach: taki przypadek wymaga potwierdzenia ustawień, nie zgadywania przez EMS.
-
-## Najważniejsze różnice godzin
-
-Godziny poniżej są podane w potwierdzonym zegarze taryfowym, a nie zawsze w czasie zegarka użytkownika.
-
-| Grupa / operator | Niższa strefa lub szczególna reguła |
-|---|---|
-| G11 i warianty jednostrefowe | Jedna strefa00:00–24:00; brak operatorowego końca taniego okna. |
-| G12 TAURON/ENEA/ENERGA/PGE EK |13:00–15:00 oraz22:00–06:00, codziennie. |
-| G12 PGE Dystrybucja | Zimą13:00–15:00, latem15:00–17:00, zawsze22:00–06:00. |
-| G12w TAURON/ENERGA/PGE EK | Jak ich G12 w dni robocze; całe soboty, niedziele i święta niższe. |
-| G12w PGE Dystrybucja | Jak sezonowe G12; całe soboty, niedziele i święta niższe. |
-| G12w ENEA |21:00–06:00 w dni robocze; całe weekendy/święta niższe. **Bez dziennego bloku13:00–15:00.** |
-| G12n PGE Dystrybucja |01:00–05:00 poniedziałek–sobota; całe niedziele/święta niższe. Zwykła sobota nie jest cała tańsza. |
-| G12r ENERGA |13:00–16:00 i22:00–07:00, każdy dzień, bez całodobowego weekendowego wyjątku. |
-| G13 TAURON | Szczyt rano07:00–13:00; wieczorem zimą16:00–21:00, latem19:00–22:00. W EMS ten sam harmonogram obowiązuje codziennie, także w weekendy i święta; pozostałe godziny pozaszczytowe. Jest to reguła sterowania, nie opis rozliczeń OSD. |
-| G13s TAURON | Latem: dzienna pozaszczytowa09:00–17:00, noc21:00–07:00, szczyt07:00–09:00 i17:00–21:00. Zimą: dzienna pozaszczytowa10:00–15:00, noc21:00–07:00, szczyt07:00–10:00 i15:00–21:00. |
-| G12sezON ENEA | Zima22:00–06:00 i11:00–13:00; lato04:00–06:00 i09:00–17:00. Bez całodobowego weekendowego wyjątku. |
-| G13active ENEA | Miesięczny rozkład trzech stref, przedstawiony poniżej; bez całodobowego weekendowego wyjątku. |
-
-W G13s weekend/święto zmienia stawki, **nie usuwa stref szczytowych**. Kolejność preferencji dystrybucji latem: dzienna pozaszczytowa, noc, szczyt; zimą: noc, dzienna pozaszczytowa, szczyt. Kalendarz pozwala rozważać ładowanie z sieci tylko w najniższej klasie; nie oznacza to nakazu ładowania, szczególnie latem przy prognozie PV.
-
-G13active ENEA:
-
-| Miesiąc | Zalecany pobór (`low`) | Zalecane ograniczanie (`high`) |
-|---|---|---|
-| I |23:00–06:00 |07:00–10:00,15:00–20:00 |
-| II |23:00–06:00 |07:00–09:00,16:00–21:00 |
-| III |10:00–16:00 |06:00–09:00,16:00–23:00 |
-| IV |10:00–16:00 |06:00–09:00,18:00–23:00 |
-| V–VIII |09:00–17:00 |06:00–09:00,18:00–23:00 |
-| IX |10:00–16:00 |06:00–09:00,17:00–23:00 |
-| X |10:00–16:00 |07:00–09:00,16:00–23:00 |
-| XI |23:00–06:00 |07:00–09:00,14:00–21:00 |
-| XII |23:00–06:00 |07:00–10:00,13:00–20:00 |
-
-Pozostałe godziny G13active to `normal`. Są odrębną strefą operatora, ale sam jej wybór nie udziela zgody na ładowanie z sieci.
-
-## Kontrakt modułu i połączenie z planerem
-
-`tariff_calendar.py` i wersjonowany `tariff_profiles.json` są niezależne od Home Assistanta i falownika. Nie wykonują połączeń sieciowych. Publiczne funkcje:
-
-- `calendar_operators()` i `calendar_profiles(operator_id=None)`: kopie metadanych katalogu, z identyfikatorem, etykietą, źródłem, stroną, datami, wymaganym potwierdzeniem i przyczyną ewentualnej blokady.
-- `describe_calendar(now, profile_id="legacy_g13", clock_basis="local")`: dzisiejsze i jutrzejsze przedziały w czasie lokalnym Warszawy, bieżąca strefa i następna zmiana. Sam podgląd nie aktywuje profilu.
-- `intervals_between(start,end,profile_id,clock_basis)`: pełne pokrycie półotwartego przedziału `[start,end)` datowanymi wierszami UTC. Każdy zawiera ISO i timestamp granic, strefę, klasę `tier`, sezon, datę licznika, zgodę kalendarza na rozważenie ładowania oraz `within_validity`.
-- `calendar_context(now,options)`: bieżący przedział, całe ciągłe okno ładowania przez północ/weekend/święta, kolejne okno i ciągłe okresy wymagające zapasu baterii. Sąsiednie `normal` i `high` łączy na potrzeby pokrycia zapotrzebowania, zachowując oddzielne wiersze stref w podglądzie.
-
-Opcje rzeczywistego profilu to `tariff_profile`, `tariff_clock_basis` i ścisłe `tariff_contract_confirmed=true`. Brak potwierdzenia, wygaśnięcie danych lub znana blokada daje `valid=false` bez okien planistycznych. Nieznany profil/zegar jest błędem; nie uruchamia zastępczego legacy. Dane2026 nie potwierdzają taryfy2027. Planer musi sprawdzać ważność każdego używanego wiersza także wtedy, gdy horyzont prognozy przecina koniec roku.
-
-`tier` jest kolejnością preferencji, nie ceną. `grid_charge_allowed` jest tylko zgodą kalendarza na **rozważenie** poboru do baterii. Nadal obowiązują prognoza PV, zasady zimowej i letniej pracy, rezerwa SoC, BMS/Deye, pomiary i ograniczenia mocy. Cele SoC powstają dla realnych terminów i zapotrzebowania; taryfa nie narzuca stałego poziomu baterii.
-
-Jednostrefowa G11 nie ma operatorowego terminu końca taniego okna: `charge_window.continuous=true`, granice są puste. Planer może użyć jawnie opisanego terminu planistycznego wynikającego z prognozy i rezerwy. Nie wolno przedstawiać go jako nowej strefy operatora.
-
-Sześć fizycznych początków Deye dla czterech dostępnych grup TAURON jest stałych w obrębie sezonu i potwierdzonego zegara licznika. G13 oraz operacyjny podział płaskiej G11 mają zimą **00:00, 04:00, 07:00, 13:00, 16:00, 21:00**, a latem **00:00, 04:00, 07:00, 13:00, 19:00, 22:00**. G12 i G12w mają przez cały rok **00:00, 04:00, 06:00, 13:00, 15:00, 22:00**. Podane godziny są w zegarze licznika; przy `fixed_cet` są przeliczane na lokalny zegar Deye, także przy zmianie czasu. Dodatkowe podziały 00:00/04:00 nie tworzą nowych stref. G11 pozostaje płaska. Weekend i święto zmieniają wyłącznie rzeczywistą klasyfikację stref i zgodę kalendarza, bez przebudowy sześciu godzin. Wszystkie źródłowe granice zwykłego dnia muszą się zmieścić; brak pokrycia blokuje program zamiast obcinać taryfę.
-
-Karty planu TAURON dzielą niezmieniony kalendarz na te same datowane sloty (`slot`, `slot_time`, `start`, `end`). Korzystają z istniejących celów i terminów `plan.targets`; podział nie tworzy sześciu nowych deadline ani nowych celów SoC. Cel, prognoza i rezerwa zachowują odrębne znaczenie, a brak prognozy pozostaje pusty. Archiwalne profile innych operatorów zachowują poprzednią kompilację cyklicznych przejść i podziałów oraz własne reguły miesięcy, sezonów i dni wolnych. G13active może mieć siedem wierszy kalendarza po przecięciu doby o północy; nie oznacza to siedmiu rejestrów Deye.
-
-Przejście ze starego programu zegarów wykonuje zwykły sterownik po potwierdzeniu sześciu GC wyłączonych oraz odczytu HA nastawy GRID równego 0 A, nie starszego niż ostatni możliwy zamiar i próba jej zapisu. Niezmieniona nastawa może być odczytana wcześniej; bieżącą komunikację potwierdzają osobno świeże pomiary mocy. Późniejszy możliwy dodatni zamiar, brak znanej historii, odtworzony lub niepoprawny odczyt blokują zmianę zegarów. Sterownik sprawdza warunki ponownie po zapisie dziennika, bezpośrednio przed każdą usługą zegara. Sam powrót usługi ustawienia 0 A nie zastępuje odczytu. Potwierdzenie dotyczy encji nastawy w HA, a nie fizycznego prądu baterii; ładowanie z PV może nadal trwać.
-
-Instrukcje Deye pokazują harmonogram **cykliczny**: przykładowe sześć początków 01:00, 05:00, 08:00, 10:00, 15:00 i 18:00 domyka ostatni przedział następnego dnia o 01:00. Potwierdzają to [SG04LP3-EU, instrukcja z 13.08.2024, strona PDF 41 / drukowana 39](https://www.deyeinverter.com/deyeinverter/2024/08/13/instructions_sun-5-12k-sg04lp3-eu_240813_en.pdf#page=41) oraz [SG05LP1-EU 3,6–8 kW, instrukcja z 19.03.2026, strona PDF 37 / drukowana 35](https://www.deyeinverter.com/deyeinverter/2026/03/19/rand/6545/%E3%80%90b%E3%80%91manual_sun-3.6-8k-sg05lp1-eu_20260319_en.pdf#page=37). Zatem ten sam rodzaj strefy po obu stronach północy może należeć do jednego cyklicznego przedziału; północ nie musi zużywać osobnego rejestru. Jest to podstawa sposobu kompilacji, a nie potwierdzenie zachowania konkretnej wersji firmware lub przyjęcia nastaw przez urządzenie.
-
-## Źródła i daty weryfikacji
-
-Katalog sprawdzono13.11.2026. Zapis źródeł obejmuje godziny i warunki ich stosowania; nie odtwarza pełnych dokumentów taryfowych.
-
-- [TAURON Dystrybucja, taryfa2026](https://www.tauron-dystrybucja.pl/-/media/offer-documents/dystrybucja/aktualna-taryfa/taryfa-tauron-dystrybucja-2026_ocr.ashx), strony9,11–13: grupy, godziny, sezony i zegar; s.44: względna kolejność stref G13s. [Opis G13s operatora](https://www.tauron-dystrybucja.pl/grupa-taryfowa-g13s) — warunki licznika i cyklu rozliczeń.
-- [PGE Dystrybucja, tekst jednolity od01.02.2026](https://pgedystrybucja.pl/content/download/15f0a79cad0e85c168cd6b8430b4a2e9/file/tekst-jednolity-od-01.02.2026_taryfa-pge-dystrybucja-na-rok-2026.pdf?inLanguage=pol-PL&version=3&contentId=27274), strony10–12,16–17,59. §2.2.9 odsyła szczególne godziny G12e do [obszaru taryfy elastycznej](https://pgedystrybucja.pl/taryfaelastyczna); jego nieodczytany harmonogram nie został zastąpiony źródłem wtórnym.
-- [ENEA Operator, aktualny wyciąg01.10–31.12.2026](https://www.operator.enea.pl/media/5191/enea-operatorwyciag-z-taryfy01102026-31122026pdf.pdf), strony2–3: godziny,12miesięcy G13active i zegar; [pełna taryfa2026 z decyzją URE](https://www.operator.enea.pl/media/3259/uslugi-dystrybucyjne/decyzja-prezesa-ure-z-dnia-17-grudnia-2025-rpdf.pdf). Konkretne godziny G12 potwierdza [FAQ operatora](https://www.operator.enea.pl/obsluga-klienta/pytania-i-odpowiedzi).
-- [ENERGA-OPERATOR, taryfa2026](https://cdn-netpr.pl/file/mediakit/2933024/8/20251217_taryfa_2026.pdf), strony8,12; [oficjalna strona taryfy](https://energa-operator.pl/uslugi/oplaty-i-faktury/taryfa) potwierdza okres01.01–31.12.2026.
-- [PGE Energetyka Kolejowa, taryfa dystrybucyjna2026 zatwierdzona19.12.2025](https://bip.ure.gov.pl/download/3/20368/PGEEnergetykaKolejowaSA.pdf), strony drukowane taryfy9–10,13. Skan tabel sprawdzono wizualnie. [Decyzja URE07.04.2026](https://bip.ure.gov.pl/download/3/20661/PGEEnergetykaKolejowa.pdf) zmienia nazwę na PGE Energetyka Kolejowa Operator, zachowując taryfę. To inny operator niż PGE Dystrybucja i inny dokument niż taryfa sprzedaży.
-- [Ustawa o dniach wolnych, tekst jednolity Dz.U.2025poz.296](https://api.sejm.gov.pl/eli/acts/DU/2025/296/text.pdf), strona2, w tym Wigilia od2025r.
-
-Stoen nie należy do wybranego przez użytkownika zakresu pięciu operatorów i nie jest obecny w katalogu2.1.0.
+Silnik zachowuje wcześniej zapisane profile zgodnie z ich dostępnością, ważnością i regułami. Dotychczasowy własny harmonogram `legacy_g13` jest oddzielnym profilem od TAURON G13. Pełny katalog, w tym profile innych operatorów, jest dostępny w źródłach. Historyczne zestawienia i źródła są dostępne w archiwalnej wersji dokumentu. [Katalog profili](custom_components/deye_ems/tariff_profiles.json) · [Archiwalna dokumentacja](https://github.com/gaszu/deye-ems/blob/c20c92cac6ffbd62432102594d39d0a02f7487ef/TARIFFS.md)
