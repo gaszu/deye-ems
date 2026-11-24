@@ -49,6 +49,8 @@ Do nowej konfiguracji można wybrać **TAURON Dystrybucja G11, G12, G12w i G13**
 
 ### Instalacja i dokumentacja
 
+Instalacja wymaga fizycznego mostka **Modbus RS‑485** podłączonego do portu RS‑485 falownika. Mostek przekazuje dane do Home Assistant przez Wi‑Fi lub przewodowy LAN. Deye EMS korzysta z encji udostępnionych przez integrację obsługującą mostek. Do aktywnego sterowania te encje muszą również umożliwiać zapis nastaw ładowania.
+
 Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego wydania. Po dodaniu integracji panel Deye EMS jest dostępny w menu bocznym administratora.
 
 [Instrukcja instalacji](INSTALL.md) · [Specyfikacja silnika](SPECIFICATION.md) · [Podgląd na danych syntetycznych](preview/README.md) · [Wydania](https://github.com/gaszu/deye-ems/releases)
@@ -99,6 +101,8 @@ New configurations can select **TAURON Dystrybucja G11, G12, G12w and G13**. The
 - **Manual mapping** allows entities from a separate BMS integration. With hardware such as JK-BMS, compatibility depends on whether Deye, YamBMS or another integration exposes the required measurements and charge-blocking or alarm signals correctly.
 
 ### Installation and documentation
+
+The installation requires a physical **Modbus RS‑485** bridge connected to the inverter’s RS‑485 port. The bridge delivers data to Home Assistant over Wi‑Fi or wired LAN. Deye EMS uses the entities exposed by the integration that handles the bridge. For active control, those entities must also allow writing charge settings.
 
 Install through Marketplace or use the ZIP from a published release. Once the integration has been added, the Deye EMS panel appears in the administrator’s sidebar.
 
