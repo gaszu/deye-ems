@@ -311,6 +311,10 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
     cheap-window reserve emergency. This minimum is a reserve floor, not a
     weather-dependent charging target.
 
+    The timing below describes the default proposal policy in this function.
+    The running EMS schedules ordinary dispatch through scheduled_current,
+    including its distinct overnight interval.
+
     An unknown/future history or attempt ledger prevents ordinary changes.
     The dispatch clock includes every potentially sent current setting,
     including safety reductions. Ordinary writes require 600 seconds since

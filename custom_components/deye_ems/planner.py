@@ -2,8 +2,9 @@
 
 ``plan_energy`` accepts ``now`` (aware datetime or ISO string), ``soc_percent``,
 and exactly 48 chronological half-hour ``forecast`` records with ``timestamp``,
-``pv_p10_kw``, ``pv_p50_kw`` and ``load_kw``. LOAD already includes the complete
-heat pump: this module never adds PC/today/yesterday energy a second time.
+``pv_p10_kw``, ``pv_p50_kw`` and ``load_kw``. The demand forecast already
+includes separately modelled devices, including a heat pump if configured.
+The planner consumes that total directly.
 The first timestamp is the Unix half-hour containing now. Explicit offsets
 disambiguate DST. A dated Solcast cache is acceptable when it covers this axis;
 retrieval age alone never makes a covered forecast stale.

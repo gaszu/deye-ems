@@ -2367,9 +2367,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         ready = ready and self._current_policy_ready(self._now())
         pending_reduction = self._pending_reduction_ok(
             observed, self._now(), control.get("next_a", 0), cap)
-        # A safe current ramp must not pulse an already enabled charger OFF for
-        # ten seconds every thirty seconds. Initial enabling still requires the
-        # exact requested setting to settle; continuing is a separate decision.
+        # Keep an enabled charger armed while a safe setting settles. Initial
+        # enabling still requires readback; continuing is a separate decision.
         continuing = (observed_grid["ordinary_history_known"] and
                       active_gc is not None and active_gc.state == "on" and permitted and (taper or observed_need > 0) and
                       (taper or not self._memory["current_policy"].get("stopped", True)) and
