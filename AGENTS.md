@@ -21,3 +21,5 @@ Before closing any fix or release, review the complete public repository for aff
 For each release, check that the manifest, backend and panel version and registration, package, release notes, visible documentation version labels and release commit title agree. Verify the checks, published tag and asset, and the version actually loaded on the production instance. Preserve compatibility, saved settings and source mappings, and retain a rollback path. Report anything still pending or unverified.
 
 Keep the GitHub repository homepage current after every public change. Verify the rendered README in both languages and the visible release label. Keep the homepage focused on product behavior, installation and user-facing links. Keep release workflow details out of the project overview.
+
+At each release, verify the explicit version on all four public repository-layout rows: custom_components/deye_ems, preview, release-notes, and tests. Verify the directory rows and current file descriptions on the GitHub homepage together.

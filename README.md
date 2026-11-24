@@ -145,8 +145,8 @@ Poniższy przewodnik opisuje wydanie **2.3.07**. The layout below describes rele
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
 | [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.3.07** |
-| [tests](tests) | Testy offline / Offline tests |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes |
+| [tests](tests) | Testy offline / Offline tests · **2.3.07** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.3.07** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.3.07** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).
