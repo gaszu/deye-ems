@@ -1,4 +1,6 @@
-# Kalendarz taryf i stałe sloty TAURON w 2.1.6
+# Kalendarz taryf i sloty TOU
+
+W podglądzie planu rodzaj dnia i okna taryfowe są podawane osobno. Dla TAURON G13 EMS stosuje w każdym dniu danego sezonu te same godziny sterowania. G12w zachowuje całodobową niską strefę w weekendy i święta zgodnie z profilem taryfy.
 
 Nowy wybór w instalatorze i panelu obejmuje wyłącznie **TAURON Dystrybucja: G11, G13, G12w i G12**. Wymaga jawnego potwierdzenia grupy na umowie oraz zegara licznika. EMS nie zmienia umowy, operatora, grupy taryfowej ani zasad rozliczeń. Nie oblicza cen, uprawnień do ulg ani salda wirtualnego magazynu.
 

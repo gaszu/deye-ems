@@ -133,3 +133,15 @@ The installation requires a physical **Modbus RS‑485** bridge connected to the
 Install through Marketplace or use the ZIP from a published release. Once the integration has been added, the Deye EMS panel appears in the administrator’s sidebar.
 
 [Installation guide](INSTALL.md) · [Engine specification](SPECIFICATION.md) · [Demo with synthetic data](preview/README.md) · [Releases](https://github.com/gaszu/deye-ems/releases)
+
+## Pliki projektu / Repository layout
+
+| Ścieżka / Path | Zawartość / Contents |
+| --- | --- |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source |
+| [tests](tests) | Testy offline / Offline tests |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes |
+| [.github](.github) | Walidacja i publikacja / Validation and publishing |
+
+Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).

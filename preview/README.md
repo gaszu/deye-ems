@@ -1,5 +1,7 @@
 # Podgląd panelu Deye EMS
 
+Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
+
 Podgląd uruchamia ten sam komponent interfejsu co integracja, z przykładowymi
 danymi i symulowanymi odpowiedziami. Nie łączy się z Home Assistantem,
 Solcastem ani falownikiem. Nie wpisuj prawdziwych kluczy API.

@@ -1,4 +1,6 @@
-# Specyfikacja Deye EMS 2.1.10
+# Specyfikacja silnika Deye EMS
+
+Bieżąca prognoza zużycia korzysta z maksymalnie 42 dni statystyk godzinowych i ograniczonej korekty trendu. Ochronna regulacja prądu korzysta z aktualnych pomiarów. Panel pokazuje rodzaj dnia niezależnie od taryfy i oznacza całodobową tanią strefę zgodnie z potwierdzonym kalendarzem.
 
 ## Sterowanie w potwierdzonej taryfie od 2.3.02
 

@@ -1,5 +1,6 @@
 # Instalacja i obsługa Deye EMS
 
+Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
 ## Rampa prądu i zakończenie ładowania
 

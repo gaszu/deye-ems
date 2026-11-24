@@ -1,4 +1,8 @@
-"""Build a standalone ZIP; only integration sources and public docs are included."""
+"""Build the standalone ZIP for the version in the integration manifest.
+
+The archive is generated under dist/ for publication as a GitHub Release asset.
+It includes the integration and public manuals.
+"""
 import ast
 import importlib.util
 import json

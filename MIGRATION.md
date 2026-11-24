@@ -1,5 +1,6 @@
-# Przejście z innego EMS i powrót z kopii
+# Migracja, aktualizacja i powrót z kopii
 
+Przy zwykłej aktualizacji zachowaj wpis integracji oraz dane runtime. Zapisz kopię konfiguracji bez danych dostępu i zachowaj poprzednią paczkę z [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Po instalacji sprawdź konfigurację Home Assistant i potwierdź wersję załadowaną po restarcie. Rozdziały z numerami wersji opisują konkretne ścieżki migracji.
 
 ## Rampa prądu i zakończenie ładowania
 
