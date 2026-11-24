@@ -115,7 +115,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "slot_measurements": {}, "safety_raise": {},
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
                         "grid_dispatch": {}, "current_policy": {}, "initial_charge_window": {},
-                        "metering_context": {}, "soc_floor_guard": {}, "tariff_slot_history": {}}
+                        "metering_context": {}, "soc_floor_guard": {}, "tariff_slot_history": {},
+                        "top_balance": {}}
         self._soc_history = {}
         self._last_save_ts = 0
         self._last_error = None
@@ -260,6 +261,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 elif isinstance(saved.get(key), dict):
                     self._memory[key] = saved[key]
         self._memory = self._redact(self._memory)
+        if self._memory["top_balance"]:
+            self._memory["top_balance"]["enabled"] = False
         # A restart retains the target latch and journal; re-read current inputs.
         self._memory["current_policy"]["observed_at"] = None
         dispatch = self._memory["grid_dispatch"]
@@ -536,6 +539,12 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             except Exception:
                 return False
         async with self._lock:
+            if mode == "shadow" and self._memory["top_balance"]:
+                self._memory["top_balance"]["enabled"] = False
+                await self._save()
+                now = self._now()
+                if await self._top_balance_tick(self._read_inputs(now), now) is not None:
+                    raise ValueError("EMS przywraca nastawy TOP BALANCE. Spróbuj ponownie po zakończeniu.")
             if mode == "shadow" and activation_guard is not None and not permitted():
                 raise ValueError("activation_cancelled")
             if mode == "active":
@@ -668,6 +677,165 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     async def async_recalculate(self):
         self._plan_due = 0
         await self.async_request_refresh()
+
+    async def async_set_top_balance(self, enabled, target=None):
+        async with self._lock:
+            session = self._memory["top_balance"]
+            if enabled is False:
+                if session:
+                    session["enabled"] = False
+                    await self._save()
+            elif enabled is True:
+                now = self._now()
+                target = _number(target)
+                if session or self.mode != "active" or self._startup_control_issue or self._owner_conflicts():
+                    raise ValueError("TOP BALANCE wymaga aktywnego EMS bez konfliktów.")
+                if target is None or not 1 <= target <= 100 or target != int(target):
+                    raise ValueError("Wpisz całkowity docelowy SoC od 1 do 100%.")
+                inputs = self._read_inputs(now)
+                slot = self._window(now)[4]
+                if not (inputs["soc_valid"] and inputs["telemetry_valid"] and inputs["soc"] < target
+                        and self._clocks_ok(now) and self._hardware_modes_ok() and self._tariff_control_ok(now)):
+                    raise ValueError("Sprawdź cel SoC, aktualne pomiary i zegar falownika.")
+                if not await self._top_balance_capture(slot, int(target)):
+                    raise ValueError("Brak prawidłowego odczytu nastaw lub falownik nie przyjmuje zadanego SoC.")
+            else:
+                raise ValueError("Brak polecenia TOP BALANCE.")
+        await self.async_request_refresh()
+
+    async def _top_balance_capture(self, slot, target):
+        now = self._now()
+        soc_key, gc_key = f"tou_soc_{slot}", f"tou_gc_{slot}"
+        setting = self._measurement(soc_key, now, unit="%", low=0, high=100)
+        actuator, gc = self._state(soc_key), self._state(gc_key)
+        maximum = _number(actuator.attributes.get("max")) if actuator is not None else None
+        if (setting is None or maximum is None or target > maximum or target < self._effective_min_soc()
+                or gc is None or gc.state not in ("on", "off") or gc.attributes.get("restored", False)):
+            return False
+        old = self._memory["top_balance"]
+        self._memory["top_balance"] = dict(enabled=True, target=target, slot=slot, soc=setting, gc=gc.state,
+            current_entity=self._sources["grid_current_number"], soc_entity=self._sources[soc_key],
+            gc_entity=self._sources[gc_key])
+        try:
+            await self._save()
+        except BaseException:
+            self._memory["top_balance"] = old
+            raise
+        return True
+
+    def _top_balance_record_valid(self, session):
+        slot = session.get("slot")
+        return (type(slot) is int and 1 <= slot <= 6 and session.get("gc") in ("on", "off")
+                and type(session.get("soc")) in (int, float) and 0 <= session["soc"] <= 100
+                and type(session.get("target")) is int and 1 <= session["target"] <= 100
+                and session.get("current_entity") == self._sources["grid_current_number"]
+                and session.get("soc_entity") == self._sources[f"tou_soc_{slot}"]
+                and session.get("gc_entity") == self._sources[f"tou_gc_{slot}"])
+
+    def _top_balance_zero(self, inputs, grid):
+        return (inputs["current_a"] == 0 and grid["current_intent_known"]
+                and grid["pending_current_a"] in (0, None))
+
+    def _top_balance_allows(self, session, inputs, now, entity, action, value):
+        current_entity = self._sources["grid_current_number"]
+        if entity == current_entity and action == "set_value" and value == 0:
+            return True
+        if action == "turn_off":
+            return entity == session.get("gc_entity")
+        if not self._top_balance_record_valid(session):
+            return False
+        slot, goal = session["slot"], session["target"]
+        restoring = session.get("enabled") is not True or self._window(now)[4] != slot
+        grid = self._grid_input(inputs, now, goal, True)
+        zero = self._top_balance_zero(inputs, grid)
+        if restoring:
+            return zero and ((entity == session["soc_entity"] and action == "set_value" and value == session["soc"])
+                             or (entity == session["gc_entity"] and action == "turn_on" and session["gc"] == "on"))
+        cap = calculate_grid_charge_cap(grid)
+        if not (inputs["soc_valid"] and inputs["soc"] < goal and cap["telemetry_ok"]
+                and cap["grid_within_limits"] and self._hardware_modes_ok() and self._clocks_ok(now)):
+            return False
+        if entity == session["soc_entity"] and action == "set_value":
+            state = self._state(f"tou_soc_{slot}")
+            maximum = _number(state.attributes.get("max")) if state is not None else None
+            return zero and value == goal and maximum is not None and goal <= maximum
+        if self._measurement(f"tou_soc_{slot}", now, unit="%", low=0, high=100) != goal:
+            return False
+        if entity == session["gc_entity"] and action == "turn_on":
+            return zero
+        gc = self._state(f"tou_gc_{slot}")
+        attempt = self._current_grid_attempt
+        current = inputs["current_a"]
+        return (entity == current_entity and action == "set_value" and current is not None
+                and 0 < value <= cap["cap_a"] and gc is not None and gc.state == "on"
+                and not gc.attributes.get("restored", False) and attempt is not None
+                and (not attempt["ordinary"] and value < current
+                     or attempt["ordinary"] and current < value
+                     and self._ordinary_dispatch_ready(now, own_attempt=attempt, fast=True)
+                     and value <= calculate_grid_charge_increase_cap(grid)["increase_cap_a"]))
+
+    async def _top_balance_tick(self, inputs, now):
+        session = self._memory["top_balance"]
+        if not self._top_balance_record_valid(session):
+            self._last_error = "top_balance_restore_invalid"
+            return {"runtime_reason": "top_balance_restoring"}
+        slot, goal = session["slot"], session["target"]
+        active_slot = self._window(now)[4]
+        if session.get("enabled") is True and inputs["soc_valid"] and inputs["soc"] >= goal:
+            session["enabled"] = False
+            await self._save()
+        restoring = session.get("enabled") is not True or slot != active_slot
+        grid = self._grid_input(inputs, now, goal, True)
+        cap = calculate_grid_charge_cap(grid)
+        zero = self._top_balance_zero(inputs, grid)
+        control = {**cap, "next_a": 0, "runtime_reason": "top_balance_restoring" if restoring else "top_balance_active"}
+        safe = (inputs["soc_valid"] and inputs["soc"] < goal and cap["telemetry_ok"]
+                and cap["grid_within_limits"] and self._hardware_modes_ok() and self._clocks_ok(now))
+        if restoring or not safe:
+            if not zero:
+                await self._grid_attempt(0, now.timestamp(), force=True, reason="top_balance_stop", top_balance=True)
+                if not safe and not restoring:
+                    await self._gc(slot, False)
+                return control
+            if not restoring:
+                return control
+        key = f"tou_soc_{slot}"
+        wanted = session["soc"] if restoring else goal
+        if self._measurement(key, now, unit="%", low=0, high=100) != wanted:
+            if not restoring and not zero:
+                await self._grid_attempt(0, now.timestamp(), force=True, reason="top_balance_prepare", top_balance=True)
+            else:
+                await self._attempt(session["soc_entity"], "set_value", wanted, now.timestamp(), cooldown=10)
+            return control
+        gc = self._state(f"tou_gc_{slot}")
+        wanted_gc = session["gc"] if restoring else "on"
+        if gc is None or gc.state != wanted_gc or gc.attributes.get("restored", False):
+            if zero:
+                await self._gc(slot, wanted_gc == "on")
+            else:
+                await self._grid_attempt(0, now.timestamp(), force=True, reason="top_balance_prepare", top_balance=True)
+            return control
+        if restoring:
+            if session.get("enabled") is True and await self._top_balance_capture(active_slot, goal):
+                return control
+            self._memory["top_balance"] = {}
+            try:
+                await self._save()
+            except BaseException:
+                self._memory["top_balance"] = session
+                raise
+            return None
+        current = inputs["current_a"]
+        upper = calculate_grid_charge_increase_cap(grid)["increase_cap_a"]
+        wanted = upper // QUANTUM_A * QUANTUM_A if upper >= QUANTUM_A else upper
+        control["next_a"] = wanted
+        if current > cap["cap_a"] or (grid["pending_current_a"] or 0) > cap["cap_a"]:
+            ceiling = self._current_intent_ceiling(inputs, self._dispatch_history(now))
+            reduction = min(wanted, ceiling) if wanted < current and grid["pending_current_a"] in (None, 0) else 0
+            await self._grid_attempt(reduction, now.timestamp(), force=True, reason="top_balance_safety", top_balance=True)
+        elif wanted > current and grid["pending_current_a"] in (None, 0):
+            await self._grid_attempt(wanted, now.timestamp(), reason="top_balance_increase", top_balance=True)
+        return control
 
     async def _save(self):
         async with self._store_lock:
@@ -1489,7 +1657,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             "id": uuid4().hex, "spent": False}
         return True
 
-    def _ordinary_dispatch_ready(self, now, *, own_attempt=None):
+    def _ordinary_dispatch_ready(self, now, *, own_attempt=None, fast=False):
         marker = self._memory.get("initial_charge_window")
         if marker != {} and not self._initial_record_valid(marker, now):
             return False
@@ -1498,7 +1666,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return False
         return (history.get("ordinary_positive_known") is True and
                 dispatch_ready(now.timestamp(), history.get("possible_at"), history.get("not_sent_at"),
-                               history.get("ordinary_positive_at"), fast=self._fast_night_charge(now)))
+                               history.get("ordinary_positive_at"), fast=fast or self._fast_night_charge(now)))
 
     async def _service(self, entity_id, action, value=None):
         if self._startup_control_issue is not None:
@@ -1523,6 +1691,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         # BMS permission update since the caller calculated its request.
         now = self._now()
         inputs = self._read_inputs(now)
+        if session := self._memory["top_balance"]:
+            if self._top_balance_allows(session, inputs, now, entity_id, action, value):
+                return await self._send_service(entity_id, action, value)
+            return False
         winter, night, afternoon, _, active_slot = self._window(now)
         target, emergency, _ = self._target(now)
         floor = self._effective_min_soc()
@@ -1715,7 +1887,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._grid_reduction_chain = None
             self._pending_grid_reduction = None
 
-    async def _grid_attempt(self, value, now_ts, *, force=False, reason=None):
+    async def _grid_attempt(self, value, now_ts, *, force=False, reason=None, top_balance=False):
         value = int(value)
         now = self._now()
         before = self._read_inputs(now)
@@ -1733,17 +1905,17 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         chain = self._grid_reduction_chain
         old_ledger = deepcopy(self._memory["ledger"].get(self._sources["grid_current_number"], {}))
         ordinary = value > 0 and not force
-        if ordinary and not self._ordinary_dispatch_ready(now):
+        if ordinary and not self._ordinary_dispatch_ready(now, fast=top_balance):
             self._command_suppressed(value, "ordinary", "ordinary_dispatch_wait")
             return False
         target, emergency, _ = self._target(now)
         initial_grid = self._grid_input(before, now, target, emergency)
-        initial = ordinary and before["current_a"] == 0 and not self._initial_window_started(now)
+        initial = ordinary and not top_balance and before["current_a"] == 0 and not self._initial_window_started(now)
         context = {"id": uuid4().hex, "ordinary": ordinary, "outcome": "not_sent", "prepared": False,
                    "previous": history,
                    "initial_start": initial, "initial_permission": initial_dispatch_ready(initial_grid),
                    "initial_deadline": initial_grid["policy_deadline"] if initial else None,
-                   "positive_deadline": initial_grid["policy_deadline"] if value > 0 and initial_grid["cheap_window"] else None}
+                   "positive_deadline": initial_grid["policy_deadline"] if value > 0 and initial_grid["cheap_window"] and not top_balance else None}
         if value <= 0:
             self._pending_grid_reduction = None
         self._current_grid_attempt = context
@@ -2820,10 +2992,16 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._save()
             active = self.mode == "active" and self._startup_control_issue is None
             floor = self._effective_min_soc()
+            top_control = None
+            if self._memory["top_balance"]:
+                top_control = (await self._top_balance_tick(inputs, now) if active
+                               else {"runtime_reason": "top_balance_restoring", "next_a": 0})
             safety_grid = self._grid_input(inputs, now, floor, False, safety_only=True)
             safety = self._controller(safety_grid)
             modes_ok = self._hardware_modes_ok()
-            if active and not modes_ok:
+            if top_control is not None:
+                pass
+            elif active and not modes_ok:
                 await self._disable_gc()
                 await self._grid_attempt(0, now.timestamp(), force=True, reason="hardware_mode_mismatch")
             elif active:
@@ -2860,7 +3038,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             control = self._controller(request_grid)
             control.update(describe_current_wait(request_grid))
             modes_ok = self._hardware_modes_ok()
-            if self.mode == "active" and self._startup_control_issue is not None:
+            if top_control is not None:
+                control = top_control
+            elif self.mode == "active" and self._startup_control_issue is not None:
                 control["runtime_reason"] = "waiting_for_startup_control"
             elif active and not modes_ok:
                 await self._disable_gc()
@@ -2889,6 +3069,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     "status": control.get("runtime_reason", "active" if active else "shadow"),
                     "error": self._last_error, "conflicts": conflicts,
                     "startup_control_issue": self._startup_control_issue if self.mode == "active" else None,
+                    "top_balance": {key: self._memory["top_balance"].get(key) for key in ("enabled", "target")},
                     "inputs": inputs, "plan": public_plan, "tariff_calendar": self.options["tariff_calendar"],
                     "command_diagnostics": deepcopy(self._command_diagnostics),
                     "control": {**control, "target_soc": target,

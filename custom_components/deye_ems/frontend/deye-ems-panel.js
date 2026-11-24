@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-3-03";
-const PANEL_VERSION = "2.3.03";
+const PANEL_TAG = "deye-ems-panel-2-3-04";
+const PANEL_VERSION = "2.3.04";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -1455,6 +1455,9 @@ class DeyeEMSPanel extends HTMLElement {
     this.renderedAppearanceStage=appearanceStage;
     const p=this.payload||{},d=p.data||{},plan=d.plan||{},c=d.control||{},o=p.options||{},batteryLimit=this.batteryLimitInfo();
     const active=p.mode==="active",pendingStart=this.postSavePending(),rows=plan.rows||[];
+    const balance=d.top_balance||{},balancing=balance.enabled===true;
+    const restoring=balance.enabled===false;
+    const balanceTarget=balance.target??this.drafts.topBalance??100;
     const lowerBound=numeric(o.min_soc_lower_bound),boundValid=o.min_soc_bound_valid===true&&lowerBound!==null&&lowerBound>=5&&lowerBound<=90;
     const rawFloor=numeric(o.effective_min_soc_percent)??numeric(o.min_soc_percent),floor=rawFloor!==null&&rawFloor>=5&&rawFloor<=90?rawFloor:null;
     const fresh=this.snapshotFresh(),request=fresh?c.next_a:null,readSetting=fresh&&d.inputs?.telemetry_valid===true?c.read_setting_a??d.inputs.current_a:null;
@@ -1484,6 +1487,9 @@ class DeyeEMSPanel extends HTMLElement {
       ".slot-plan-heading{margin-top:24px}.slot-plan-heading h3{font-size:21px;margin-bottom:6px}.slot-plan-heading p,.slot-plan-note{line-height:1.6;color:var(--secondary-text-color);font-size:13px;max-width:760px}.slot-day{margin-top:22px}.slot-day>h3{font-size:16px;margin:0 0 12px}.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}.slot-card{padding:18px 14px;text-align:center;min-width:0;box-shadow:none;border-radius:16px}.slot-card.is-current{border-color:var(--primary-color);background:var(--ha-color-fill-primary-quiet-resting,var(--ha-card-background,var(--card-background-color,#fff)))}.slot-card.is-past{background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;text-align:left;min-height:26px}.slot-zone{font-size:12px;font-weight:650;color:var(--secondary-text-color)}.slot-card h4{font-size:15px;line-height:1.5;margin:10px 0 6px}.slot-permission{font-size:12px;min-height:36px;line-height:1.5;margin:0 0 10px;color:var(--secondary-text-color)}.slot-badge{display:inline-block;font-size:10px;line-height:1.5;font-weight:650;padding:3px 7px;border-radius:20px;background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-badge.current{background:var(--ha-color-primary-90,var(--secondary-background-color));color:var(--primary-text-color)}.slot-badge.fallback{background:var(--ha-color-warning-90,var(--secondary-background-color));color:var(--primary-text-color);margin:6px 0}.slot-gauge{position:relative;width:112px;height:112px;margin:0 auto;color:var(--primary-color)}.slot-gauge.reserve{color:var(--secondary-text-color)}.slot-gauge svg{width:112px;height:112px;transform:rotate(-90deg);overflow:visible}.slot-gauge circle{fill:none;stroke-width:8}.gauge-track{stroke:var(--divider-color)}.gauge-value{stroke:currentColor;stroke-linecap:round}.gauge-reading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:2px;color:var(--primary-text-color)}.gauge-reading b{font-size:29px;font-weight:650;letter-spacing:-1px}.gauge-reading span{font-size:13px;color:var(--secondary-text-color)}.slot-role{font-size:13px;font-weight:650;margin:10px 0 4px}.slot-explanation{font-size:11px;line-height:1.5;color:var(--secondary-text-color);min-height:33px;margin:0}.slot-reserve{font-size:11px;color:var(--secondary-text-color);margin:7px 0}.slot-projection{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider-color)}.slot-projection span,.slot-projection small{display:block;color:var(--secondary-text-color);font-size:11px;line-height:1.5}.slot-projection b{display:block;font-size:15px;line-height:1.7;font-weight:600}.slot-plan-note{margin-bottom:0}.stats article{padding:18px}.stats strong{font-size:28px;overflow-wrap:anywhere}.stats .sub{line-height:1.5}.slot-grid article strong{font-size:28px}details>summary{font-size:17px;line-height:1.5}details{border-top:1px solid var(--divider-color);margin-top:24px}details[open]>summary{margin-bottom:4px}@media(max-width:480px){.slot-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.slot-card{padding:14px 9px}.slot-card h4{font-size:13px}.slot-zone{font-size:10px}.slot-card-top{align-items:flex-start;flex-direction:column}.slot-gauge,.slot-gauge svg{width:100px;height:100px}.slot-explanation{min-height:48px}.stats strong{font-size:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}"+
       "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}header,article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){header{flex-direction:column;gap:10px}.mode-controls{width:100%;justify-content:space-between}.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
       '</style><main><header aria-label="Sterowanie EMS"><div class="mode-controls"><div class="pill '+(active?'':'shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div></header>'+
+      '<section aria-label="TOP BALANCE"><div class="actions"><label>Docelowy SoC (%)<input id="top-balance-target" type="number" min="1" max="100" step="1" value="'+esc(balanceTarget)+'" '+(balancing||restoring?'disabled':'')+'></label>'+
+      '<button id="top-balance" '+(this.busy||restoring||!balancing&&(!active||!fresh)?'disabled':'')+'>'+(restoring?'Przywracanie nastaw…':balancing?'Wyłącz TOP BALANCE':'TOP BALANCE')+'</button></div>'+
+      '<p class="legend">Ładowanie z sieci także w drogiej strefie. Po osiągnięciu celu EMS przywróci zwykłą regulację.</p></section>'+
       (this.actionError?'<div role="alert" class="notice error" data-action-error="true"><p><b>Ostatnia nieudana akcja</b></p><p>'+esc(this.actionError.message)+'</p><button id="action-error-dismiss" class="secondary">Zamknij komunikat</button></div>':'')+
       (this.error&&this.error!==this.actionError?.message?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+this.runtimeErrorHtml()+this.startupControlHtml()+this.postSaveHtml()+
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
@@ -1545,6 +1551,18 @@ class DeyeEMSPanel extends HTMLElement {
     this.bindTelemetryDiagnostics();
     this.shadowRoot.getElementById("recalculate")?.addEventListener("click",()=>this.command({command:"recalculate"}));
     this.shadowRoot.getElementById("mode")?.addEventListener("click",()=>this.command({command:"mode",mode:active||pendingStart?"shadow":"active"}));
+    const balanceInput=this.shadowRoot.getElementById("top-balance-target");
+    balanceInput?.addEventListener("input",()=>{this.drafts.topBalance=balanceInput.value;});
+    this.shadowRoot.getElementById("top-balance")?.addEventListener("click",()=>{
+      if(balancing){void this.command({command:"top_balance",enabled:false});return;}
+      const value=Number(balanceInput?.value);
+      if(Number.isInteger(value)&&value>=1&&value<=100){
+        void this.command({command:"top_balance",enabled:true,value});
+      }else{
+        this.error="Wpisz całkowity docelowy SoC od 1 do 100%.";
+        this.render();
+      }
+    });
     this.shadowRoot.getElementById("topology")?.addEventListener("change",event=>{this.drafts.topology=event.target.value;});
     this.shadowRoot.getElementById("topology-save")?.addEventListener("click",()=>{
       if(active||this.busy)return;

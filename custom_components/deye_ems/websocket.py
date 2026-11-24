@@ -59,7 +59,7 @@ async def tariff_catalog(hass, connection, msg):
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/command",
-    vol.Required("command"): vol.In(("recalculate", "mode", "option", "load_save", "load_delete", "load_toggle", "appearance", "check_updates")),
+    vol.Required("command"): vol.In(("recalculate", "mode", "option", "load_save", "load_delete", "load_toggle", "appearance", "check_updates", "top_balance")),
     vol.Optional("theme"): str,
     vol.Optional("mode"): vol.In(("shadow", "active")),
     vol.Optional("original_energy_entity"): str, vol.Optional("channel"): dict,
@@ -96,6 +96,8 @@ async def command(hass, connection, msg):
             await coordinator.async_recalculate()
         elif msg["command"] == "mode":
             await coordinator.async_set_mode(msg["mode"])
+        elif msg["command"] == "top_balance":
+            await coordinator.async_set_top_balance(msg.get("enabled"), msg.get("value"))
         elif msg["command"] == "load_save":
             await coordinator.async_save_load(msg.get("original_energy_entity", ""), msg.get("channel"),
                 expected_revision=msg.get("expected_loads_revision"))
