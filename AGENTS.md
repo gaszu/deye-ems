@@ -12,3 +12,4 @@
 - Public documentation describes product behavior and synthetic validation. Keep deployment records, personal configuration, household telemetry and private audits outside the repository.
 - Run meaningful checks for changed behavior. Build the standalone ZIP with build_release.py and verify published sources against the tested files. Describe publication and live deployment separately.
 - Document non-obvious behavior as part of each code change. Explain why an invariant, safety check, ordering rule, or fallback exists where it is implemented. Keep affected comments and public documentation in sync with behavior, and avoid restating obvious code.
+- For each release, keep the version in the README release label and repository layout description aligned with the integration manifest, and include it in the release commit title. Include the relevant version in commit titles that update the public file descriptions.

@@ -2,6 +2,8 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
+**Aktualne wydanie / Current release:** [Deye EMS 2.3.07](https://github.com/gaszu/deye-ems/releases/tag/v2.3.07)
+
 ## Polski
 
 **Deye EMS jest przeznaczony dla „starych” prosumentów rozliczanych w systemie opustów (net-metering).**
@@ -135,6 +137,8 @@ Install through Marketplace or use the ZIP from a published release. Once the in
 [Installation guide](INSTALL.md) · [Engine specification](SPECIFICATION.md) · [Demo with synthetic data](preview/README.md) · [Releases](https://github.com/gaszu/deye-ems/releases)
 
 ## Pliki projektu / Repository layout
+
+Poniższy przewodnik opisuje wydanie **2.3.07**. The layout below describes release **2.3.07**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
