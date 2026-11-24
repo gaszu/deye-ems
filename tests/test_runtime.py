@@ -516,6 +516,28 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         return [{"start": end-(index+1)*3600, "end": end-index*3600,
                  "mean": value, "change": value/1000} for index in range(168)]
 
+    async def test_long_history_dampens_spikes_and_tracks_persistent_changes(self):
+        h = Harness()
+
+        async def forecast(recent_power, count):
+            end = h.now.replace(minute=0, second=0, microsecond=0).timestamp()
+            rows = [{"start": end-(index+1)*3600, "end": end-index*3600,
+                     "mean": recent_power if index < count else 2000}
+                    for index in range(42*24)]
+
+            async def provider(*args):
+                return {SOURCES["load_power"]: rows}
+
+            h.co._statistics_provider = provider
+            return await h.co._load_profile(h.now)
+
+        stable = await forecast(10000, 1)
+        increased = await forecast(2800, 7*24)
+        decreased = await forecast(1200, 7*24)
+        self.assertLess(stable["load_trend_ratio"], 1.03)
+        self.assertGreaterEqual(increased["load_trend_ratio"], 1.15)
+        self.assertLessEqual(decreased["load_trend_ratio"], .85)
+
     async def test_optional_missing_pc_keeps_whole_load(self):
         h = Harness()
         async def provider(*args):

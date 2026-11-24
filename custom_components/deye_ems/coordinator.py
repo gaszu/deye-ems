@@ -2437,7 +2437,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         from homeassistant.components.recorder import get_instance
         from homeassistant.components.recorder.statistics import statistics_during_period
         job = partial(statistics_during_period, self.hass,
-                      start_time=(now - timedelta(days=7)).replace(minute=0, second=0, microsecond=0).astimezone(_UTC),
+                      start_time=(now - timedelta(days=42)).replace(minute=0, second=0, microsecond=0).astimezone(_UTC),
                       end_time=now.astimezone(_UTC), statistic_ids={load_entity, *(c["energy_entity"] for c in self._channels()),
                           *([self._sources["ct_grid_power"], self._sources["grid_power"]]
                             if self._options["topology"] == "load_with_external_ct" else [])},
@@ -2556,7 +2556,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 for item in items:
                     start, end, value = _stamp(item.get("start")), _stamp(item.get("end")), _number(item.get(field))
                     if None not in (start, end, value) and 3599 <= end-start <= 3601 and (
-                            now.timestamp()-8*86400 <= start < end <= now.timestamp()) and (signed or value >= 0):
+                            now.timestamp()-43*86400 <= start < end <= now.timestamp()) and (signed or value >= 0):
                         if start in output:
                             raise ValueError("duplicate_hourly_statistics")
                         output[start] = (start, end, value*scale)
@@ -2573,69 +2573,73 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             rows = list(load.values())
             if not rows or now.timestamp()-max(x[1] for x in rows) > 10800:
                 raise ValueError("load_statistics_missing")
-            midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            reference = midnight-timedelta(days=1)
-            expected = round((midnight.timestamp()-reference.timestamp())/3600)
             channels = []
             for channel in self._channels():
                 state = self.hass.states.get(channel["energy_entity"])
                 unit_ok = (state is not None and not state.attributes.get("restored", False) and
                            state.attributes.get("unit_of_measurement") in ("Wh", "kWh") and _number(state.state) is not None)
-                # Recorder is explicitly asked for kWh, even for a Wh source.
+                # Recorder supplies energy changes in kWh. Each complete hour turns that into mean W.
                 values = hourly(stats.get(channel["energy_entity"], []), "change", 1000) if unit_ok else {}
-                by_hour = {}
-                yesterday = [x for x in values.values() if reference.timestamp() <= x[0] < midnight.timestamp()]
-                for at, _, power in yesterday:
-                    by_hour.setdefault(datetime.fromtimestamp(at, _TZ).hour, []).append(power)
-                current = [x for x in values.values() if x[0] >= midnight.timestamp()]
-                ratio = 1.0
-                if len(current) >= 3 and all(datetime.fromtimestamp(x[0], _TZ).hour in by_hour for x in current):
-                    denominator = sum(sum(by_hour[datetime.fromtimestamp(x[0], _TZ).hour]) /
-                                      len(by_hour[datetime.fromtimestamp(x[0], _TZ).hour]) for x in current)
-                    if denominator > 0:
-                        ratio = sum(x[2] for x in current)/denominator
-                channels.append({**channel, "values": values, "by_hour": by_hour, "ratio": ratio,
-                                 "reference_complete": len(yesterday) == expected and len(by_hour) >= 23})
-            included = channels
-            included_ready = bool(included) and all(all(at in c["values"] for c in included) and
-                    sum(c["values"][at][2] for c in included) <= row[2] for at, row in load.items())
-            profiles, used = {}, set()
+                channels.append({**channel, "values": values})
+            def estimate(samples, reference, recent):
+                if len(reference) < 3 or len(recent) < 2:
+                    return sum(samples) / len(samples), 1.0
+                baseline = sum(samples[i] for i in reference) / len(reference)
+                latest = sum(samples[i] for i in recent) / len(recent)
+                # Dampen the recent shift and bound its influence on the established baseline.
+                # A small absolute allowance lets a new load emerge from a near-zero baseline.
+                limit = max(100.0, baseline * .30)
+                correction = max(-limit, min(limit, (latest - baseline) * .5))
+                forecast = max(0.0, baseline + correction)
+                return forecast, forecast / baseline if baseline else 1.0
+
+            by_hour = [[] for _ in range(24)]
+            for row in rows:
+                local = datetime.fromtimestamp(row[0], _TZ)
+                by_hour[local.hour].append((row, local.date(), local.weekday() >= 5))
+            recent_start = now.astimezone(_TZ).date() - timedelta(days=6)
+            profiles, trends = {}, {channel["energy_entity"]: [] for channel in channels}
+            load_trends = []
             for weekend in (False, True):
                 values = []
-                for hour in range(24):
-                    candidates = [x for x in rows if datetime.fromtimestamp(x[0], _TZ).hour == hour]
-                    matched = [x for x in candidates if (datetime.fromtimestamp(x[0], _TZ).weekday() >= 5) == weekend]
-                    use = matched if len({datetime.fromtimestamp(x[0], _TZ).date() for x in matched}) >= 3 else candidates
-                    if len({datetime.fromtimestamp(x[0], _TZ).date() for x in use}) < 3:
+                for candidates in by_hour:
+                    matched = [x for x in candidates if x[2] == weekend]
+                    use = matched if len({x[1] for x in matched}) >= 3 else candidates
+                    if len({x[1] for x in use}) < 3:
                         raise ValueError("load_hour_history_insufficient")
-                    weighted = [(x, .85**((now.timestamp()-x[0])/86400)) for x in use]
-                    denominator = sum(w for _, w in weighted)
-                    total = sum(x[2]*w for x, w in weighted)/denominator
-                    # Missing any included series retains whole LOAD; none of
-                    # the included channels is added to it a second time.
-                    if included_ready:
-                        total = sum((x[2]-sum(c["values"][x[0]][2] for c in included))*w
-                                    for x, w in weighted)/denominator
-                    for channel in included if included_ready else []:
-                        channel_rows = [channel["values"][x[0]] for x in use]
-                        if len({datetime.fromtimestamp(x[0], _TZ).date() for x in channel_rows}) < 3:
-                            raise ValueError("channel_load_history_insufficient")
-                        if channel["reference_complete"] and hour in channel["by_hour"]:
-                            forecast = sum(channel["by_hour"][hour])/len(channel["by_hour"][hour])*channel["ratio"]
-                        else:
-                            cw = [(x, .85**((now.timestamp()-x[0])/86400)) for x in channel_rows]
-                            forecast = sum(x[2]*w for x, w in cw)/sum(w for _, w in cw)
-                        total += forecast
-                        used.add(channel["energy_entity"])
-                    values.append(total/1000)
+                    covered = [item for item in use if all(item[0][0] in channel["values"] for channel in channels)
+                               and sum(channel["values"][item[0][0]][2] for channel in channels) <= item[0][2]]
+                    # New meters can contribute once a given hour has enough aligned data.
+                    # Otherwise the full demand series already includes those loads.
+                    included = channels if len({item[1] for item in covered}) >= 3 else []
+                    if included:
+                        use = covered
+                    # One sample per local date avoids overweighting the repeated autumn DST hour.
+                    days = {}
+                    for row, date, _ in use:
+                        samples = [channel["values"][row[0]][2] for channel in included]
+                        days.setdefault(date, []).append([row[2] - sum(samples), *samples])
+                    series = list(zip(*(tuple(sum(column) / len(column) for column in zip(*day))
+                                        for day in days.values())))
+                    reference = [i for i, date in enumerate(days) if date < recent_start]
+                    recent = [i for i, date in enumerate(days) if date >= recent_start]
+                    parts = [estimate(samples, reference, recent) for samples in series]
+                    load_trends.append(parts[0][1])
+                    for channel, (_, ratio) in zip(included, parts[1:]):
+                        trends[channel["energy_entity"]].append(ratio)
+                    values.append(sum(forecast for forecast, _ in parts) / 1000)
                 profiles[str(weekend)] = values
+
+            ratios = {entity: sum(items) / len(items) for entity, items in trends.items() if items}
+            pump = self._sources.get("pc_energy_total")
             result = {"profiles": profiles, "through": max(x[1] for x in rows),
                       "signature": signature,
-                      "pc_applied": self._sources.get("pc_energy_total") in used,
-                      "pc_ratio": next((c["ratio"] for c in channels if c["energy_entity"] == self._sources.get("pc_energy_total")), 1),
+                      "load_trend_ratio": sum(load_trends) / len(load_trends),
+                      "pc_applied": pump in ratios, "pc_ratio": ratios.get(pump, 1.0),
                       "extra_loads": [{k: c[k] for k in ("name", "energy_entity", "included_in_load")}
-                          | {"used": c["energy_entity"] in used, "trend_ratio": c["ratio"],
-                             "reason": "profile_applied_once" if c["energy_entity"] in used else "whole_load_fallback"}
+                          | {"used": c["energy_entity"] in ratios,
+                             "trend_ratio": ratios.get(c["energy_entity"], 1.0),
+                             "reason": "profile_applied_once" if c["energy_entity"] in ratios else "whole_load_fallback"}
                           for c in channels]}
             self._memory["load_profiles"] = result
             return result
