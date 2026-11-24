@@ -8,6 +8,7 @@ on:
       - 'tests/**'
       - 'build_release.py'
       - 'README.md'
+      - 'AGENTS.md'
       - '.github/workflows/release.yml'
       - '.github/workflows/validate.yml'
   workflow_dispatch:
@@ -35,7 +36,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Check project homepage version
+      - name: Check project homepage and guidance versions
         run: |
           python - <<'PY'
           import json
@@ -54,6 +55,12 @@ jobs:
               rows = [line for line in readme.splitlines() if line.startswith(prefix)]
               if len(rows) != 1 or not rows[0].endswith(f' · **{version}** |'):
                   issues.append(f'Expected one {directory} row labelled {version}')
+
+          guidance = Path('AGENTS.md').read_text(encoding='utf-8').splitlines()
+          release_marker = f'Current Deye EMS release: **{version}**.'
+          markers = [line for line in guidance if line.startswith('Current Deye EMS release:')]
+          if markers != [release_marker]:
+              issues.append(f'AGENTS.md must contain exactly one release marker for {version}')
 
           if issues:
               raise SystemExit('\n'.join(issues))

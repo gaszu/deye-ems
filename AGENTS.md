@@ -1,5 +1,7 @@
 # Deye EMS — development guidance
 
+Current Deye EMS release: **2.4.1**.
+
 - Maintain an independently installable Home Assistant custom integration with a local engine. Runtime must not depend on EMHASS, auxiliary helpers or user automations.
 - Preserve the engine contract documented in SPECIFICATION.md. Treat source mappings, safety settings, capacity and power ratings as private configuration. Do not change live settings as part of interface work.
 - Start new installations in observation mode. Source changes require observation; resuming control must be explicit and require current valid inputs and a current plan. Never automatically disable another controller.
@@ -18,7 +20,7 @@
 
 Before closing any fix or release, review the complete public repository for affected references, including code comments, README in both languages, INSTALL, MIGRATION, SPECIFICATION, TARIFFS, VALIDATION, preview, tests, Marketplace metadata and release notes. Update every affected file in the same work and verify the result on GitHub. Preserve accurate files as they are.
 
-For each release, check that the manifest, backend and panel version and registration, package, release notes, visible documentation version labels and release commit title agree. Verify the checks, published tag and asset, and the version actually loaded on the production instance. Preserve compatibility, saved settings and source mappings, and retain a rollback path. Report anything still pending or unverified.
+For each release, check that the manifest, backend and panel version and registration, package, release notes, AGENTS.md version marker, visible documentation version labels and release commit title agree. Verify the checks, published tag and asset, and the version actually loaded on the production instance. Preserve compatibility, saved settings and source mappings, and retain a rollback path. Report anything still pending or unverified.
 
 Keep the GitHub repository homepage current after every public change. Verify the rendered README in both languages and the visible release label. Keep the homepage focused on product behavior, installation and user-facing links. Keep release workflow details out of the project overview.
 
