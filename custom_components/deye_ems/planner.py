@@ -842,7 +842,7 @@ def _plan_tariff(inputs):
                 season="winter" if _winter(now) else "summer", **identity,
                 **{k: cfg[k] for k in ("pv_forecast_mode", "pv_peak_kwp", "pv_forecast_reference_kwp")}))
         risk, _, checked = _simulate(rows, now, soc, cfg, targets)
-        central, projection, _ = _simulate(rows, now, soc, cfg, targets, "pv_p50_kw")
+        central, projection, central_checked = _simulate(rows, now, soc, cfg, targets, "pv_p50_kw")
         public = {}
         for target in targets:
             obs = checked[target["at"].isoformat()]
@@ -851,8 +851,12 @@ def _plan_tariff(inputs):
                 target.update(unreachable=True, reason="target_unreachable_before_deadline")
             if obs["protected_import_kwh"] > TOLERANCE_KWH:
                 target.update(unreachable=True, reason="protected_energy_or_power_deficit")
+            central_obs = central_checked[target["at"].isoformat()]
             target.update(projected_p10_deadline_soc_percent=reached,
-                          projected_p10_protected_import_kwh=obs["protected_import_kwh"])
+                          projected_p10_protected_import_kwh=obs["protected_import_kwh"],
+                          projected_p10_minimum_soc_percent=obs["minimum_soc_percent"],
+                          projected_p50_deadline_soc_percent=central_obs["deadline_soc_percent"],
+                          projected_p50_protected_import_kwh=central_obs["protected_import_kwh"])
             public[target["key"]] = _public(target)
         unreachable = any(t["unreachable"] for t in public.values()) or risk["protected_import_kwh"] > TOLERANCE_KWH or risk["grid_limit_excess_kwh"] > TOLERANCE_KWH
         summary = list(public.values())

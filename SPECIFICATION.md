@@ -1,6 +1,6 @@
 # Specyfikacja silnika Deye EMS
 
-Specyfikacja wydania [Deye EMS 2.3.07](https://github.com/gaszu/deye-ems/releases/tag/v2.3.07). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
+Specyfikacja wydania [Deye EMS 2.3.08](https://github.com/gaszu/deye-ems/releases/tag/v2.3.08). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
 
 ## Pomiary i topologie
 
@@ -49,3 +49,7 @@ Tryb ręczny w aktywnym EMS. Cel jest liczbą całkowitą do 100% w granicach ak
 ## Dokumenty powiązane
 
 [Instalacja](INSTALL.md) · [Taryfy](TARIFFS.md) · [Migracja i powrót](MIGRATION.md) · [Walidacja](VALIDATION.md) · [Archiwum specyfikacji](https://github.com/gaszu/deye-ems/blob/9c31606c64830fbc868c778e385cffb8cfe551c7/SPECIFICATION.md)
+
+## Ryzyko i diagnostyka planu
+
+Panel pokazuje SoC w P10/P50 przed terminem oraz ewentualny niedobór energii w chronionym oknie. Silnik ocenia osiągalność każdego celu osobno, a panel rozróżnia cel planu i cel używany przez regulator. Podniesienie celu ochronnego na podstawie nieosiągalnego planu wymaga ryzyka wyczerpania rezerwy. Diagnostyka odbiornika podaje dostępne i wykorzystane godziny Recorder oraz zakres osobnego profilu. Problemy telemetrii podczas startu i w czasie pracy są rozróżniane.

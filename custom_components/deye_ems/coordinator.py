@@ -1268,8 +1268,12 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs["telemetry_details"], inputs["telemetry_hints"] = describe_telemetry(
             self.hass, self._sources, diagnostic_checks, issues, now,
             groups={"charge_power": charge_keys}, state_lookup=lambda entity: self._entity_state(entity, now))
+        # Record whether a gap occurred before the first usable control snapshot.
+        if inputs.get("telemetry_valid") is True:
+            self._seen_valid_telemetry = True
         if issues:
-            self._last_telemetry_fault = {"at": now.isoformat(), "issues": deepcopy(issues),
+            kind = "runtime" if getattr(self, "_seen_valid_telemetry", False) else "startup"
+            self._last_telemetry_fault = {"at": now.isoformat(), "kind": kind, "issues": deepcopy(issues),
                 "details": [deepcopy(row) for row in inputs["telemetry_details"] if not row.get("valid")]}
         inputs["last_telemetry_fault"] = deepcopy(getattr(self, "_last_telemetry_fault", None))
         inputs["report_stream"] = self._report_stream_status()
@@ -2598,6 +2602,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 by_hour[local.hour].append((row, local.date(), local.weekday() >= 5))
             recent_start = now.astimezone(_TZ).date() - timedelta(days=6)
             profiles, trends = {}, {channel["energy_entity"]: [] for channel in channels}
+            profile_hours = {channel["energy_entity"]: set() for channel in channels}
             load_trends = []
             for weekend in (False, True):
                 values = []
@@ -2625,7 +2630,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     parts = [estimate(samples, reference, recent) for samples in series]
                     load_trends.append(parts[0][1])
                     for channel, (_, ratio) in zip(included, parts[1:]):
-                        trends[channel["energy_entity"]].append(ratio)
+                        entity = channel["energy_entity"]
+                        trends[entity].append(ratio)
+                        profile_hours[entity].update(item[0][0] for item in use)
                     values.append(sum(forecast for forecast, _ in parts) / 1000)
                 profiles[str(weekend)] = values
 
@@ -2638,6 +2645,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                       "extra_loads": [{k: c[k] for k in ("name", "energy_entity", "included_in_load")}
                           | {"used": c["energy_entity"] in ratios,
                              "trend_ratio": ratios.get(c["energy_entity"], 1.0),
+                             "available_hours": len(c["values"]),
+                             "used_hours": len(profile_hours[c["energy_entity"]]),
+                             "profile_hours": len(trends[c["energy_entity"]]),
                              "reason": "profile_applied_once" if c["energy_entity"] in ratios else "whole_load_fallback"}
                           for c in channels]}
             self._memory["load_profiles"] = result
@@ -2784,9 +2794,15 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     if not isinstance(record, dict) or key not in self._deadlines(accepted_now):
                         continue
                     if self._live_record(plan, key, accepted_now):
-                        if plan.get("status") == "ok":
+                        # A shortage at another deadline must not invalidate this target.
+                        minimum_soc = _number(record.get("projected_p10_minimum_soc_percent"))
+                        reserve_risk = (minimum_soc is not None and minimum_soc <= self._effective_min_soc() + .01
+                                        and (_number(record.get("projected_p10_protected_import_kwh")) or 0) > .005)
+                        if (record.get("unreachable") is False or plan.get("status") == "ok"
+                                or self._real_tariff() and not reserve_risk):
                             self._memory["safety_raise"].pop(key, None)
                         elif plan.get("status") == "unreachable":
+                            # A higher target helps only with an energy shortage at the reserve.
                             self._memory["safety_raise"][key] = {**record,
                                 "generated_at": plan["generated_at"], "deadline": record["deadline"]}
             try:
@@ -2810,7 +2826,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 for at in [now.replace(hour=hour, minute=0, second=0, microsecond=0)]}
 
     def _accept_targets(self, plan, now):
-        if (plan.get("status") != "ok" or plan.get("quality") != "valid" or
+        statuses = ("ok", "unreachable") if self._real_tariff() else ("ok",)
+        if (plan.get("status") not in statuses or plan.get("quality") != "valid" or
                 plan.get("source") != "own_deterministic_planner"):
             return
         generated = _stamp(plan.get("generated_at"))
@@ -2923,7 +2940,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         live = self._live_record(self._memory.get("plan", {}), key, now) if key is not None else None
         fallback = (min(self._options["grid_max_soc_percent"], max(
                     self._options["winter_weather_soc_percent"], minimum)) if winter else self._options["grid_max_soc_percent"])
-        selected, emergency, source = (value, cache["emergency"], "own_plan" if live else "dated_cache") if valid else (
+        # A live record at the same deadline does not prove it supplied the cached target.
+        live_accepted = (live is not None and live.get("unreachable") is False
+                         and created == _stamp(self._memory["plan"].get("generated_at"))
+                         and value == _number(live.get("soc_percent")))
+        selected, emergency, source = (value, cache["emergency"], "own_plan" if live_accepted else "dated_cache") if valid else (
             fallback, not winter, "winter_fallback" if winter else "summer_emergency_fallback")
         raised = self._memory["safety_raise"].get(key, {})
         rv, generated = _number(raised.get("soc_percent")), _stamp(raised.get("generated_at"))

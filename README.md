@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.3.07](https://github.com/gaszu/deye-ems/releases/tag/v2.3.07)
+**Aktualne wydanie / Current release:** [Deye EMS 2.3.08](https://github.com/gaszu/deye-ems/releases/tag/v2.3.08)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -29,6 +29,8 @@ Deye EMS ma własnego klienta Solcast API, dostępnego z panelu Home Assistant. 
 - **P50** to mediana prognozy PV, czyli scenariusz środkowy. Silnik używa go do rysowania prognozy SoC w panelu i do oceny, jaką część oczekiwanego zużycia pokryje PV przy wyznaczaniu zimowego celu pogodowego.
 
 Dokładna nastawa prądu uwzględnia bieżące pomiary i limity. Percentyle są danymi wejściowymi scenariuszy planowania. Nie określają prawdopodobieństwa osiągnięcia celu SoC dla całej doby. [Parametry Solcast](https://docs.solcast.com.au/docs/output-parameters) · [Implementacja planera](custom_components/deye_ems/planner.py)
+
+Pod każdym celem w prognozie modelu panel pokazuje SoC w P10 i P50 oraz ryzyko niedoboru. Nagłówek pokazuje cel faktycznie używany przez regulator.
 
 ### Falowniki i układy pomiarowe
 
@@ -96,6 +98,8 @@ Deye EMS includes a Solcast API client configured from its Home Assistant panel.
 
 Live measurements and limits inform the actual charge current. The percentiles are inputs to planning scenarios. They do not give a probability of reaching an SoC target over an entire day. [Solcast output parameters](https://docs.solcast.com.au/docs/output-parameters) · [Planner implementation](custom_components/deye_ems/planner.py)
 
+Each target in the model forecast shows P10 and P50 SoC and any shortage risk. The dashboard header shows the target actually used by the controller.
+
 ### Inverters and metering layouts
 
 The catalogue includes profiles for selected European low-voltage Deye hybrid inverters. Choose the exact model during setup.
@@ -140,13 +144,13 @@ Install through Marketplace or use the ZIP from a published release. Once the in
 
 ## Pliki projektu / Repository layout
 
-Poniższy przewodnik opisuje wydanie **2.3.07**. The layout below describes release **2.3.07**.
+Poniższy przewodnik opisuje wydanie **2.3.08**. The layout below describes release **2.3.08**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.3.07** |
-| [tests](tests) | Testy offline / Offline tests · **2.3.07** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.3.07** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.3.07** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.3.08** |
+| [tests](tests) | Testy offline / Offline tests · **2.3.08** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.3.08** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.3.08** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).

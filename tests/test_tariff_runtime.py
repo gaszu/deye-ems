@@ -24,6 +24,26 @@ def request(now="2026-11-10T01:00:00+01:00", profile="enea_g12w_2026", **kwargs)
     return value
 
 
+class PerDeadlineAcceptance(unittest.TestCase):
+    def test_unreachable_evening_does_not_block_reachable_morning(self):
+        h = Harness(options=options("tauron_g13_2026"))
+        now = h.now
+        deadlines = {"morning": now.timestamp()+3600, "evening": now.timestamp()+7200}
+        targets = {key: {"deadline": datetime.fromtimestamp(deadline, TZ).isoformat(),
+                         "soc_percent": 51 if key == "morning" else 85,
+                         "source": "own_deterministic_planner",
+                         "unreachable": key == "evening"}
+                   for key, deadline in deadlines.items()}
+        plan = {"status": "unreachable", "quality": "valid", "source": "own_deterministic_planner",
+                "generated_at": now.isoformat(), "season": "winter", "targets": targets}
+        with patch.object(h.co, "_deadlines", return_value=deadlines), \
+             patch.object(h.co, "_pv_metadata_matches", return_value=True), \
+             patch.object(h.co, "_tariff_metadata_matches", return_value=True):
+            h.co._accept_targets(plan, now)
+        self.assertEqual(h.co._memory["target_cache"]["morning"]["soc_percent"], 51)
+        self.assertNotIn("evening", h.co._memory["target_cache"])
+
+
 class OperatorPlanner(unittest.TestCase):
     def test_enea_weekday_midday_is_protected_and_never_grid_charges(self):
         result = PLAN(request(soc=45, load=1))

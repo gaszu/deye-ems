@@ -1,6 +1,6 @@
 # Instalacja i obsługa Deye EMS
 
-Instrukcja dla wydania [Deye EMS 2.3.07](https://github.com/gaszu/deye-ems/releases/tag/v2.3.07).
+Instrukcja dla wydania [Deye EMS 2.3.08](https://github.com/gaszu/deye-ems/releases/tag/v2.3.08).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -200,3 +200,7 @@ Encja jest wybierana wŹródłach i obsługiwana przez prefiksDeye. Limit obowi�
 Brak, restored, niepoprawna jednostka lub wartość encji blokują zmianę rezerwy i aktywację. Przy utracie odczytu w czasie pracy EMS zeruje ładowanie z sieci i wyłączaGC, nie obniżaTOU i zachowuje konserwatywną poprzednią granicę. Nie zmienia samej nastawy Battery low SOC. Wspierany odczyt0–85% zapewnia miejsce na5p.p. zapasu przy maksymalnej rezerwie90%.
 
 Wybór LOAD/CT jest dostępny bezpośrednio w panelu w sekcji **Pomiar i sterowanie**. Selektor konfiguruje model EMS, a odczyt fizycznego trybu falownika jest pokazany oddzielnie. Zapis wymaga obserwacji i nie zmienia sam nastawy fizycznego trybu falownika. Zmienione opcje uruchamiają sprawdzanie warunków wznowienia; niezgodny tryb sprzętowy blokuje aktywację.
+
+## Ryzyko i diagnostyka planu
+
+Panel pokazuje SoC w P10/P50 przed terminem oraz ewentualny niedobór energii w chronionym oknie. Silnik ocenia osiągalność każdego celu osobno, a panel rozróżnia cel planu i cel używany przez regulator. Podniesienie celu ochronnego na podstawie nieosiągalnego planu wymaga ryzyka wyczerpania rezerwy. Diagnostyka odbiornika podaje dostępne i wykorzystane godziny Recorder oraz zakres osobnego profilu. Problemy telemetrii podczas startu i w czasie pracy są rozróżniane.
