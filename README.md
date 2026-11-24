@@ -4,6 +4,8 @@
 
 **Aktualne wydanie / Current release:** [Deye EMS 2.3.07](https://github.com/gaszu/deye-ems/releases/tag/v2.3.07)
 
+[![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
+
 ## Polski
 
 **Deye EMS jest przeznaczony dla „starych” prosumentów rozliczanych w systemie opustów (net-metering).**
