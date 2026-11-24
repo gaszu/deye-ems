@@ -7,6 +7,7 @@ on:
       - 'custom_components/**'
       - 'tests/**'
       - 'build_release.py'
+      - 'README.md'
       - '.github/workflows/release.yml'
       - '.github/workflows/validate.yml'
   workflow_dispatch:
@@ -34,6 +35,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check project homepage version
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          version = json.loads(Path('custom_components/deye_ems/manifest.json').read_text(encoding='utf-8'))['version']
+          readme = Path('README.md').read_text(encoding='utf-8')
+          label = f'[Deye EMS {version}](https://github.com/gaszu/deye-ems/releases/tag/v{version})'
+          issues = []
+          if label not in readme:
+              issues.append(f'Release label must link to v{version}')
+
+          # Check the visible rows independently so one correct row cannot mask an omission.
+          for directory in ('custom_components/deye_ems', 'preview', 'release-notes', 'tests'):
+              prefix = f'| [{directory}]({directory}) |'
+              rows = [line for line in readme.splitlines() if line.startswith(prefix)]
+              if len(rows) != 1 or not rows[0].endswith(f' · **{version}** |'):
+                  issues.append(f'Expected one {directory} row labelled {version}')
+
+          if issues:
+              raise SystemExit('\n'.join(issues))
+          PY
       - name: Test
         run: |
           python -m unittest discover -s tests -p 'test_*.py'
