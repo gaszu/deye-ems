@@ -1,4 +1,7 @@
-"""Independent local EMS integration. Installing it does not transfer ownership."""
+"""Register the local EMS integration and its Home Assistant panel.
+
+Installing the integration does not transfer control of the inverter.
+"""
 from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom

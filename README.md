@@ -144,7 +144,7 @@ Poniższy przewodnik opisuje wydanie **2.3.07**. The layout below describes rele
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.3.07** |
 | [tests](tests) | Testy offline / Offline tests |
 | [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data |
 | [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes |
