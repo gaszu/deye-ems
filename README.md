@@ -39,6 +39,15 @@ Katalog zawiera profile wybranych europejskich, niskonapięciowych falowników h
 
 Konfiguracja własna pozwala ręcznie określić parametry falownika i przypisać wymagane encje. Integracja obsługuje **Zero Export To Load**, gdzie dom jest mierzony na wyjściu LOAD, oraz **Zero Export To CT**, gdzie osobne odczyty portu GRID i licznika CT pozwalają uwzględnić również odbiorniki między falownikiem a przyłączem. Możliwość sterowania zależy od dostępności wymaganych pomiarów i nastaw TOU w Home Assistant. [Katalog modeli](custom_components/deye_ems/inverter_models.py)
 
+### Własne odbiorniki
+
+W panelu wybierz **Dodaj odbiornik**. Podaj nazwę, wybierz licznik energii w Wh lub kWh i opcjonalnie encję chwilowej mocy w W lub kW. Możesz w ten sposób osobno modelować np. pompę ciepła, grzałkę CWU lub ładowarkę samochodu. Konfigurację zmieniasz w trybie obserwacji. Przełącznik ON/OFF włącza lub wyłącza osobne modelowanie kanału z zachowaniem konfiguracji. Nie przełącza fizycznego urządzenia.
+
+- **Zero Export To Load** — podstawą jest zużycie mierzone na wyjściu LOAD. Dodawaj kanały odbiorników ujętych w tym pomiarze. Odbiornik po stronie GRID nie wchodzi do tej prognozy przez samo dodanie jego licznika.
+- **Zero Export To CT** — model uwzględnia LOAD oraz odbiory między portem GRID falownika a licznikiem CT, wyznaczone z bilansu pomiarów. Kanał może dotyczyć odbiornika po dowolnej z tych stron, o ile jego zużycie jest już częścią tego bilansu.
+
+EMS wykorzystuje historię licznika, żeby osobno oszacować wzorzec zużycia odbiornika, a pozostałe zużycie modeluje na podstawie łącznego pomiaru. Gdy historia jest za krótka, używa profilu łącznego zużycia. Zmiana prognozy zużycia może zmienić przewidywany SoC, potrzebny zapas i cele ładowania. Odbiornik jest liczony raz. Dodany kanał nie zwiększa odczytu chwilowego poboru, a ograniczanie importu nadal korzysta z bieżących pomiarów instalacji. [Konfiguracja odbiorników](INSTALL.md#dodatkowe-zużycia)
+
 ### Taryfy
 
 Do nowej konfiguracji można wybrać **TAURON Dystrybucja G11, G12, G12w i G13**. Kalendarz stosuje reguły danego profilu, w tym sezonowość, dni tygodnia i święta tam, gdzie przewiduje je taryfa. Przy zapisie trzeba potwierdzić zgodność profilu z umową oraz wybrać sposób pracy zegara licznika. Katalog zawiera też profile informacyjne innych operatorów i zachowuje wcześniej zapisane profile zgodnie z ich regułami. Zakres dostępny dla nowej konfiguracji określa selektor taryf. [Katalog taryf](custom_components/deye_ems/tariff_profiles.json) · [Reguły wyboru](custom_components/deye_ems/tariff_settings.py)
@@ -93,6 +102,15 @@ The catalogue includes profiles for selected European low-voltage Deye hybrid in
 | SUN-SG05LP3-EU-SM2 | 3 | 3–20 kW |
 
 A custom profile allows manual entry of inverter parameters and mapping of the required entities. The integration supports **Zero Export To Load**, where household demand is measured at the LOAD output, and **Zero Export To CT**, where separate GRID-port and CT readings also account for loads between the inverter and the service connection. Control requires the relevant measurements and writable Time of Use (TOU) settings in Home Assistant. [Inverter catalogue](custom_components/deye_ems/inverter_models.py)
+
+### Custom loads
+
+In the panel, select **Add load**. Enter a name, choose an energy meter in Wh or kWh, and optionally select a live power entity in W or kW. This lets you model devices such as a heat pump, water heater or EV charger separately. Edit the configuration in observation mode. The ON/OFF switch enables or disables separate modelling for the channel and preserves its configuration. It does not switch the physical device.
+
+- **Zero Export To Load** — the forecast starts from demand measured at the LOAD output. Add channels for devices already included in that measurement. Adding a GRID-side meter alone does not bring that load into the forecast.
+- **Zero Export To CT** — the forecast includes LOAD and demand between the inverter’s GRID port and the CT meter, calculated from the meter balance. A channel can represent a device on either side, provided its demand is already part of that balance.
+
+EMS uses the meter history to estimate the device’s demand pattern separately and models the remaining demand from the aggregate measurements. If there is too little history, it uses the aggregate demand profile. A different demand forecast can change projected SoC, the required energy buffer and charge targets. Each load is counted once. Adding a channel does not increase the live demand reading, and import limiting continues to use live installation measurements. [Load setup](INSTALL.md#dodatkowe-zużycia)
 
 ### Tariffs
 
