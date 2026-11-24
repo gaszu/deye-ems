@@ -1,5 +1,5 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-3-04";
+const PANEL_TAG = "deye-ems-panel-2-3-05";
 const PANEL_VERSION = "2.3.05";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
