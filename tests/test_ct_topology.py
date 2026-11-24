@@ -23,6 +23,55 @@ def ct_harness():
 
 
 class CTTopology(unittest.IsolatedAsyncioTestCase):
+    def test_balanced_port_does_not_treat_native_load_as_a_single_phase_charger(self):
+        h = ct_harness()
+        h.set("asymmetric_phase_feeding", "on")
+        h.set("load_power", 3104, "W")
+        h.set("grid_power", 4966, "W")
+        h.set("ct_grid_power", 4966, "W")
+        h.set("grid_current_number", 35, "A")
+        for i, load, port in ((1, 143, 1651), (2, 2581, 1662), (3, 380, 1653)):
+            h.set(f"load_l{i}_power", load, "W")
+            h.set(f"grid_l{i}_power", port, "W")
+            h.set(f"ct_grid_l{i}_power", port, "W")
+        inputs = h.co._read_inputs(h.now)
+        self.assertIs(inputs["grid_charge_balanced"], True)
+        grid = h.co._grid_input(inputs, h.now, 75, False)
+        cap = runtime.calculate_grid_charge_increase_cap(grid)
+        watts_per_amp = grid["battery_voltage_v"] / grid.get("charge_efficiency", .9)
+        self.assertGreater(cap["increase_cap_a"], 70)
+        self.assertLessEqual(cap["increase_cap_a"] * watts_per_amp, 9500 - 3104)
+        h.set("ct_grid_l2_power", 4550, "W")
+        h.set("ct_grid_power", 7854, "W")
+        grid = h.co._grid_input(h.co._read_inputs(h.now), h.now, 75, False)
+        cap = runtime.calculate_grid_charge_increase_cap(grid)
+        self.assertLessEqual((cap["increase_cap_a"] - 35) * watts_per_amp / 3 + 4550, 4750)
+        self.assertLessEqual(runtime.calculate_grid_charge_cap(grid)["cap_a"] * watts_per_amp,
+                             3 * (4750 - (4550 - 1662)) - 3104)
+        h.set("grid_l2_power", 2000, "W")
+        h.set("grid_power", 5304, "W")
+        self.assertIs(h.co._read_inputs(h.now)["grid_charge_balanced"], False)
+
+    def test_grid_export_to_ct_branch_consumes_the_shared_conversion_budget(self):
+        h = ct_harness()
+        h.set("grid_current_number", 35, "A")
+        h.set("load_power", 3000, "W")
+        for export in (6000, 7000, 10000):
+            with self.subTest(export=export):
+                h.set("grid_power", -export, "W")
+                for i in (1, 2, 3):
+                    h.set(f"grid_l{i}_power", -export / 3, "W")
+                grid = h.co._grid_input(h.co._read_inputs(h.now), h.now, 75, False)
+                cap = runtime.calculate_grid_charge_cap(grid)
+                self.assertTrue(cap["telemetry_ok"])
+                headroom = max(10000 - 3000 - export, 0)
+                self.assertEqual(cap["converter_cap_a"], int(headroom / cap["power_per_a_w"]))
+                self.assertLessEqual(cap["cap_a"], cap["converter_cap_a"])
+                if headroom == 0:
+                    result = runtime.calculate_grid_charge({**grid, "safety_only": True})
+                    self.assertEqual(result["next_a"], 0)
+                    self.assertTrue(result["write"])
+
     async def test_connection_limit_can_exceed_inverter_rating_without_raising_converter_cap(self):
         h = ct_harness()
         await h.co.async_set_option("grid_import_limit_kw", 16)

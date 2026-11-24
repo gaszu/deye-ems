@@ -989,7 +989,6 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         inputs["inverter_phases"] = self._options.get("inverter_phases", 3)
         inputs["connection_phases"] = self._options.get("connection_phases", 3)
         inputs["inverter_phase"] = self._options.get("inverter_phase", "L1")
-        inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
         inputs["topology"] = self._options["topology"]
         mode_state = self._state("work_mode")
         inputs["inverter_work_mode"] = (mode_state.state if mode_state is not None
@@ -1031,8 +1030,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 inputs.update(telemetry_valid=False, outside_power_valid=False,
                               outside_load_w=None, load_power=None, grid_power=None,
                               total_load_with_outside_w=None, topology_error="invalid_ct_grid_balance")
-            # CT phase regulation is not inferred from the Load-mode switch.
-            inputs["grid_charge_balanced"] = False
+        inputs["grid_charge_balanced"] = self._grid_charge_balanced(inputs, now)
         bound = self._soc_lower_bound()
         inputs.update(min_soc_lower_bound=bound, effective_min_soc_percent=self._effective_min_soc())
         if bound is None or self._effective_min_soc() + self._options["reserve_margin_soc_percent"] > self._options["grid_max_soc_percent"]:
@@ -1114,7 +1112,19 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         report = _stamp(getattr(flag, "last_reported", None) or getattr(flag, "last_updated", None))
         if report is None or report > now.timestamp():
             return None
-        if flag.state == "off" or mode.state != "Zero Export To Load":
+        if flag.state == "off":
+            return False
+        if mode.state == "Zero Export To CT":
+            if self._options["topology"] != "load_with_external_ct":
+                return False
+            if not inputs["telemetry_valid"]:
+                return None
+            # The switch and real import on all three native GRID phases
+            # must agree. Equal CT readings alone cannot prove this because
+            # CT includes house loads outside the inverter.
+            port = [inputs[f"grid_port_l{i}_power"] for i in (1, 2, 3)]
+            return min(port) >= 250 and max(port) - min(port) <= 100
+        if mode.state != "Zero Export To Load":
             return False
         # The switch is latched; its available value is anchored by fresh live
         # power/BMS telemetry, rather than expiring an unchanged ON setting.
@@ -1969,6 +1979,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 "deye_cap_a": inputs["deye_grid_charge_limit_a"],
                 "actuator_cap_a": inputs["grid_charge_actuator_max_a"],
                 "load_w": inputs["load_power"], "grid_w": inputs["grid_power"],
+                "external_ct": self._options["topology"] == "load_with_external_ct",
                 "outside_load_w": 0 if self._options["topology"] == "load_with_external_ct" else inputs["outside_load_w"],
                 "load_phases_w": [inputs[f"load_l{i}_power"] for i in (1, 2, 3)],
                 "grid_phases_w": [inputs[f"grid_l{i}_power"] for i in (1, 2, 3)],

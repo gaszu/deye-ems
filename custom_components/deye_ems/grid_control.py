@@ -131,8 +131,15 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     per_amp = voltage / eta
     whole_load = max(load, sum(max(v, 0) for v in loads), 0) + outside
     phase_load = max(loads[layout[2]], 0) if single else max(max(loads), 0)
-    phase_budget = (3 * (phase - phase_margin) - whole_load if balanced else
-                    phase - phase_margin - phase_load - outside)
+    native_load = max(port_load, sum(max(v, 0) for v in port_loads), 0)
+    if balanced and g.get("external_ct") is True:
+        # GRID can distribute its import evenly; the passive CT branch
+        # cannot. The busiest external phase retains its full local load.
+        branch_peak = max(0, max(ct - native for ct, native in zip(grids, ports)))
+        phase_budget = 3 * (phase - phase_margin - branch_peak) - native_load
+    else:
+        phase_budget = (3 * (phase - phase_margin) - whole_load if balanced else
+                        phase - phase_margin - phase_load - outside)
     load_budget = min(total - margin - whole_load, phase_budget)
     grid_excess = max(grid - (total - margin), sum(grids) - (total - margin),
                  (3 if balanced else 1) * (max(grids) - (phase - phase_margin)), 0)
@@ -142,7 +149,6 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     # The inverter GRID port is a separate bottleneck from the utility CT.
     # Only native LOAD traverses that port when utility power supplies LOAD;
     # passive loads between CT and GRID are already in the utility budget.
-    native_load = max(port_load, sum(max(v, 0) for v in port_loads), 0)
     native_phase_load = max(port_loads[layout[2]], 0) if single else max(max(port_loads), 0)
     port_phase_budget = (3 * (port_phase - phase_margin) - native_load if balanced else
                          port_phase - phase_margin - native_phase_load)
@@ -152,7 +158,14 @@ def calculate_grid_charge_cap(g: dict) -> dict:
     excess = max(grid_excess, port_excess)
     load_cap = math.floor(max(load_budget, 0) / per_amp)
     port_cap = math.floor(max(port_budget, 0) / per_amp)
-    converter_cap = math.floor(min(converter_total, (3 if balanced else 1) * converter_phase) / per_amp)
+    converter_budget = min(converter_total, (3 if balanced else 1) * converter_phase)
+    if g.get("external_ct") is True:
+        port_export = max(-port, sum(max(-p, 0) for p in ports), 0)
+        if port_export > 0:
+            # Supplying LOAD and the branch upstream of GRID consumes the
+            # same conversion budget even while utility CT shows no import.
+            converter_budget = min(converter_budget, max(converter_total - native_load - port_export, 0))
+    converter_cap = math.floor(converter_budget / per_amp)
     deye_cap, actuator_cap, bms_cap = (math.floor(v) for v in (deye, actuator, bms))
     total_battery_cap = min(battery_total, bms)
     hard_cap = min(deye_cap, actuator_cap, bms_cap, converter_cap,
