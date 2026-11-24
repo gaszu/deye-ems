@@ -46,7 +46,9 @@ W panelu wybierz **Dodaj odbiornik**. Podaj nazwę, wybierz licznik energii w Wh
 - **Zero Export To Load** — podstawą jest zużycie mierzone na wyjściu LOAD. Dodawaj kanały odbiorników ujętych w tym pomiarze. Odbiornik po stronie GRID nie wchodzi do tej prognozy przez samo dodanie jego licznika.
 - **Zero Export To CT** — model uwzględnia LOAD oraz odbiory między portem GRID falownika a licznikiem CT, wyznaczone z bilansu pomiarów. Kanał może dotyczyć odbiornika po dowolnej z tych stron, o ile jego zużycie jest już częścią tego bilansu.
 
-EMS wykorzystuje historię licznika, żeby osobno oszacować wzorzec zużycia odbiornika, a pozostałe zużycie modeluje na podstawie łącznego pomiaru. Gdy historia jest za krótka, używa profilu łącznego zużycia. Zmiana prognozy zużycia może zmienić przewidywany SoC, potrzebny zapas i cele ładowania. Odbiornik jest liczony raz. Dodany kanał nie zwiększa odczytu chwilowego poboru, a ograniczanie importu nadal korzysta z bieżących pomiarów instalacji. [Konfiguracja odbiorników](INSTALL.md#dodatkowe-zużycia)
+Przy kolejnych przeliczeniach planu EMS pobiera z historii Home Assistant nowe dostępne statystyki godzinowe i aktualizuje profil zużycia. Gdy dane na to pozwalają, porównuje dotychczasowe zużycie z tymi samymi godzinami poprzedniego dnia i koryguje prognozę. Gdy historia kanału jest niewystarczająca, korzysta z profilu łącznego zużycia. Zmiana prognozy może wpłynąć na przewidywany SoC, potrzebny zapas i cele ładowania.
+
+Żeby uniknąć podwójnego doliczania energii, EMS odejmuje historyczne zużycie osobno modelowanego odbiornika od pomiaru łącznego, a następnie sumuje prognozę odbiornika z prognozą pozostałego zużycia. Ograniczanie importu nadal korzysta z bieżących pomiarów instalacji. [Konfiguracja odbiorników](INSTALL.md#dodatkowe-zużycia)
 
 ### Taryfy
 
@@ -110,7 +112,9 @@ In the panel, select **Add load**. Enter a name, choose an energy meter in Wh or
 - **Zero Export To Load** — the forecast starts from demand measured at the LOAD output. Add channels for devices already included in that measurement. Adding a GRID-side meter alone does not bring that load into the forecast.
 - **Zero Export To CT** — the forecast includes LOAD and demand between the inverter’s GRID port and the CT meter, calculated from the meter balance. A channel can represent a device on either side, provided its demand is already part of that balance.
 
-EMS uses the meter history to estimate the device’s demand pattern separately and models the remaining demand from the aggregate measurements. If there is too little history, it uses the aggregate demand profile. A different demand forecast can change projected SoC, the required energy buffer and charge targets. Each load is counted once. Adding a channel does not increase the live demand reading, and import limiting continues to use live installation measurements. [Load setup](INSTALL.md#dodatkowe-zużycia)
+When recalculating the plan, EMS reads the latest available hourly statistics from Home Assistant and updates the demand profile. When the data allows, it compares today’s demand so far with the same hours on the previous day and adjusts the forecast. If channel history is insufficient, it uses the aggregate demand profile. The updated forecast can affect projected SoC, the required energy buffer and charge targets.
+
+To avoid double-counting, EMS subtracts each separately modelled device’s historical demand from the aggregate measurement, then adds the device forecast to the forecast for the remaining demand. Import limiting continues to use live installation measurements. [Load setup](INSTALL.md#dodatkowe-zużycia)
 
 ### Tariffs
 
