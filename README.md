@@ -146,6 +146,5 @@ Poniższy przewodnik opisuje wydanie **2.3.07**. The layout below describes rele
 | [tests](tests) | Testy offline / Offline tests |
 | [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data |
 | [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes |
-| [.github](.github) | Walidacja i publikacja / Validation and publishing |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).
