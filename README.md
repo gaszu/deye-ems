@@ -4,6 +4,8 @@
 
 ## Polski
 
+**Deye EMS jest przeznaczony dla „starych” prosumentów rozliczanych w systemie opustów (net-metering).**
+
 **Deye EMS to lokalny system zarządzania energią dla Home Assistant, przeznaczony do instalacji z hybrydowym falownikiem Deye i magazynem energii.** Wyznacza cele naładowania baterii (SoC) na podstawie prognozy produkcji PV, przewidywanego zużycia domu, taryfy i zadanej rezerwy. Następnie dopasowuje ładowanie z sieci do bieżących warunków. Silnik działa w Home Assistant. Solcast jest opcjonalnym źródłem prognozy PV.
 
 ### Jak działa
@@ -56,6 +58,8 @@ Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego 
 [Instrukcja instalacji](INSTALL.md) · [Specyfikacja silnika](SPECIFICATION.md) · [Podgląd na danych syntetycznych](preview/README.md) · [Wydania](https://github.com/gaszu/deye-ems/releases)
 
 ## English
+
+**Deye EMS is designed for Polish prosumers on the legacy net metering scheme (system opustów).**
 
 **Deye EMS is a local energy management system for Home Assistant installations with a Deye hybrid inverter and battery storage.** It sets battery state-of-charge (SoC) targets using the PV forecast, expected household demand, the electricity tariff and a configured reserve. It then adjusts grid charging to measured conditions. The engine runs in Home Assistant. Solcast is an optional source of PV forecasts.
 
