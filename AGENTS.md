@@ -27,3 +27,5 @@ At each release, verify the explicit version on all four public repository-layou
 For every public fix and release, review the full tree recursively, including file and directory descriptions visible on GitHub. Verify affected headings, version labels, links, code comments and last-change titles against the actual published state before reporting completion. Internal review belongs in the repository workflow, outside the user-facing homepage.
 
 Review comments and docstrings recursively across all project files, including sources, tests, preview and automation. On each change, check affected explanations against the implemented behavior and update stale ones in the same commit. Comment where needed to explain reasoning, safety, ordering and compatibility. Do not add filler comments or comments to formats that do not support them.
+
+Use MAJOR.MINOR.PATCH versioning for new releases without zero-padding. Bump MINOR and reset PATCH for backward-compatible, substantial engine changes. Use PATCH for smaller fixes. Preserve published tags and assets.
