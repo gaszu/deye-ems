@@ -2611,13 +2611,20 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     use = matched if len({x[1] for x in matched}) >= 3 else candidates
                     if len({x[1] for x in use}) < 3:
                         raise ValueError("load_hour_history_insufficient")
-                    covered = [item for item in use if all(item[0][0] in channel["values"] for channel in channels)
-                               and sum(channel["values"][item[0][0]][2] for channel in channels) <= item[0][2]]
-                    # New meters can contribute once a given hour has enough aligned data.
-                    # Otherwise the full demand series already includes those loads.
-                    included = channels if len({item[1] for item in covered}) >= 3 else []
-                    if included:
-                        use = covered
+                    # Accept meters independently. An unavailable meter stays in
+                    # aggregate demand and cannot block a usable meter in this hour.
+                    included = []
+                    aligned = [(item, item[0][2]) for item in use]
+                    for channel in channels:
+                        covered = []
+                        for item, remaining in aligned:
+                            sample = channel["values"].get(item[0][0])
+                            if sample is not None and sample[2] <= remaining:
+                                covered.append((item, remaining - sample[2]))
+                        if len({item[1] for item, _ in covered}) >= 3:
+                            included.append(channel)
+                            aligned = covered
+                    use = [item for item, _ in aligned]
                     # One sample per local date avoids overweighting the repeated autumn DST hour.
                     days = {}
                     for row, date, _ in use:

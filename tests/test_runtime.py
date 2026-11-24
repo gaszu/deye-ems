@@ -574,14 +574,19 @@ class ProfilesAndCache(unittest.IsolatedAsyncioTestCase):
         for values in result["profiles"].values():
             self.assertTrue(all(abs(value-4) < 1e-10 for value in values))
 
-    async def test_missing_included_channel_retains_whole_load_without_adding_pump(self):
+    async def test_missing_meter_does_not_block_a_valid_meter_or_inflate_total(self):
         h = Harness(options={"extra_loads": [{"name": "CWU", "energy_entity": "sensor.cwu_energy", "included_in_load": True}]})
+
         async def provider(*args):
             return {SOURCES["load_power"]: self.rows(h.now, 3000),
                     SOURCES["pc_energy_total"]: self.rows(h.now, 1000)}
+
         h.co._statistics_provider = provider
         result = await h.co._load_profile(h.now)
-        self.assertFalse(result["pc_applied"])
+        channels = {item["energy_entity"]: item for item in result["extra_loads"]}
+        self.assertTrue(result["pc_applied"])
+        self.assertEqual(channels[SOURCES["pc_energy_total"]]["profile_hours"], 48)
+        self.assertEqual(channels["sensor.cwu_energy"]["used_hours"], 0)
         self.assertTrue(all(abs(v-3) < 1e-10 for v in result["profiles"]["False"]))
 
     async def test_legacy_outside_flag_never_adds_to_whole_load_forecast_or_budget(self):

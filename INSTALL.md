@@ -1,6 +1,6 @@
 # Instalacja i obsługa Deye EMS
 
-Instrukcja dla wydania [Deye EMS 2.4.0](https://github.com/gaszu/deye-ems/releases/tag/v2.4.0).
+Instrukcja dla wydania [Deye EMS 2.4.1](https://github.com/gaszu/deye-ems/releases/tag/v2.4.1).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -204,3 +204,5 @@ Wybór LOAD/CT jest dostępny bezpośrednio w panelu w sekcji **Pomiar i sterowa
 ## Ryzyko i diagnostyka planu
 
 Panel pokazuje SoC w P10/P50 przed terminem oraz ewentualny niedobór energii w chronionym oknie. Silnik ocenia osiągalność każdego celu osobno, a panel rozróżnia cel planu i cel używany przez regulator. Podniesienie celu ochronnego na podstawie nieosiągalnego planu wymaga ryzyka wyczerpania rezerwy. Diagnostyka odbiornika podaje dostępne i wykorzystane godziny Recorder oraz zakres osobnego profilu. Problemy telemetrii podczas startu i w czasie pracy są rozróżniane.
+
+Przy doborze osobnych profili zużycia każdy licznik jest sprawdzany osobno. Kanał z brakami pozostaje w zużyciu łącznym. Profile mogą korzystać tylko ze wspólnych godzin, w których ich łączne zużycie mieści się w pomiarze domu.

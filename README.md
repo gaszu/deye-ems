@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.4.0](https://github.com/gaszu/deye-ems/releases/tag/v2.4.0)
+**Aktualne wydanie / Current release:** [Deye EMS 2.4.1](https://github.com/gaszu/deye-ems/releases/tag/v2.4.1)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -52,7 +52,7 @@ W panelu wybierz **Dodaj odbiornik**. Podaj nazwę, wybierz licznik energii w Wh
 - **Zero Export To Load** — podstawą jest zużycie mierzone na wyjściu LOAD. Dodawaj kanały odbiorników ujętych w tym pomiarze. Odbiornik po stronie GRID nie wchodzi do tej prognozy przez samo dodanie jego licznika.
 - **Zero Export To CT** — model uwzględnia LOAD oraz odbiory między portem GRID falownika a licznikiem CT, wyznaczone z bilansu pomiarów. Kanał może dotyczyć odbiornika po dowolnej z tych stron, o ile jego zużycie jest już częścią tego bilansu.
 
-Przy kolejnych przeliczeniach planu EMS pobiera z historii Home Assistant nowe dostępne statystyki godzinowe i aktualizuje profil zużycia. Sięga do 42 dni wstecz. Porównuje ostatni tydzień z wcześniejszymi tygodniami dla danej godziny i, gdy danych jest wystarczająco dużo, osobno dla dni roboczych i weekendów. Ograniczona korekta trendu stopniowo uwzględnia trwały wzrost lub spadek poboru. Regulator może natychmiast ograniczyć ładowanie po skoku poboru, a prąd przywraca zgodnie z odstępami i progami sterowania. Gdy historia kanału jest niewystarczająca, korzysta z profilu łącznego zużycia. Zmiana prognozy może wpłynąć na przewidywany SoC, potrzebny zapas i cele ładowania.
+Przy kolejnych przeliczeniach planu EMS pobiera z historii Home Assistant nowe dostępne statystyki godzinowe i aktualizuje profil zużycia. Sięga do 42 dni wstecz. Porównuje ostatni tydzień z wcześniejszymi tygodniami dla danej godziny i, gdy danych jest wystarczająco dużo, osobno dla dni roboczych i weekendów. Ograniczona korekta trendu stopniowo uwzględnia trwały wzrost lub spadek poboru. Regulator może natychmiast ograniczyć ładowanie po skoku poboru, a prąd przywraca zgodnie z odstępami i progami sterowania. Odbiornik bez użytecznej historii pozostaje w profilu łącznym i nie blokuje innych liczników. Zmiana prognozy może wpłynąć na przewidywany SoC, potrzebny zapas i cele ładowania.
 
 Żeby uniknąć podwójnego doliczania energii, EMS odejmuje historyczne zużycie osobno modelowanego odbiornika od pomiaru łącznego, a następnie sumuje prognozę odbiornika z prognozą pozostałego zużycia. Ograniczanie importu nadal korzysta z bieżących pomiarów instalacji. [Konfiguracja odbiorników](INSTALL.md#dodatkowe-zużycia)
 
@@ -120,7 +120,7 @@ In the panel, select **Add load**. Enter a name, choose an energy meter in Wh or
 - **Zero Export To Load** — the forecast starts from demand measured at the LOAD output. Add channels for devices already included in that measurement. Adding a GRID-side meter alone does not bring that load into the forecast.
 - **Zero Export To CT** — the forecast includes LOAD and demand between the inverter’s GRID port and the CT meter, calculated from the meter balance. A channel can represent a device on either side, provided its demand is already part of that balance.
 
-When recalculating the plan, EMS reads the latest available hourly statistics from Home Assistant and updates the demand profile. It looks back up to 42 days and compares the latest week with earlier weeks for the same hour, separately for weekdays and weekends where enough data is available. A bounded trend adjustment gradually accounts for persistent changes. The controller can reduce charge current immediately in response to a demand spike and restores it according to the dispatch intervals and thresholds. If channel history is insufficient, it uses the aggregate demand profile. The updated forecast can affect projected SoC, the required energy buffer and charge targets.
+When recalculating the plan, EMS reads the latest available hourly statistics from Home Assistant and updates the demand profile. It looks back up to 42 days and compares the latest week with earlier weeks for the same hour, separately for weekdays and weekends where enough data is available. A bounded trend adjustment gradually accounts for persistent changes. The controller can reduce charge current immediately in response to a demand spike and restores it according to the dispatch intervals and thresholds. A device with insufficient history stays in the aggregate demand profile and does not block other meters. The updated forecast can affect projected SoC, the required energy buffer and charge targets.
 
 To avoid double-counting, EMS subtracts each separately modelled device’s historical demand from the aggregate measurement, then adds the device forecast to the forecast for the remaining demand. Import limiting continues to use live installation measurements. [Load setup](INSTALL.md#dodatkowe-zużycia)
 
@@ -144,13 +144,13 @@ Install through Marketplace or use the ZIP from a published release. Once the in
 
 ## Pliki projektu / Repository layout
 
-Poniższy przewodnik opisuje wydanie **2.4.0**. The layout below describes release **2.4.0**.
+Poniższy przewodnik opisuje wydanie **2.4.1**. The layout below describes release **2.4.1**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.4.0** |
-| [tests](tests) | Testy offline / Offline tests · **2.4.0** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.4.0** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.4.0** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.4.1** |
+| [tests](tests) | Testy offline / Offline tests · **2.4.1** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.4.1** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.4.1** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).
