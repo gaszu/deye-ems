@@ -1,186 +1,83 @@
 # Deye EMS
 
-[Najnowsze wydanie Deye EMS](https://github.com/gaszu/deye-ems/releases/latest) · [Instrukcja instalacji](INSTALL.md)
+[Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
+## Polski
 
-## Rampa prądu i zakończenie ładowania
+**Deye EMS to lokalny system zarządzania energią dla Home Assistant, przeznaczony do instalacji z hybrydowym falownikiem Deye i magazynem energii.** Wyznacza cele naładowania baterii (SoC) na podstawie prognozy produkcji PV, przewidywanego zużycia domu, taryfy i zadanej rezerwy. Następnie dopasowuje ładowanie z sieci do bieżących warunków. Silnik działa w Home Assistant. Solcast jest opcjonalnym źródłem prognozy PV.
 
-Zwykła nastawa rośnie lub maleje o najwyżej 10 A, nie częściej niż co 600 s. Natywny krok nastawy 5 A i niższe ograniczenia mogą wymusić mniejszą zmianę. Nagły pobór domu, BMS, nieprawidłowe dane i koniec dozwolonego okna mają pierwszeństwo i mogą od razu obniżyć prąd lub go wyzerować. Po ustaniu ograniczenia powrót odbywa się według bieżącego zapotrzebowania i dostępnych limitów, z zachowaniem kroku i pierwotnego zegara zwykłych prób; redukcja ochronna go nie przesuwa.
+### Jak działa
 
-Cel SoC planu rozpoczyna stopniowe wygaszanie już trwającego ładowania do 0 A. SoC może przekroczyć cel. Maksymalny SoC ładowania z konfiguracji jest twardym ograniczeniem: jego osiągnięcie zatrzymuje ładowanie od razu. W tanich slotach TOU zapisuje się ten maksymalny próg, aby falownik nie odcinał fizycznie ładowania wcześniej na miękkim celu planu. W chronionych slotach pozostaje rezerwa i GC OFF. Próg sprzętowy nie jest źródłem podnoszącym cel planu ani cache. Po zatrzymaniu ładowanie nie jest ponownie włączane tylko po to, aby wykonać taper.
+1. **Planowanie.** EMS łączy prognozę PV, profil zużycia z historii Home Assistant i kalendarz taryfy. Panel pokazuje prognozę SoC, cele ładowania i plan na dziś oraz jutro.
+2. **Sterowanie.** W slotach dopuszczających ładowanie EMS zarządza ustawieniem Grid Charge i reguluje prąd. Bierze pod uwagę aktualne pomiary, dostępną moc, limity falownika i przyłącza oraz ograniczenia BMS. W dozwolonym oknie nocnym priorytetem jest osiągnięcie porannego celu SoC. Po osiągnięciu celu histereza zapobiega częstemu wznawianiu ładowania.
+3. **Zabezpieczenia.** Ustawienia rezerwy, stan baterii, aktualność pomiarów i zgodność odczytów z konfiguracją ograniczają działanie regulatora. Tryb obserwacji pokazuje plan i diagnostykę bez przejmowania sterowania falownikiem.
+4. **TOP BALANCE.** Operator może zadać własny cel SoC do 100%, w zakresie akceptowanym przez falownik, i uruchomić ładowanie z sieci także w drogiej strefie. EMS respektuje limity instalacji i BMS. Po osiągnięciu celu lub ręcznym zakończeniu przywraca nastawy slotu i wraca do zwykłego planu. Balansowaniem ogniw zajmuje się BMS.
 
-Rampa zmienia czas dostarczenia energii; osiągnięcie planowanego SoC nie jest gwarantowane. Ustawiona nastawa, odczyt HA i fizyczny prąd baterii pozostają osobnymi informacjami.
+### Falowniki i układy pomiarowe
 
+Katalog zawiera profile wybranych europejskich, niskonapięciowych falowników hybrydowych Deye. Przy konfiguracji wybierz dokładny model z listy.
 
-Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, regulatorem ładowania baterii i panelem administratora. Nie wymaga EMHASS, zewnętrznego solvera, kontenera, usługi AI ani pomocniczych automatyzacji EMS.
+| Rodzina | Fazy | Zakres mocy modeli w katalogu |
+| --- | --- | --- |
+| SUN-SG04LP1-EU | 1 | 3–6 kW |
+| SUN-SG05LP1-EU-SM2-P | 1 | 3,6–10 kW |
+| SUN-SG04LP3-EU | 3 | 5–12 kW |
+| SUN-SG05LP3-EU-SM2 | 3 | 3–20 kW |
 
-Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
+Konfiguracja własna pozwala ręcznie określić parametry falownika i przypisać wymagane encje. Integracja obsługuje **Zero Export To Load**, gdzie dom jest mierzony na wyjściu LOAD, oraz **Zero Export To CT**, gdzie osobne odczyty portu GRID i licznika CT pozwalają uwzględnić również odbiorniki między falownikiem a przyłączem. Możliwość sterowania zależy od dostępności wymaganych pomiarów i nastaw TOU w Home Assistant. [Katalog modeli](custom_components/deye_ems/inverter_models.py)
 
-## Instalacja
+### Taryfy
 
-**Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
+Do nowej konfiguracji można wybrać **TAURON Dystrybucja G11, G12, G12w i G13**. Kalendarz stosuje reguły danego profilu, w tym sezonowość, dni tygodnia i święta tam, gdzie przewiduje je taryfa. Przy zapisie trzeba potwierdzić zgodność profilu z umową oraz wybrać sposób pracy zegara licznika. Katalog zawiera też profile informacyjne innych operatorów i zachowuje wcześniej zapisane profile zgodnie z ich regułami. Zakres dostępny dla nowej konfiguracji określa selektor taryf. [Katalog taryf](custom_components/deye_ems/tariff_profiles.json) · [Reguły wyboru](custom_components/deye_ems/tariff_settings.py)
 
-Domyślny profil baterii odczytuje dane z Deye. YamBMS jest opcją; można też wybrać ręczne przypisanie źródeł. Po wyborze prefiksu i profilu sprawdź proponowane encje przed zapisem.
+### Bateria, BMS i YamBMS
 
-Czysta instalacja nie ma skonfigurowanych dodatkowych odbiorników. Pompę ciepła, CWU czy klimatyzację dodaje się samodzielnie w panelu. Sekcja „Źródła danych” pozwala ustawić prefiks encji Deye oraz sprawdzić i zapisać przypisania w obserwacji.
+- **Deye** jest domyślnym źródłem danych. EMS odczytuje z encji falownika SoC, napięcie, bieżący limit prądu ładowania oraz alarmy i błędy baterii dostępne z komunikacji falownika z BMS.
+- **YamBMS** jest opcjonalnym źródłem danych magazynu. Może udostępniać zagregowany SoC, napięcie, limit prądu i blokadę ładowania z jednego lub kilku BMS. EMS odczytuje te dane z encji Home Assistant, a polecenia ładowania nadal przekazuje falownikowi Deye.
+- **Ręczne przypisanie** pozwala wskazać encje z własnej integracji BMS. Przy sprzęcie takim jak JK-BMS zgodność zależy od tego, czy Deye, YamBMS lub osobna integracja poprawnie udostępnia wymagane pomiary oraz sygnały blokady lub alarmu.
 
-Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcześniejszy termin korekty z uwzględnieniem minimalnego odstępu między zwykłymi dodatnimi nastawami. Termin zależy od aktualnych warunków i nie gwarantuje rozpoczęcia ładowania. Limity, rezerwa SoC i sterowanie pozostają zachowane.
+### Instalacja i dokumentacja
 
-[![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
+Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego wydania. Po dodaniu integracji panel Deye EMS jest dostępny w menu bocznym administratora.
 
-1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj [najnowsze stabilne wydanie](https://github.com/gaszu/deye-ems/releases/latest) i wykonaj restart, jeżeli HA go wymaga.
-3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
+[Instrukcja instalacji](INSTALL.md) · [Specyfikacja silnika](SPECIFICATION.md) · [Podgląd na danych syntetycznych](preview/README.md) · [Wydania](https://github.com/gaszu/deye-ems/releases)
 
-Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
+## English
 
-Alternatywnie pobierz [paczkę ZIP z najnowszego wydania](https://github.com/gaszu/deye-ems/releases/latest). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [informacje o wydaniach](https://github.com/gaszu/deye-ems/releases).
+**Deye EMS is a local energy management system for Home Assistant installations with a Deye hybrid inverter and battery storage.** It sets battery state-of-charge (SoC) targets using the PV forecast, expected household demand, the electricity tariff and a configured reserve. It then adjusts grid charging to measured conditions. The engine runs in Home Assistant. Solcast is an optional source of PV forecasts.
 
-## TOP BALANCE
+### How it works
 
-W aktywnym EMS ustaw docelowy SoC jako liczbę całkowitą od 1 do 100% w zakresie akceptowanym przez falownik. Przycisk znajduje się po lewej pod podsumowaniem akumulatora. Tryb włącza Grid Charge w bieżącym slocie także przy drogiej taryfie i wykorzystuje dostępną moc w granicach aktualnych pomiarów i limitów instalacji.
+1. **Planning.** The engine combines the PV forecast, a demand profile derived from Home Assistant history and the tariff calendar. The dashboard shows the projected SoC, charge targets and the plan for today and tomorrow.
+2. **Control.** In slots that allow grid charging, EMS manages the inverter’s Grid Charge setting and adjusts the charge current. It uses live measurements, available power, inverter and service connection limits, and BMS constraints. During an eligible overnight window, it prioritises the morning SoC target. After reaching the target, hysteresis avoids frequent restarts.
+3. **Safeguards.** The battery reserve, battery status, measurement freshness and consistency with the configured installation all constrain control. Observation mode shows the plan and diagnostics without taking control of the inverter.
+4. **TOP BALANCE.** An operator can set an SoC target up to 100%, within the inverter’s accepted range, and start grid charging even during an expensive tariff period. EMS respects installation and BMS limits. When the target is reached or the operator stops the session, EMS restores the slot settings and resumes the normal plan. The BMS handles cell balancing.
 
-Po osiągnięciu celu lub ręcznym zakończeniu EMS przywraca próg SoC i Grid Charge slotu, a następnie przelicza prąd według zwykłego planu. Przy zmianie slotu najpierw odtwarza nastawy poprzedniego. Po restarcie kończy przerwaną sesję i odtwarza zapisane nastawy.
+### Inverters and metering layouts
 
-## Plan baterii w kartach
+The catalogue includes profiles for selected European low-voltage Deye hybrid inverters. Choose the exact model during setup.
 
-Najważniejsze pomiary, stan trybu i przycisk sterowania są u góry. Karty **Dziś / Jutro** korzystają z przedziałów stałego szablonu TOU oraz klasyfikacji rzeczywistego kalendarza taryfy. Dla lokalnego zegara TAURON każdy dzień ma sześć kart, również niedziela ze zgodą na ładowanie przez całą dobę. Sześć kart nie oznacza sześciu stref cenowych ani sześciu nowych terminów celu. Przy innym zegarze lub cyklicznym przedziale widok doby może pokazać przycięte fragmenty; czasy dostarcza backend.
+| Family | Phases | Power range of listed models |
+| --- | --- | --- |
+| SUN-SG04LP1-EU | 1 | 3–6 kW |
+| SUN-SG05LP1-EU-SM2-P | 1 | 3.6–10 kW |
+| SUN-SG04LP3-EU | 3 | 5–12 kW |
+| SUN-SG05LP3-EU-SM2 | 3 | 3–20 kW |
 
-Koło **Cel ładowania** pokazuje zapas do uzyskania na podany termin. Koło **Minimalny zapas** w chronionym przedziale pokazuje próg, do którego dom może korzystać z baterii, przy wyłączonym doładowaniu z sieci. Aktualny SoC jest osobnym pomiarem u góry; projekcja baterii jest opisana oddzielnie. Wartości nieznane pozostają puste, cele zachowawcze mają oznaczenie, a minione przedziały nie otrzymują fikcyjnej historii.
+A custom profile allows manual entry of inverter parameters and mapping of the required entities. The integration supports **Zero Export To Load**, where household demand is measured at the LOAD output, and **Zero Export To CT**, where separate GRID-port and CT readings also account for loads between the inverter and the service connection. Control requires the relevant measurements and writable Time of Use (TOU) settings in Home Assistant. [Inverter catalogue](custom_components/deye_ems/inverter_models.py)
 
-Karta sterowania korzysta z tej samej powierzchni, obramowania i zaokrąglenia kart HA. Stan trybu i przycisk pozostają u góry podczas przewijania. Opis „Silnik lokalny / Energia pod kontrolą”, „Układ LOAD / LOAD i CT”, „Falownik i ograniczenia” oraz „Wersja i aktualizacje” są w istniejących „Ustawieniach zaawansowanych i szczegółach”. Cztery działania aktualizacji mają wspólny wygląd kapsułek; Marketplace i opis wydania pozostają odnośnikami.
+### Tariffs
 
-Ustawienia szczegółowe pozostają rozwinięte podczas odświeżania danych i zmiany motywu. Zapis konfiguracji utrzymuje panel EMS podczas zwykłego przeładowania integracji. Rzeczywiste wyłączenie lub usunięcie integracji nadal usuwa jej panel. Wygląd dziedziczy motyw HA; bieżące blokady sterowania pozostają w głównym widoku.
+New configurations can select **TAURON Dystrybucja G11, G12, G12w and G13**. The calendar applies each profile’s rules, including seasons, weekdays and public holidays where relevant. Setup asks the operator to confirm that the tariff matches their contract and to select the meter’s clock basis. The catalogue also contains reference profiles for other operators. Existing saved profiles are retained according to their own rules. The tariff selector determines which profiles are available for new configurations. [Tariff catalogue](custom_components/deye_ems/tariff_profiles.json) · [Selection rules](custom_components/deye_ems/tariff_settings.py)
 
-**Prognoza modelu** znajduje się nad sekcją **Plan na dziś i jutro**. Każdy dzień ma osobny rząd kafelków. Na wąskich ekranach rząd przewija się poziomo. [Lokalny podgląd panelu na danych syntetycznych](preview/README.md).
+### Battery, BMS and YamBMS
 
-## Diagnostyka pomiarów
+- **Deye** is the default battery data source. EMS reads the SoC, voltage, current charge limit, alarms and faults that the inverter exposes from its BMS link.
+- **YamBMS** is an optional battery data source. It can expose aggregate SoC, voltage, charge current limit and charge blocking from one or more BMS units. EMS reads those Home Assistant entities and continues to send charge commands to the Deye inverter.
+- **Manual mapping** allows entities from a separate BMS integration. With hardware such as JK-BMS, compatibility depends on whether Deye, YamBMS or another integration exposes the required measurements and charge-blocking or alarm signals correctly.
 
-Panel pokazuje nieprawidłowe źródła wraz z encją, odczytem, jednostką, czasem raportu, wiekiem i dopuszczalnym limitem. Prawidłowe źródła można rozwinąć. Wskazówki ESPHome są ograniczone do encji tej platformy; nie zmieniają progów bezpieczeństwa. Przy nieaktualnym całym stanie EMS szczegóły nie są przedstawiane jako bieżące.
+### Installation and documentation
 
-Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połączenie tylko do odczytu z urządzeniem ESPHome. Pomaga to przy identycznych wartościach, których kolejne raporty pomija integracja źródłowa HA. Wymagane są dwa poprawne pakiety z jednej sesji i aktualnego przypisania urządzenia, encji oraz jednostki; najnowszy musi zgadzać się z wartością HA. Od 2.1.3 świeżość danych i zgodność czasowa korzystają z odbioru najnowszego raportu (`reported_at`), a wcześniejszy odbiór potwierdzający parę (`confirmed_at`) jest sprawdzany osobno. Oba pakiety muszą mieścić się w niezmienionym limicie wieku źródła: 30 s dla mocy i 120 s dla napięcia. Przerwa przekraczająca limit, cofnięcie czasu, nowe połączenie lub zmiana przypisania wymagają nowej poprawnej pary. Diagnostyka nadal odróżnia znacznik HA od odbioru przez EMS. To dowód odbioru raportu, nie chwili pomiaru Modbus. Rozłączenie i zmiana przypisań kasują dowody. Utrata oryginalnego połączenia HA zamyka również klienta EMS. Firmware nie wymaga zmian; urządzenie musi mieć miejsce na dodatkowe połączenie API.
+Install through Marketplace or use the ZIP from a published release. Once the integration has been added, the Deye EMS panel appears in the administrator’s sidebar.
 
-## Falownik jednofazowy lub trójfazowy
-
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Katalog obejmuje 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
-
-Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
-
-Kreator dla wybranego falownika jednofazowego rozpoznaje istniejące alternatywne encje SoC, ładowania TOU oraz statusów alarmu i błędu urządzenia. Nie zastępuje własnych przypisań ani nie zapisuje propozycji bez potwierdzenia. Wybór modelu nie dodaje sensorów do urządzenia. Sterownik źródłowy musi udostępniać wymagane pomiary i zabezpieczenia.
-
-W profilu **Deye**, bez zewnętrznego BMS, źródłem limitu może być **Maximum Battery Charge Current** falownika; limit sieci wynosi 95% tej nastawy i podlega pozostałym ograniczeniom. Jeśli dostępny jest osobny prawidłowy odczyt CCL z Deye, również obowiązuje jego niższy limit. Istniejący, lecz niedostępny lub nieprawidłowy odczyt CCL nie jest omijany, a prawidłowe zero blokuje ładowanie. Profile YamBMS i ręczny zachowują wymagania wybranego BMS. Panel podaje źródło limitu, aby nastawa Deye nie była przedstawiana jako pomiar zgody BMS.
-
-Zmiana istniejącego modelu odbywa się w obserwacji, przez podgląd i osobne potwierdzenie. Aktualizacja z 1.x zachowuje profil własny i dotychczasowe ograniczenia; nie wybiera automatycznie nowego modelu ani nie zmienia topologii/rezerwy. Panel pokazuje wybrany sprzęt i ograniczenia skuteczne.
-
-## Taryfa TAURON i cele SoC
-
-W panelu wybierz **Wybierz taryfę TAURON**. Nowy wybór obejmuje wyłącznie **TAURON Dystrybucja: G11, G13, G12w i G12**. Operator jest stały, bez listy innych OSD. Dotychczasowy profil innego operatora lub własny harmonogram nie jest zmieniany samym otwarciem, anulowaniem ani aktualizacją; silnik zachowuje zgodność z zapisaną konfiguracją. Źródła taryf i zasady archiwalnych profili pozostają w [TARIFFS.md](TARIFFS.md).
-
-Wybór wymaga sprawdzenia taryfy z umową oraz potwierdzenia zegara: lokalnego Europe/Warsaw ze zmianą lato/zima albo stałego CET. Godziny profilu pozostają stałe w jego sezonie i podstawie czasu. Weekend i święto zmieniają strefy oraz flagi zgody na ładowanie, nie przesuwają godzin szablonu. Kalendarz operatora i jego ceny pozostają odrębnym źródłem klasyfikacji.
-
-Dla lokalnego zegara G11/G13 wzorzec zimowy ma godziny **00:00, 04:00, 07:00, 13:00, 16:00, 21:00**, a letni **00:00, 04:00, 07:00, 13:00, 19:00, 22:00**. G12/G12w korzystają z godzin profilu **00:00, 04:00, 06:00, 13:00, 15:00, 22:00**. Sposób przeliczenia stałego CET na lokalny widok wynika z wybranego zegara i backendu; interfejs nie odtwarza godzin samodzielnie. G11 pozostaje taryfą całodobową, a wolna niedziela G13/G12w zachowuje te same wpisy z odpowiednimi flagami.
-
-Tabela i karty pokazują zgodę na doładowanie, istniejący termin celu, rezerwę i prognozowane SoC. Cel zachowawczy jest opisany oddzielnie; brak lub miniony odczyt ma znak „—”, a nie sztuczne zero. Podział na wpisy TOU nie tworzy nowych terminów planu: całodobowe tanie okno może mieć jeden dotychczasowy termin mimo sześciu kart. Tabela TOU w szczegółach przedstawia przygotowany program, nie dowód odczytu rejestrów ani fizycznego działania.
-
-Po **Zapisz** kreator źródeł, modelu, Solcast lub taryfy zamyka się sam. Sprawdzanie wznowienia obejmuje także pozostałe zmienione opcje wpisu integracji. Zmiana motywu lub widoczności paska bocznego, odczyty katalogu, podgląd, anulowanie bez zapisu i ręczny STOP nie uruchamiają automatycznego startu. Sprawdzanie i ewentualne wznowienie prowadzi silnik HA także po zamknięciu przeglądarki. Ręczny **Zatrzymaj i obserwuj** anuluje oczekujący start. Błąd ostatniej akcji pozostaje widoczny do zamknięcia komunikatu albo udanej powtórki powiązanej akcji; bieżące blokady silnika mają osobną diagnostykę.
-
-## Konfiguracja
-
-| Ustawienie | Wartość początkowa produktu |
-|---|---:|
-| Minimalny bezpieczny SoC | 40%, od Battery low SOC +5p.p. do90% |
-| Pojemność baterii | 66 kWh |
-| Zainstalowana moc PV | Do wpisania, w kWp |
-| Moc falownika łącznie / na fazę | 12 kW / 5 kW, osobne pola |
-| Limit importu łącznie / na fazę | 12 kW / 5 kW, osobne pola |
-| Maksymalny prąd ładowania z sieci | Automatycznie: 95% ustawienia maksymalnego prądu ładowania Deye, zaokrąglone w dół; dodatkowo BMS, port GRID, przyłącze i zakres nastawy |
-| Bufor prognozy ponad rezerwą | 5 p.p. |
-| Zimowy cel przy słabym PV | 75% |
-| Maksymalny cel doładowania z sieci | 95% |
-
-Są to domyślne ustawienia oprogramowania, a nie odczyty urządzeń ani zalecenia dla każdej instalacji. Przed sterowaniem wpisz właściwe wartości i sprawdź przypisania w **Konfiguruj → Encje pomiarowe i sterujące**. Minimalny SoC pozostaje niezależną rezerwą; zmienny cel ładowania jej nie zastępuje. Konfigurację przechowuje HA, a cache i rejestr prób — zarządzany magazyn HA.
-
-## Solcast w panelu
-
-**Połącz i skonfiguruj Solcast** otwiera natywny kreator options flow HA wewnątrz panelu. Dostępna jest też droga **Integracje → Deye EMS → Konfiguruj → Solcast — połączenie i ustawienia**. Wbudowany klient nie wymaga osobnej integracji Solcast. Można również pozostać przy prognozach odczytywanych z wybranych encji HA.
-
-Otwarcie, anulowanie kreatora i aktualizacja wersji nie przełączają źródła prognozy. Zmiany połączenia wykonuje się w obserwacji. **Zapisz i włącz pobieranie API** zapisuje konfigurację i włącza klienta; kolejne pobrania mogą zużyć limit konta. Po zapisie sprawdź nowy plan i osobno włącz sterowanie. Zamknięcie zakończonego kreatora nie cofa zapisu. Wyłączenie klienta wymaga jawnej akcji; panel pokazuje osobne potwierdzenie.
-
-Konto, instalacje i ich geometrię konfiguruje się w [Solcast Toolkit](https://toolkit.solcast.com.au/). Kreator EMS przyjmuje klucz API, identyfikatory instalacji, odstęp pobierania, limit konta, wykorzystanie bieżącej doby oraz mnożniki korekty. Puste identyfikatory pozwalają spróbować wykrywania; jeśli API go nie obsługuje, wpisz je ręcznie. [Dokumentacja API Solcast](https://docs.solcast.com.au/docs/section/rooftop-sites-hobbyist) opisuje zasady usługi.
-
-Zapisany klucz nie wraca do formularza, panelu statusu, planu, cache ani diagnostyki. Puste pole zachowuje istniejący klucz. Nowy klucz wpisany w formularzu pozostaje w jego nietrwałej pamięci i jest czyszczony po zakończeniu lub zamknięciu.
-
-Import z `solcast_solar` kopiuje dostępne ustawienia i **bieżący snapshot kalibracji**, obejmujący 24/48 współczynników, tabele instalacji i wykluczenia. Nie przenosi historii ani dalszego samouczenia. Import trafia najpierw do prywatnego szkicu; zapis następuje dopiero po zatwierdzeniu formularza. Brak wymaganej kalibracji zatrzymuje import. Import nie wyłącza istniejącego klienta Solcast; użytkownik zarządza jego odpytywaniem osobno.
-
-Korekty importowane do EMS dotyczą wyłącznie surowych odpowiedzi własnego API. Prognozy z encji HA nie są korygowane ponownie. Tryb **prognoza całej instalacji** używa wartości 1:1; moc kWp nie skaluje ich drugi raz. Osobny tryb profilu referencyjnego skaluje przez stosunek mocy zainstalowanej do referencyjnej.
-
-Limit zapytań jest rozliczany dla całego konta według **doby UTC**. Każda instalacja wymaga oddzielnego zapytania; wykrywanie i nieudane próby również mogą zużyć limit. Rejestr próby jest utrwalany przed HTTP. Restart, zapis ustawień i zmiana źródła nie zerują wykorzystania. Początkowe zużycie może podnieść zapisany licznik, nigdy go obniżyć. Przy nieznanym zużyciu pozostaw pełny limit doby; domyślnie jest to 10. Unikaj równoległego odpytywania konta przez kilku klientów.
-
-Panel pokazuje **Wykorzystano / Limit / Pozostało** dla lokalnego licznika API klienta EMS oraz czas odnowienia doby UTC przeliczony na Warszawę. Licznik obejmuje zarezerwowane próby, również błędy i zaimportowane wykorzystanie; nie jest licznikiem udanych pobrań ani odczytem całego konta Solcast. Dla źródła z encji HA, wyłączonego klienta, brakujących lub nieaktualnych danych panel pokazuje wyjaśnienie zamiast domyślnych zer. Odczyt panelu nie wykonuje dodatkowych zapytań Solcast.
-
-## Plan i regulacja
-
-Silnik tworzy deterministyczną projekcję bilansu energii na 48 h. Zimą wyznacza cel zależny od PV i prognozowanego zużycia; latem preferuje autokonsumpcję PV i ładowanie z sieci stosuje awaryjnie. Okna sezonowe, warunki fallbacku i szczegóły modelu opisuje [SPECIFICATION.md](SPECIFICATION.md). Cache jest datowany i powiązany z konfiguracją oraz terminem; braki prognozy nie są zastępowane fikcyjną produkcją zero.
-
-Regulator uwzględnia świeżość i jednostki pomiarów, GRID/LOAD łącznie i na fazach, napięcie baterii oraz ograniczenia BMS i falownika. Model rozkładu fazowego zależy od potwierdzonych ustawień urządzenia; brak potwierdzenia wybiera wariant zachowawczy. Limity importu i mocy konwersji są kontrolowane osobno. EMS nie przełącza automatycznie trybów falownika.
-
-Poza trybem nocnym zwykłe dodatnie nastawy prądu mogą zostać wysłane nie wcześniej niż po 600 s od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Dotyczy to startu z zera oraz korekt; nie trzeba trafić w pierwszą minutę :00/:30. Regulator wylicza prąd bez rampy 20 A, zaokrągla zwykłą nastawę do 5 A i wymaga korekty co najmniej 10 A. Bezpieczny start z zera może użyć 1–4 A. Redukcje ochronne i wyłączenie działają od razu i nie odnawiają ani nie przesuwają historii zwykłych dodatnich nastaw. Jednorazowe uprawnienie pierwszego startu w tanim oknie pozostaje trwałe; nie jest zwracane po zerowaniu i nie omija odstępu 600 s. Po ograniczeniu wymagane są poprawnych bieżących pomiarów (od 2.1.13 bez dodatkowego odliczania), a po osiągnięciu celu także dotychczasowa histereza SoC. Nadal obowiązują 120 s od ostatniego możliwego polecenia i 60 s od pewnego niewysłania. Bieżący odczyt nastawy, GRID/LOAD, BMS, potrzeba ładowania i pozostałe ograniczenia są ponownie sprawdzane bezpośrednio przed usługą. Restart ani niejednoznaczny wynik nie kasują historii; brak wiarygodnej historii blokuje dodatnią nastawę. Podany termin jest najwcześniejszą możliwością, nie obietnicą polecenia. Przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
-
-Od 2.1.5 w łańcuchu ochronnej redukcji opóźniony odczyt HA nie uprawnia do podniesienia wcześniejszego niższego żądania. Dodatnia nastawa ochronna jest zaokrąglana w dół do 5 A; przy limicie poniżej 5 A pozostaje dopuszczalna całkowita nastawa 1–4 A, zaokrąglona w dół. Ponowienie dokładnie tej samej redukcji przyjętej przez usługę nie odnawia ograniczonego do 30 s oczekiwania na jej odczyt. Wymagane surowsze zero i pozostałe twarde zabezpieczenia zachowują pierwszeństwo. Zwykłe zwiększenia nadal wymagają co najmniej 600 s odstępu i poprawnych bieżących pomiarów (od 2.1.13 bez dodatkowego odliczania).
-
-Diagnostyka 2.1.5 udostępnia `data.command_diagnostics`: prywatny ślad ostatnich 20 prób zmiany limitu prądu ładowania z sieci, liczniki wyników, oddzielne informacje o pominięciu zapisu i ostatnim odczycie. Dane są przechowywane w RAM od bieżącego uruchomienia i zerują się po restarcie. Nie odtwarzają wstecz pełnej historii. Stan `accepted` oznacza powrót wywołania usługi HA; nie jest potwierdzeniem rejestru ani fizycznego przepływu energii. Wykres historii HA pokazuje rejestrowane stany lub echo integracji źródłowej i sam nie dowodzi liczby ani rzeczywistego czasu zapisów do falownika. Ślad, odczyt nastawy i pomiary mocy należy porównywać jako osobne dowody. Eksport diagnostyki pozostaje prywatny. W **Ustawieniach zaawansowanych i szczegółach → Zapisy do falownika** dostępny jest podgląd tylko do odczytu: czas od uruchomienia, liczniki i pięć najnowszych prób z maksymalnie 20 w RAM. Ostatnie pominięcie oraz odczyt HA są opisane osobno. Otwarcie tej sekcji nie wysyła poleceń.
-
-Od wersji 1.0.13 EMS odczytuje ogólny **Maximum Battery Charge Current** Deye i wyznacza `floor(0,95 × prąd Deye)`. Oddzielna encja **Maximum Battery Grid Charge Current** jest nastawą sterowaną przez EMS; nie służy do wyznaczania własnego limitu. Dawny stały parametr 108 A nie uczestniczy już w obliczeniach i jego encja number jest wyłączana bez usuwania historii. Nowy sensor i panel pokazują automatyczny limit. Brak poprawnego odczytu blokuje ładowanie zamiast przywracać 108 A.
-
-Import przez port GRID jest ograniczany do skonfigurowanej mocy znamionowej falownika, niezależnie od limitu przyłącza mierzonego przez CT. To przyjęta polityka EMS: producent opisuje osobno moc znamionową i maksymalny prąd przelotowy AC. Sprawdzane są pomiary sumaryczne i fazowe oraz zapas na LOAD. Prąd potrzebny do osiągnięcia celu wynika z energii, czasu, aktualnego napięcia i sprawności.
-
-Od wersji 1.0.15 prognoza nie używa ręcznego „Modelowego limitu ładowania”. Wspólna moc ładowania z PV i sieci wynika z mniejszego z aktualnych limitów prądu Deye i BMS, pomnożonego przez napięcie baterii, oraz mocy falownika. Ładowanie z sieci ma dodatkowo limit Deye−5%, zakres sterowanej nastawy i zapas mocy na prognozowany dom. PV i sieć korzystają z jednego budżetu baterii. Brak poprawnych danych uniemożliwia poprawną projekcję; blokada BMS daje zerową moc ładowania. Limity są ponownie odczytywane po pobraniu historii i prognozy, a regulator wykonawczy niezależnie sprawdza je przed zapisem do urządzenia.
-
-Dawna wartość `charge_max_kw` pozostaje zachowana w zapisanej konfiguracji dla możliwości powrotu, ale nie wpływa na obliczenia. Jej encja number jest wyłączana przez integrację z zachowaniem historii. Parametr modelowego rozładowania pozostaje osobny.
-
-Od 1.0.16 również bieżący regulator odejmuje oszacowaną nadwyżkę PV/lokalnego DC od potrzebnego tempa doładowania z sieci. Używa rzeczywistej mocy baterii i natywnego portu GRID, po uwzględnieniu zasilania domu; nie odejmuje całej produkcji PV ani importu CT. Szacunek jest zachowawczy, z tolerancją 200 W, i nie jest dokładnym licznikiem udziału źródeł. Panel pokazuje go obok pozostałej potrzeby ładowania po stronie baterii. Pokrycie całej potrzeby przez PV wyłącza doładowanie sieciowe bez oznaczania celu SoC jako osiągniętego. Zwykłe dodatnie korekty zachowują co najmniej 600 s odstępu, a ograniczenia i wyłączenie ładowania działają natychmiastowo. Przy SoC poniżej rezerwy maksymalizowane jest bezpieczne ładowanie łączne, z PV pomniejszającym udział sieci.
-
-Chronione okno wyłącza doładowanie baterii z sieci; nie oznacza twardego zerowania CT. Przy dużym odbiorniku między CT a GRID falownik może pokrywać część jego zużycia w granicach dostępnej mocy PV/baterii i rezerwy SoC, a pozostała moc płynie bezpośrednio z sieci. Moc falownika jest wspólna z LOAD. Taki import CT nie jest sam w sobie ładowaniem baterii ani przekroczeniem mocy portu GRID.
-
-## Dodatkowe zużycia
-
-W panelu dostępne są **Dodaj odbiornik / Edytuj / Usuń** oraz przełącznik ON/OFF. Kanał zawiera nazwę, licznik energii Wh/kWh i opcjonalny pomiar mocy W/kW. OFF zachowuje konfigurację i identyfikator. Edycja wymaga obserwacji; powrót do sterowania jest jawny.
-
-Model zakłada, że główny LOAD obejmuje modelowane odbiorniki. Użytkownik musi sprawdzić zakres swojego pomiaru. Kanały służą wyłącznie prognozie SoC: silnik rozdziela profile i składa całkowite zużycie raz. Nie dolicza ponownie mocy kanałów do bieżącego LOAD ani regulatora importu. Brak odpowiedniej historii kanału zachowuje model całkowitego LOAD. ON/OFF nie steruje fizycznym zasilaniem odbiornika.
-
-## Panel, aktualizacje i testy
-
-Panel pokazuje tryb, cele, przepływy, plan i diagnostykę. W ustawieniach zaawansowanych pole **Motyw panelu** pozwala wybrać dowolny zainstalowany motyw HA albo dziedziczyć bieżący motyw profilu. Wygląd jest stosowany lokalnie w EMS, łącznie z tłem i kartami, bez zmiany innych dashboardów. Integracja tworzy własne encje sensor, binary_sensor, number, select, button oraz diagnostyczną encję update „Nowe wydanie”.
-
-Sekcja **Wersja i aktualizacje** w **Ustawieniach zaawansowanych i szczegółach** pokazuje rzeczywiście załadowaną wersję HA i wersję otwartej karty. Od 2.0.3 EMS sprawdza stabilne wydania GitHub automatycznie: po uruchomieniu HA, z około 30 s opóźnieniem, a następnie co godzinę. Diagnostyczna encja **Deye EMS — Nowe wydanie** pokazuje dostępność w natywnej liście aktualizacji HA także przy zamkniętym panelu. Nie ma funkcji instalowania. Przycisk **Sprawdź aktualizacje** pozostaje dostępny, z 60 s przerwą i wspólną obsługą limitów GitHub. Błąd zachowuje wcześniejszy wynik jako nieaktualny. Harmonogram jest niezależny od silnika i nie zmienia sterowania; odczyty statusu nie odpytują GitHuba.
-
-Lista Marketplace ma osobną pamięć podręczną. Repozytorium dodane z linku jest zwykle sprawdzane co 48 h, katalog co 6 h — publikacja GitHub nie jest natychmiastowym sygnałem do wszystkich sklepów. Po otwarciu panelu EMS przez administratora nowsze, potwierdzone wydanie uruchamia ograniczoną synchronizację **samych metadanych naszego repozytorium** przez oficjalny protokół frontendowy Marketplace. Stary HACS jest wykrywany wyłącznie po odpowiedzi unknown_command. Zamknięty panel nie wysyła tego żądania; automatyczny sygnał encji update nadal działa w tle. Nie ma automatycznej instalacji, restartu ani odświeżania innych repozytoriów. Przed aktualizacją wykonaj kopię i zachowaj poprzednią paczkę; po instalacji sprawdź załadowaną wersję i wymagany restart.
-
-Źródła mechanizmu: [HACS — źródła danych i częstotliwości](https://www.hacs.dev/docs/faq/data_sources/), [Marketplace — publiczny protokół odświeżenia metadanych](https://github.com/home-assistant/core/blob/2026.11.1/homeassistant/components/marketplace/websocket/repository.py#L399).
-
-Sekcja **Układ LOAD** albo **Układ LOAD i CT** znajduje się w **Ustawieniach zaawansowanych i szczegółach**. Nazwa wynika z zapisanej konfiguracji, a obok pomiarów panel pokazuje odczytany tryb falownika oraz objaśnienia przepływów i wspólnej mocy. W układzie LOAD pobór odbiorów między GRID a CT jest nieobliczany; w układzie z CT wynika z bilansu CT−GRID. Brak aktualnych, poprawnych danych nie usuwa sekcji i nie jest zastępowany zerem.
-
-Aktualizacja kodu zachowuje istniejącą konfigurację i źródło prognozy. Nie usuwaj wpisu integracji ani magazynu runtime podczas zwykłej aktualizacji. Włączenie sterowania pozostaje osobną, świadomą czynnością.
-
-Testy są offline; podgląd przeglądarki używa danych syntetycznych. Aktualne wyniki, zakres i ograniczenia opisuje [VALIDATION.md](VALIDATION.md).
-
-```shell
-python -m unittest discover -s tests -q
-node tests/test_frontend.cjs
-python build_release.py
-```
-
-## Wersja1.0.7: układ z CT i odbiorami przed falownikiem
-
-Opcjonalna topologia **LOAD + odbiory między GRID a CT** zachowujeZero Export To CT. Odróżnia wymianę z siecią mierzoną naCT od portuGRID falownika. Do zużycia i prognozy dodaje bilansCT−GRID do natywnegoLOAD, bez podwójnego liczenia CWU. Wspólna moc znamionowa dotyczy całego falownika. Konfiguracja wymaga oddzielnych sum i faz obu pomiarów, obserwacji i jawnego wznowienia; pełne wymagania są w[INSTALL.md](INSTALL.md). Brak wdrożenia i potwierdzenia pomiarów sprzętowych.
-
-
-## Ładowanie i sekwencyjne pomiary — 2.1.13
-
-Kolejne pomiary RS485 mogą pochodzić z różnych części cyklu odczytu. Wspólna tolerancja różnicy znaczników grupy mocy baterii i portu GRID oraz kontroli CT wynosi teraz 20 s. Maksymalny wiek mocy nadal wynosi 30 s, napięcia 120 s. Jednostki, zakresy, brak raportów, alarmy BMS i limity mocy pozostają sprawdzane. Panel zachowuje ostatnio wykryte źródło i przyczynę problemu także po odzyskaniu prawidłowych pomiarów; zapis historyczny nie zastępuje aktualnej walidacji. Nie wymaga to zmiany firmware ESPHome.
-
-Po osiągnięciu celu histereza wznowienia wynosi 5 p.p. SoC. W ostatniej godzinie taniego okna silnik może jednokrotnie zwolnić tę blokadę, gdy SoC jest poniżej celu. Następne osiągnięcie celu ponownie zatrzymuje ładowanie. Nie podnosi to ustawionego celu ani maksymalnego SoC.
-
-Małe, jeszcze nierozpoczęte doładowanie (obliczona potrzeba do 10 A) można odłożyć bliżej końca taniego okna. Silnik uwzględnia aktualny limit prądu, napięcie, sprawność, obserwowane rozładowywanie i zapas rezerwy; pozostawia co najmniej godzinę oraz margines czasu. Niski limit lub zagrożenie rezerwy powodują wcześniejszy start. Rozpoczęte ładowanie nie jest zatrzymywane wyłącznie przez ten mechanizm odkładania. Nagła zmiana obciążenia może zmienić termin; osiągnięcie celu nie jest gwarantowane.
-
-Zwykłe dodatnie nastawy zachowują odstęp co najmniej 600 s, krok 5 A i martwą strefę 10 A. Ochronne redukcje pozostają natychmiastowe; powrót wymaga poprawnych bieżących pomiarów (od 2.1.13 bez dodatkowego odliczania). Nie zmieniono godzin TOU, taryfy, rezerwy, topologii ani przypisań encji.
+[Installation guide](INSTALL.md) · [Engine specification](SPECIFICATION.md) · [Demo with synthetic data](preview/README.md) · [Releases](https://github.com/gaszu/deye-ems/releases)
