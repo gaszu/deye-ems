@@ -330,6 +330,16 @@ def _day_rows(day, profile_id, clock_tz):
     return [_serialize_row(row, WARSAW) for row in intervals_between(start, end, profile_id, basis)]
 
 
+def _day_summary(day, rows):
+    # The civil day label is independent of the tariff rules. Use the actual
+    # intervals so fixed CET and daylight-saving boundaries stay accurate.
+    kind = "holiday" if polish_holiday(day) else "weekend" if day.weekday() >= 5 else "workday"
+    all_day_low = bool(rows) and all(
+        row["within_validity"] and row["grid_charge_allowed"] and row["zone"] != "flat"
+        for row in rows)
+    return {"kind": kind, "all_day_low": all_day_low}
+
+
 def describe_calendar(now, profile_id="legacy_g13", clock_basis="local"):
     """JSON preview in Warsaw wall time; viewing never activates a profile."""
     profile, clock_tz = _profile(profile_id), _clock(clock_basis)
@@ -346,6 +356,8 @@ def describe_calendar(now, profile_id="legacy_g13", clock_basis="local"):
             "timezone": "Europe/Warsaw", "local_date": local.date().isoformat(),
             "within_validity": valid, "holiday_source_url": HOLIDAYS_SOURCE,
             "today": today, "tomorrow": tomorrow, "current_interval": current,
+            "day_summary": {"today": _day_summary(local.date(), today),
+                            "tomorrow": _day_summary(local.date() + timedelta(days=1), tomorrow)},
             "current_zone": current["zone"] if current else None,
             "next_change": current["end"] if current else None}
 

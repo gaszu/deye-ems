@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-3-06";
-const PANEL_VERSION = "2.3.06";
+const PANEL_TAG = "deye-ems-panel-2-3-07";
+const PANEL_VERSION = "2.3.07";
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -721,6 +721,21 @@ class DeyeEMSPanel extends HTMLElement {
     const targets=Object.values(plan.targets||{}).filter(row=>row&&typeof row==="object"&&updateTimestamp(row.deadline)!==null).sort((a,b)=>updateTimestamp(a.deadline)-updateTimestamp(b.deadline)).slice(0,24);
     return targets.length?'<div class="grid">'+targets.map(row=>'<article><span class="label">'+(row.virtual_checkpoint===true?'Planistyczny punkt kontrolny':'Modelowy cel SoC')+'</span><strong>'+num(numeric(row.soc_percent)!==null&&numeric(row.soc_percent)>=0&&numeric(row.soc_percent)<=100?row.soc_percent:null)+'<small>%</small></strong><span class="sub">'+esc(time(row.deadline))+(row.virtual_checkpoint===true?' · nie jest granicą strefy operatora':'')+'</span></article>').join("")+'</div>':"";
   }
+  tariffDaySummaryHtml(calendar){
+    // Date labels come from the calendar. Cheap-period claims additionally
+    // require a fresh, confirmed schedule before they can describe the plan.
+    if(!this.snapshotFresh()||calendar.local_date!==this.slotDateKey(Date.now()))return "";
+    const labels={holiday:"Święto ustawowe",weekend:"Weekend",workday:"Dzień roboczy"};
+    const active=calendar.valid===true&&calendar.runtime_allowed===true&&calendar.preview_only!==true;
+    const days=[["today","Dziś"],["tomorrow","Jutro"]].map(([key,label])=>{
+      const day=calendar.day_summary?.[key];
+      if(!day||!Object.hasOwn(labels,day.kind))return "";
+      const cheap=active&&day.all_day_low===true;
+      const note=cheap?" · Tania strefa przez całą dobę. Plan SoC uwzględnia całodobowe okno taryfowe.":active&&day.kind!=="workday"&&calendar.tariff==="G13"?" · EMS stosuje zwykłe godziny sezonowe G13.":"";
+      return '<p><b>'+label+'</b> · '+labels[day.kind]+note+'</p>';
+    }).join("");
+    return days?'<div aria-label="Rodzaj dnia i okna taryfowe">'+days+'</div>':"";
+  }
   tariffCalendarHtml(){
     const calendar=this.payload?.options?.tariff_calendar;
     const heading='<section aria-label="Harmonogram taryfy"><h2>Plan na dziś i jutro</h2>';
@@ -738,7 +753,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<p>Aktualna strefa: '+esc(this.snapshotFresh()?this.tariffZone({zone:calendar.current_zone,zone_label:calendar.current_interval?.zone_label}):"brak bieżącego odczytu")+' · następna zmiana: '+esc(time(this.snapshotFresh()?calendar.next_change:null))+'.</p>'+
       (calendar.valid===false||calendar.preview_only===true||calendar.runtime_allowed===false||calendar.within_validity===false?'<p class="notice warning">'+esc(warning)+' Ten podgląd nie potwierdza zgody na sterowanie.</p>':'')+
       (calendar.profile_id==="legacy_g13"?'<p class="notice">Zachowany własny harmonogram G13 z wcześniejszej wersji. Reguły operatora zaczną obowiązywać po wyborze i potwierdzeniu taryfy.</p>':'')+
-      (targetTable||tables)+'<p class="legend">'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny: Europe/Warsaw. Wersja reguł: '+esc(calendar.version||"niepotwierdzona")+'.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+'</section>';
+      this.tariffDaySummaryHtml(calendar)+(targetTable||tables)+'<p class="legend">'+esc(this.tariffClock(calendar.clock_basis))+'. Godziny: Europe/Warsaw. Wersja reguł: '+esc(calendar.version||"niepotwierdzona")+'.'+(source?' <a href="'+esc(source)+'" target="_blank" rel="noopener noreferrer">Dokument taryfowy</a>.':'')+'</p>'+notes+'</section>';
   }
   panelThemeNames(){return Object.keys(this._hass?.themes?.themes||{}).sort((a,b)=>a.localeCompare(b));}
   savedPanelTheme(){return typeof this.payload?.appearance?.theme==="string"?this.payload.appearance.theme:"";}

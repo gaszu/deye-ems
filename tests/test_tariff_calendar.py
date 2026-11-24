@@ -27,6 +27,19 @@ class TariffCalendarTests(unittest.TestCase):
         self.assertTrue(all(stamp(a["end"]) == stamp(b["start"])
                             for a, b in zip(rows, rows[1:])))
 
+    def test_day_summary_distinguishes_weekend_holiday_and_all_day_low(self):
+        saturday = "2026-11-14T12:00:00+01:00"
+        g12w = describe(saturday, "tauron_g12w_2026")["day_summary"]
+        self.assertEqual(g12w["today"], {"kind": "weekend", "all_day_low": True})
+        self.assertEqual(g12w["tomorrow"], {"kind": "weekend", "all_day_low": True})
+        g13 = describe(saturday, "tauron_g13_2026")["day_summary"]
+        self.assertEqual(g13["today"], {"kind": "weekend", "all_day_low": False})
+        holiday = describe("2026-11-11T12:00:00+01:00", "tauron_g12w_2026")["day_summary"]
+        self.assertEqual(holiday["today"], {"kind": "holiday", "all_day_low": True})
+        self.assertEqual(holiday["tomorrow"], {"kind": "workday", "all_day_low": False})
+        flat = describe(saturday, "tauron_g11_2026")["day_summary"]
+        self.assertEqual(flat["today"], {"kind": "weekend", "all_day_low": False})
+
     def test_legacy_keeps_six_slots_and_existing_winter_permissions(self):
         result = describe("2026-11-13T06:59:59+01:00")
         self.assertEqual([row["legacy_slot"] for row in result["today"]], list(range(1, 7)))
