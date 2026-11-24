@@ -17,6 +17,13 @@
 
 Deye EMS ma własnego klienta Solcast API, dostępnego z panelu Home Assistant. Można skonfigurować jedną lub kilka instalacji PV, ustalić odstęp pobierania i dopasować budżet zapytań do konta. Panel pokazuje prognozy P50 i P10 na dziś, pozostałą część dnia i jutro oraz wskazuje, czy dane pochodzą z API, lokalnego cache czy encji Home Assistant. EMS sprawdza aktualność i pokrycie prognozy przed użyciem jej do planowania. Można też korzystać z prognozy udostępnianej przez istniejące encje Home Assistant. [Konfiguracja Solcast](INSTALL.md#solcast--konfiguracja-w-panelu)
 
+#### Co oznaczają P10 i P50
+
+- **P10** to dolny, 10. percentyl prognozy PV, czyli scenariusz ze słabszą produkcją. Silnik używa go do wyliczenia zapasu energii potrzebnego przed okresem bez planowego ładowania z sieci. Sprawdza na nim także, czy bateria dojdzie do celu na czas i czy latem grozi niedobór uzasadniający awaryjne doładowanie.
+- **P50** to mediana prognozy PV, czyli scenariusz środkowy. Silnik używa go do rysowania prognozy SoC w panelu i do oceny, jaką część oczekiwanego zużycia pokryje PV przy wyznaczaniu zimowego celu pogodowego.
+
+Dokładna nastawa prądu uwzględnia bieżące pomiary i limity. Percentyle są danymi wejściowymi scenariuszy planowania. Nie określają prawdopodobieństwa osiągnięcia celu SoC dla całej doby. [Parametry Solcast](https://docs.solcast.com.au/docs/output-parameters) · [Implementacja planera](custom_components/deye_ems/planner.py)
+
 ### Falowniki i układy pomiarowe
 
 Katalog zawiera profile wybranych europejskich, niskonapięciowych falowników hybrydowych Deye. Przy konfiguracji wybierz dokładny model z listy.
@@ -60,6 +67,13 @@ Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego 
 ### Built-in Solcast
 
 Deye EMS includes a Solcast API client configured from its Home Assistant panel. You can configure one or more PV sites, set the polling interval and match the request budget to your account. The panel shows P50 and P10 forecasts for today, the rest of today and tomorrow, and identifies whether the data came from the API, the local cache or Home Assistant entities. EMS checks forecast freshness and coverage before using it to plan charging. Forecasts exposed by existing Home Assistant entities are also supported. [Solcast setup](INSTALL.md#solcast--konfiguracja-w-panelu)
+
+#### What P10 and P50 mean
+
+- **P10** is the lower, 10th percentile of the PV forecast, a scenario with weaker production. The engine uses it to size the energy buffer for periods without scheduled grid charging, check whether the battery can reach its target on time, and detect summer shortfalls that may warrant an emergency top-up.
+- **P50** is the median PV forecast, the central scenario. The engine uses it for the projected SoC chart and to estimate how much expected demand PV can cover when setting the winter weather-based target.
+
+Live measurements and limits inform the actual charge current. The percentiles are inputs to planning scenarios. They do not give a probability of reaching an SoC target over an entire day. [Solcast output parameters](https://docs.solcast.com.au/docs/output-parameters) · [Planner implementation](custom_components/deye_ems/planner.py)
 
 ### Inverters and metering layouts
 
