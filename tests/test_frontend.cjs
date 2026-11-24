@@ -6,6 +6,20 @@ const vm = require("node:vm");
 const {test} = require("node:test");
 
 const source = fs.readFileSync(path.join(__dirname, "../custom_components/deye_ems/frontend/deye-ems-panel.js"), "utf8");
+function runPreviewScript(script, context, options) {
+  // The real preview loads the panel script first. Provide its two registration
+  // constants and the mount point in the isolated synthetic DOM.
+  context.PANEL_TAG = /const PANEL_TAG = "([^"]+)"/.exec(source)[1];
+  context.PANEL_VERSION = /const PANEL_VERSION = "([^"]+)"/.exec(source)[1];
+  const mount = context.document.getElementById("preview");
+  mount.append = () => {};
+  context.document.createElement = tag => {
+    assert.equal(tag, context.PANEL_TAG);
+    return mount;
+  };
+  return vm.runInContext(script, context, options);
+}
+
 const NOW = Date.parse("2026-11-10T22:00:00+01:00");
 const decode = value => value.replaceAll("&quot;", '"').replaceAll("&#39;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 class FakeStyle {
@@ -2463,7 +2477,7 @@ test("preview implements the tariff wizard and cancellable automatic start witho
   const html=fs.readFileSync(path.join(__dirname,"../preview/index.html"),"utf8"),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1],nodes=new Map(),timers=[];
   const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{events:{},addEventListener(name,fn){this.events[name]=fn;},refresh(){return Promise.resolve();}});return nodes.get(id);}};
   const context=vm.createContext({document,Date,structuredClone,console,setTimeout(fn){timers.push({fn,cancelled:false});return timers.length;},clearTimeout(id){if(timers[id-1])timers[id-1].cancelled=true;},fetch(){throw Error("Network forbidden");}});
-  vm.runInContext(script,context,{filename:"preview-inline.js"});const hass=vm.runInContext("previewHass",context);
+  runPreviewScript(script,context,{filename:"preview-inline.js"});const hass=vm.runInContext("previewHass",context);
   const save=async()=>{const first=await hass.callApi("POST","config/config_entries/options/flow",{}),route="config/config_entries/options/flow/"+first.flow_id;let step=await hass.callApi("POST",route,{next_step_id:"tariff"});assert.equal(step.step_id,"tariff_plan");assert.equal(step.data_schema.find(row=>row.name==="profile_id").selector.select.options.length,4);step=await hass.callApi("POST",route,{profile_id:"tauron_g11_2026",clock_basis:"local"});assert.equal(step.step_id,"tariff_confirm");step=await hass.callApi("POST",route,{confirm_tariff:true});assert.equal(step.type,"create_entry");};
   await save();let state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.mode,"shadow");assert.equal(state.post_save_activation.status,"waiting");assert.equal(state.options.tariff_calendar.operator_id,"tauron_dystrybucja");
   await hass.callWS({command:"mode",mode:"shadow"});assert.equal(timers.at(-1).cancelled,true);state=await hass.callWS({type:"deye_ems/status"});assert.equal(state.post_save_activation.status,"cancelled");
@@ -2650,7 +2664,7 @@ test("synthetic G13 preview preserves merged weekend calendar but renders six fi
   class PreviewDate extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
   const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{addEventListener(){},refresh(){return Promise.resolve();}});return nodes.get(id);}};
   const context=vm.createContext({document,Date:PreviewDate,structuredClone,console,setTimeout(){return 1;},clearTimeout(){},fetch(){throw Error("Network forbidden");}});
-  vm.runInContext(script,context,{filename:"preview-weekend.js"});
+  runPreviewScript(script,context,{filename:"preview-weekend.js"});
   const calendar=JSON.parse(vm.runInContext("JSON.stringify(example.options.tariff_calendar)",context));
   assert.equal(calendar.today.length,5);assert.equal(calendar.tomorrow.length,1);
   assert.equal(calendar.tomorrow[0].grid_charge_allowed,true);assert.equal(calendar.tomorrow[0].reason,"weekend");
@@ -2788,7 +2802,7 @@ test("synthetic seasonal TAURON templates keep workday and free-day clocks while
   for(const date of ["2026-06-07T12:00:00+02:00","2026-11-15T12:00:00+01:00"]){
     const now=Date.parse(date),nodes=new Map();class PreviewDate extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
     const document={documentElement:{style:{setProperty(){}}},getElementById(id){if(!nodes.has(id))nodes.set(id,{addEventListener(){},refresh(){return Promise.resolve();}});return nodes.get(id);}};
-    const context=vm.createContext({document,Date:PreviewDate,structuredClone,console,setTimeout(){return 1;},clearTimeout(){},fetch(){throw Error("Network forbidden");}});vm.runInContext(script,context);
+    const context=vm.createContext({document,Date:PreviewDate,structuredClone,console,setTimeout(){return 1;},clearTimeout(){},fetch(){throw Error("Network forbidden");}});runPreviewScript(script,context);
     const expected=date.includes("06-07")?["00:00:00","04:00:00","07:00:00","13:00:00","19:00:00","22:00:00"]:["00:00:00","04:00:00","07:00:00","13:00:00","16:00:00","21:00:00"];
     for(const kind of ["g13","all_day","g12w","g12"]){
       vm.runInContext('applyPreviewScenario("'+kind+'","forecast",false)',context);
