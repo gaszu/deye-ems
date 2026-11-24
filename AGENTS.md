@@ -11,3 +11,4 @@
 - Keep the interface simple, with muted pastel colors derived from the current HA theme and readable text and focus states in light and dark modes.
 - Public documentation describes product behavior and synthetic validation. Keep deployment records, personal configuration, household telemetry and private audits outside the repository.
 - Run meaningful checks for changed behavior. Build the standalone ZIP with build_release.py and verify published sources against the tested files. Describe publication and live deployment separately.
+- Document non-obvious behavior as part of each code change. Explain why an invariant, safety check, ordering rule, or fallback exists where it is implemented. Keep affected comments and public documentation in sync with behavior, and avoid restating obvious code.

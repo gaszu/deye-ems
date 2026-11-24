@@ -238,6 +238,7 @@ def calculate_grid_charge_increase_cap(g: dict) -> dict:
                       - max(g["grid_port_w"], sum(g["grid_port_phases_w"])))
     port_phase_available = (g["inverter_grid_phase_limit_w"] - g.get("phase_headroom_w", 250)
                             - (g["grid_port_phases_w"][layout[2]] if single else max(g["grid_port_phases_w"])))
+    # Scale per-phase headroom only when native GRID measurements confirm balanced charging.
     multiplier = 3 if not single and g.get("grid_charge_balanced") is True else 1
     available = max(0, min(total_available, phase_available * multiplier,
                            port_available, port_phase_available * multiplier))

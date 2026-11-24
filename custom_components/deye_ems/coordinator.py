@@ -261,6 +261,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 elif isinstance(saved.get(key), dict):
                     self._memory[key] = saved[key]
         self._memory = self._redact(self._memory)
+        # A restarted process restores the journal before any new override is allowed.
         if self._memory["top_balance"]:
             self._memory["top_balance"]["enabled"] = False
         # A restart retains the target latch and journal; re-read current inputs.
@@ -712,6 +713,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if (setting is None or maximum is None or target > maximum or target < self._effective_min_soc()
                 or gc is None or gc.state not in ("on", "off") or gc.attributes.get("restored", False)):
             return False
+        # Persist the original slot and actuator identities before writing either register.
         old = self._memory["top_balance"]
         self._memory["top_balance"] = dict(enabled=True, target=target, slot=slot, soc=setting, gc=gc.state,
             current_entity=self._sources["grid_current_number"], soc_entity=self._sources[soc_key],
@@ -737,6 +739,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 and grid["pending_current_a"] in (0, None))
 
     def _top_balance_allows(self, session, inputs, now, entity, action, value):
+        # Revalidate at dispatch because SoC, slot and headroom can change after planning.
         current_entity = self._sources["grid_current_number"]
         if entity == current_entity and action == "set_value" and value == 0:
             return True
@@ -800,6 +803,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if not restoring:
                 return control
         key = f"tou_soc_{slot}"
+        # Change the slot threshold at zero current before changing Grid Charge.
         wanted = session["soc"] if restoring else goal
         if self._measurement(key, now, unit="%", low=0, high=100) != wanted:
             if not restoring and not zero:
@@ -816,6 +820,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 await self._grid_attempt(0, now.timestamp(), force=True, reason="top_balance_prepare", top_balance=True)
             return control
         if restoring:
+            # At a slot boundary, capture the next slot only after restoring the previous one.
             if session.get("enabled") is True and await self._top_balance_capture(active_slot, goal):
                 return control
             self._memory["top_balance"] = {}

@@ -1,5 +1,7 @@
 # Deye EMS
 
+[Najnowsze wydanie Deye EMS](https://github.com/gaszu/deye-ems/releases/latest) · [Instrukcja instalacji](INSTALL.md)
+
 
 ## Rampa prądu i zakończenie ładowania
 
@@ -14,7 +16,7 @@ Samodzielna integracja Home Assistant z lokalnym silnikiem planowania energii, r
 
 Produkt obsługuje sezonowe cele SoC, prognozy PV P10/P50, datowany cache, profile zużycia z Recorder HA, dodatkowe odbiorniki oraz pomiary energii w slotach. Parametry baterii, falownika, limitów importu i przypisania encji dobiera użytkownik do swojej instalacji.
 
-## Instalacja wersji 2.1.13
+## Instalacja
 
 **Po instalacji panel Deye EMS znajdziesz w lewym menu Home Assistant.**
 
@@ -27,12 +29,18 @@ Panel pokazuje stan doładowania z sieci, powód oczekiwania i konkretny najwcze
 [![Zainstaluj Deye EMS przez Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
 1. Otwórz przycisk Marketplace i wskaż swoją instancję HA. W razie potrzeby dodaj repozytorium jako integrację.
-2. Zainstaluj **v2.1.13** i wykonaj restart, jeżeli HA go wymaga.
+2. Zainstaluj [najnowsze stabilne wydanie](https://github.com/gaszu/deye-ems/releases/latest) i wykonaj restart, jeżeli HA go wymaga.
 3. [Dodaj integrację Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) albo [otwórz istniejący wpis](https://my.home-assistant.io/redirect/integration/?domain=deye_ems).
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Panel Deye EMS pojawia się w menu bocznym administratora. Nowa konfiguracja rozpoczyna pracę w **shadow / obserwacja**. Po końcowym zapisie i potwierdzeniu kreatora silnik sprawdza pomiary, konfigurację oraz plan i sam włącza sterowanie, jeśli spełnione są warunki. Brak warunków pozostawia obserwację z widoczną przyczyną. Przycisk u góry panelu zatrzymuje sterowanie i anuluje oczekujący start.
 
-Alternatywnie pobierz [deye-ems-2.1.13.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.13/deye-ems-2.1.13.zip). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [opis wydania](release-notes/2.1.13.md).
+Alternatywnie pobierz [paczkę ZIP z najnowszego wydania](https://github.com/gaszu/deye-ems/releases/latest). Szczegóły: [INSTALL.md](INSTALL.md), [specyfikacja silnika](SPECIFICATION.md), [zasady przejścia i powrotu](MIGRATION.md), [informacje o wydaniach](https://github.com/gaszu/deye-ems/releases).
+
+## TOP BALANCE
+
+W aktywnym EMS ustaw docelowy SoC jako liczbę całkowitą od 1 do 100% w zakresie akceptowanym przez falownik. Przycisk znajduje się po lewej pod podsumowaniem akumulatora. Tryb włącza Grid Charge w bieżącym slocie także przy drogiej taryfie i wykorzystuje dostępną moc w granicach aktualnych pomiarów i limitów instalacji.
+
+Po osiągnięciu celu lub ręcznym zakończeniu EMS przywraca próg SoC i Grid Charge slotu, a następnie przelicza prąd według zwykłego planu. Przy zmianie slotu najpierw odtwarza nastawy poprzedniego. Po restarcie kończy przerwaną sesję i odtwarza zapisane nastawy.
 
 ## Plan baterii w kartach
 
@@ -44,7 +52,7 @@ Karta sterowania korzysta z tej samej powierzchni, obramowania i zaokrąglenia k
 
 Ustawienia szczegółowe pozostają rozwinięte podczas odświeżania danych i zmiany motywu. Zapis konfiguracji utrzymuje panel EMS podczas zwykłego przeładowania integracji. Rzeczywiste wyłączenie lub usunięcie integracji nadal usuwa jej panel. Wygląd dziedziczy motyw HA; bieżące blokady sterowania pozostają w głównym widoku.
 
-![Plan baterii — dane przykładowe](https://raw.githubusercontent.com/gaszu/deye-ems/v2.1.2/preview/panel-2.1.2.png)
+**Prognoza modelu** znajduje się nad sekcją **Plan na dziś i jutro**. Każdy dzień ma osobny rząd kafelków. Na wąskich ekranach rząd przewija się poziomo. [Lokalny podgląd panelu na danych syntetycznych](preview/README.md).
 
 ## Diagnostyka pomiarów
 
@@ -54,7 +62,7 @@ Od 2.0.3 EMS może odbierać natywne raporty sensorów przez dodatkowe połącze
 
 ## Falownik jednofazowy lub trójfazowy
 
-W instalatorze wybierz dokładny model EU albo konfigurację własną. Wersja 2.1.13 ma 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
+W instalatorze wybierz dokładny model EU albo konfigurację własną. Katalog obejmuje 28 modeli LV: SG04LP1-EU (3–6 kW), SG05LP1-EU-SM2-P (3,6–10 kW), SG04LP3-EU (5–12 kW) i SG05LP3-EU-SM2 (3–20 kW), w tym SUN-10K-SG05LP3-EU-SM2. Warianty HV nie są jeszcze obsługiwane. Wybór modelu uzupełnia górne granice; niższe ograniczenia użytkownika i bieżące Deye/BMS pozostają skuteczne.
 
 Jednofazowy falownik w domu trójfazowym wymaga wskazania L1/L2/L3. Jego pomiary sumaryczne GRID/LOAD wystarczają dla portu falownika. W układzie z trójfazowym CT nadal wymagane są rzeczywiste trzy fazy CT. Obciążenia i moc ładowarki nie są mnożone przez trzy. Pomiary oraz istniejące źródła można sprawdzić i dopasować w panelu.
 
@@ -116,7 +124,7 @@ Silnik tworzy deterministyczną projekcję bilansu energii na 48 h. Zimą wyznac
 
 Regulator uwzględnia świeżość i jednostki pomiarów, GRID/LOAD łącznie i na fazach, napięcie baterii oraz ograniczenia BMS i falownika. Model rozkładu fazowego zależy od potwierdzonych ustawień urządzenia; brak potwierdzenia wybiera wariant zachowawczy. Limity importu i mocy konwersji są kontrolowane osobno. EMS nie przełącza automatycznie trybów falownika.
 
-Od 2.1.4 zwykłe dodatnie nastawy prądu mogą zostać wysłane nie wcześniej niż po 600 s od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Dotyczy to startu z zera oraz korekt; nie trzeba trafić w pierwszą minutę :00/:30. Regulator wylicza prąd bez rampy 20 A, zaokrągla zwykłą nastawę do 5 A i wymaga korekty co najmniej 10 A. Bezpieczny start z zera może użyć 1–4 A. Redukcje ochronne i wyłączenie działają od razu i nie odnawiają ani nie przesuwają historii zwykłych dodatnich nastaw. Jednorazowe uprawnienie pierwszego startu w tanim oknie pozostaje trwałe; nie jest zwracane po zerowaniu i nie omija odstępu 600 s. Po ograniczeniu wymagane są poprawnych bieżących pomiarów (od 2.1.13 bez dodatkowego odliczania), a po osiągnięciu celu także dotychczasowa histereza SoC. Nadal obowiązują 120 s od ostatniego możliwego polecenia i 60 s od pewnego niewysłania. Bieżący odczyt nastawy, GRID/LOAD, BMS, potrzeba ładowania i pozostałe ograniczenia są ponownie sprawdzane bezpośrednio przed usługą. Restart ani niejednoznaczny wynik nie kasują historii; brak wiarygodnej historii blokuje dodatnią nastawę. Podany termin jest najwcześniejszą możliwością, nie obietnicą polecenia. Przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
+Poza trybem nocnym zwykłe dodatnie nastawy prądu mogą zostać wysłane nie wcześniej niż po 600 s od poprzedniej możliwie wysłanej zwykłej dodatniej nastawy. Dotyczy to startu z zera oraz korekt; nie trzeba trafić w pierwszą minutę :00/:30. Regulator wylicza prąd bez rampy 20 A, zaokrągla zwykłą nastawę do 5 A i wymaga korekty co najmniej 10 A. Bezpieczny start z zera może użyć 1–4 A. Redukcje ochronne i wyłączenie działają od razu i nie odnawiają ani nie przesuwają historii zwykłych dodatnich nastaw. Jednorazowe uprawnienie pierwszego startu w tanim oknie pozostaje trwałe; nie jest zwracane po zerowaniu i nie omija odstępu 600 s. Po ograniczeniu wymagane są poprawnych bieżących pomiarów (od 2.1.13 bez dodatkowego odliczania), a po osiągnięciu celu także dotychczasowa histereza SoC. Nadal obowiązują 120 s od ostatniego możliwego polecenia i 60 s od pewnego niewysłania. Bieżący odczyt nastawy, GRID/LOAD, BMS, potrzeba ładowania i pozostałe ograniczenia są ponownie sprawdzane bezpośrednio przed usługą. Restart ani niejednoznaczny wynik nie kasują historii; brak wiarygodnej historii blokuje dodatnią nastawę. Podany termin jest najwcześniejszą możliwością, nie obietnicą polecenia. Przyjęcie usługi, odczyt rejestru i fizyczny przepływ energii są odrębnymi informacjami. Plan nie gwarantuje osiągnięcia SoC ani idealnego zera importu.
 
 Od 2.1.5 w łańcuchu ochronnej redukcji opóźniony odczyt HA nie uprawnia do podniesienia wcześniejszego niższego żądania. Dodatnia nastawa ochronna jest zaokrąglana w dół do 5 A; przy limicie poniżej 5 A pozostaje dopuszczalna całkowita nastawa 1–4 A, zaokrąglona w dół. Ponowienie dokładnie tej samej redukcji przyjętej przez usługę nie odnawia ograniczonego do 30 s oczekiwania na jej odczyt. Wymagane surowsze zero i pozostałe twarde zabezpieczenia zachowują pierwszeństwo. Zwykłe zwiększenia nadal wymagają co najmniej 600 s odstępu i poprawnych bieżących pomiarów (od 2.1.13 bez dodatkowego odliczania).
 

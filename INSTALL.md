@@ -1,4 +1,4 @@
-# Instalacja i obsługa Deye EMS 2.1.13
+# Instalacja i obsługa Deye EMS
 
 
 ## Rampa prądu i zakończenie ładowania
@@ -16,7 +16,7 @@ W sekcji „Przyłącze sieciowe” wpisz dozwolony import całej instalacji ora
 
 Wymagany Home Assistant **2026.11.0 lub nowszy**. Integracja działa lokalnie i nie wymaga EMHASS ani zewnętrznego solvera. Użytkownik wybiera źródła danych i parametry właściwe dla swojej instalacji.
 
-Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po poprzedniej możliwie wysłanej zwykłej dodatniej nastawie, także przy powrocie z zera. Nie wymaga trafienia w pierwszą minutę :00/:30. Redukcje ochronne i wyłączenie działają natychmiastowo; wznowienie wymaga dotychczasowych stabilnych pomiarów, odczytu nastawy, limitów i aktualnego planu. Termin pokazany przez panel nie gwarantuje wysłania. Zachowaj prywatną kopię ustawień i runtime przed aktualizacją; nie usuwaj historii poleceń, by wymusić start.
+Poza trybem nocnym zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po poprzedniej możliwie wysłanej zwykłej dodatniej nastawie, także przy powrocie z zera. Nie wymaga trafienia w pierwszą minutę :00/:30. Redukcje ochronne i wyłączenie działają natychmiastowo; wznowienie wymaga dotychczasowych stabilnych pomiarów, odczytu nastawy, limitów i aktualnego planu. Termin pokazany przez panel nie gwarantuje wysłania. Zachowaj prywatną kopię ustawień i runtime przed aktualizacją; nie usuwaj historii poleceń, by wymusić start.
 
 ## Marketplace
 
@@ -24,20 +24,26 @@ Od 2.1.4 zwykła dodatnia nastawa jest dopuszczana nie wcześniej niż 600 s po 
 
 1. Kliknij przycisk i wskaż instancję HA.
 2. Jeżeli repozytorium nie jest jeszcze dodane, zaakceptuj dodanie go jako **Integracja**.
-3. Zainstaluj **v2.1.13**. Wykonaj restart, jeżeli HA go wymaga.
+3. Zainstaluj [najnowsze stabilne wydanie](https://github.com/gaszu/deye-ems/releases/latest). Wykonaj restart, jeżeli HA go wymaga.
 4. [Dodaj Deye EMS](https://my.home-assistant.io/redirect/config_flow_start/?domain=deye_ems) przez **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
 
 Alternatywnie w Marketplace użyj **Dodaj z linku** i adresu `https://github.com/gaszu/deye-ems`. Jeżeli integracja ma już wpis, [otwórz istniejącą konfigurację](https://my.home-assistant.io/redirect/integration/?domain=deye_ems); nie dodawaj drugiego wpisu. Po instalacji odśwież przeglądarkę. Panel administratora pojawia się w menu bocznym.
 
 ## Instalacja z ZIP
 
-1. Pobierz [deye-ems-2.1.13.zip](https://github.com/gaszu/deye-ems/releases/download/v2.1.13/deye-ems-2.1.13.zip).
+1. Pobierz [paczkę ZIP z najnowszego wydania](https://github.com/gaszu/deye-ems/releases/latest).
 2. Rozpakuj i skopiuj cały katalog `custom_components/deye_ems` do `/config/custom_components/deye_ems` swojej instancji.
 3. Uruchom HA ponownie i dodaj integrację.
 
 ## Gdzie znaleźć panel po instalacji
 
 **Po dodaniu integracji panel Deye EMS znajdziesz na pasku bocznym Home Assistanta.** Wymagane jest konto administratora. Jeśli wpis jest ukryty, sprawdź opcję „Panel boczny” integracji oraz edycję własnego paska HA. Panel można też otworzyć pod adresem `/deye-ems` swojej instancji.
+
+## TOP BALANCE
+
+W aktywnym EMS ustaw docelowy SoC jako liczbę całkowitą od 1 do 100% w zakresie akceptowanym przez falownik. Przycisk znajduje się po lewej pod podsumowaniem akumulatora. Tryb włącza Grid Charge w bieżącym slocie także przy drogiej taryfie i wykorzystuje dostępną moc w granicach aktualnych pomiarów i limitów instalacji.
+
+Po osiągnięciu celu lub ręcznym zakończeniu EMS przywraca próg SoC i Grid Charge slotu, a następnie przelicza prąd według zwykłego planu. Przy zmianie slotu najpierw odtwarza nastawy poprzedniego. Po restarcie kończy przerwaną sesję i odtwarza zapisane nastawy.
 
 ## Pierwsza konfiguracja
 
