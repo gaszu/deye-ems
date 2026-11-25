@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-5-2";
-const PANEL_VERSION = "2.5.2";
+const PANEL_TAG = "deye-ems-panel-2-5-3";
+const PANEL_VERSION = "2.5.3";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -1541,6 +1541,8 @@ class DeyeEMSPanel extends HTMLElement {
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Następny cel baterii",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
       card("Doładowanie z sieci",fresh&&active&&d.inputs?.telemetry_valid===true&&Object.hasOwn(chargePauseMessages,c.current_hold_reason)?"Wstrzymane":fresh&&typeof c.grid_charge_enabled==="boolean"?(c.grid_charge_enabled?"Włączone":"Wyłączone"):"—","",fresh?statusText:"Oczekiwanie na odczyt")+'</div>'+
+      // Keep live metering visible while the configuration controls stay collapsed.
+      this.topologyHtml()+
       '<section class="top-balance" aria-label="TOP BALANCE"><div class="actions"><button id="top-balance" '+(this.busy||restoring||!balancing&&(!active||!fresh)?'disabled':'')+'>'+(restoring?'Przywracanie nastaw…':balancing?'Wyłącz TOP BALANCE':'TOP BALANCE')+'</button>'+
       '<label>Docelowy SoC (%)<input id="top-balance-target" type="number" min="1" max="100" step="1" value="'+esc(balanceTarget)+'" '+(balancing||restoring?'disabled':'')+'></label></div>'+
       '<p class="legend">Ładowanie z sieci także w drogiej strefie. Po osiągnięciu celu EMS przywróci zwykłą regulację.</p></section>'+
@@ -1556,7 +1558,7 @@ class DeyeEMSPanel extends HTMLElement {
       this.solcastForecastHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
       '<section aria-label="O panelu"><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div></section>'+
       '<section><h2>Taryfa energii</h2>'+this.tariffEditorHtml()+'</section>'+
-      this.topologyHtml()+this.hardwareHtml()+this.updatesHtml()+ 
+      this.hardwareHtml()+this.updatesHtml()+
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       this.sourcesHtml()+
       '<section class="reserve"><h2>Magazyn energii</h2><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+basicField("min_soc_percent","Zapisz rezerwę")+basicField("capacity_kwh","Zapisz pojemność")+'</div><p class="legend">Minimalna dopuszczalna rezerwa: '+(boundValid?num(lowerBound)+'% (Battery low SOC + 5 p.p.)':'brak poprawnego odczytu Battery low SOC — zapis rezerwy zablokowany')+'. Skuteczna rezerwa: '+num(floor)+'%. Pojemność służy do przeliczania procentów na energię.</p></section>'+

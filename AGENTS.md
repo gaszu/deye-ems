@@ -1,6 +1,6 @@
 # Deye EMS — development guidance
 
-Current Deye EMS release: **2.5.2**.
+Current Deye EMS release: **2.5.3**.
 
 - Maintain an independently installable Home Assistant custom integration with a local engine. Runtime must not depend on EMHASS, auxiliary helpers or user automations.
 - Preserve the engine contract documented in SPECIFICATION.md. Treat source mappings, safety settings, capacity and power ratings as private configuration. Do not change live settings as part of interface work.
