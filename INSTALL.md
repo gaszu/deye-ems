@@ -6,7 +6,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
 
-Instrukcja dla wydania [Deye EMS 2.6.3](https://github.com/gaszu/deye-ems/releases/tag/v2.6.3).
+Instrukcja dla wydania [Deye EMS 2.6.4](https://github.com/gaszu/deye-ems/releases/tag/v2.6.4).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -275,3 +275,5 @@ cards:
 Widok jest ukryty w zakładkach podczas przeglądania pozostałych widoków.
 Home Assistant może wyświetlić go jako bieżącą zakładkę po otwarciu EMS.
 Adres `/deye-ems?standalone=1` otwiera samodzielny panel bez przekierowania.
+
+Menu EMS pozostaje widoczne podczas przewijania pod natywnym nagłówkiem HA.
