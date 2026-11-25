@@ -19,9 +19,17 @@
 3. **Zabezpieczenia.** Ustawienia rezerwy, stan baterii, aktualność pomiarów i zgodność odczytów z konfiguracją ograniczają działanie regulatora. Tryb obserwacji pokazuje plan i diagnostykę bez przejmowania sterowania falownikiem.
 4. **TOP BALANCE.** Operator może zadać własny cel SoC do 100%, w zakresie akceptowanym przez falownik, i uruchomić ładowanie z sieci także w drogiej strefie. EMS respektuje limity instalacji i BMS. Po osiągnięciu celu lub ręcznym zakończeniu przywraca nastawy slotu i wraca do zwykłego planu. Balansowaniem ogniw zajmuje się BMS.
 
+*Zrzuty ekranu pochodzą z panelu demonstracyjnego i pokazują dane przykładowe.*
+
+![Prognoza SoC z wykresem i ryzykiem niedoboru](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/plan-soc.jpg)
+
+![Przycisk TOP BALANCE i pole docelowego SoC](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/top-balance.jpg)
+
 ### Zintegrowany Solcast
 
 Deye EMS ma własnego klienta Solcast API, dostępnego z panelu Home Assistant. Można skonfigurować jedną lub kilka instalacji PV, ustalić odstęp pobierania i dopasować budżet zapytań do konta. Panel pokazuje prognozy P50 i P10 na dziś, pozostałą część dnia i jutro oraz wskazuje, czy dane pochodzą z API, lokalnego cache czy encji Home Assistant. EMS sprawdza aktualność i pokrycie prognozy przed użyciem jej do planowania. Można też korzystać z prognozy udostępnianej przez istniejące encje Home Assistant. [Konfiguracja Solcast](INSTALL.md#solcast--konfiguracja-w-panelu)
+
+![Karty Solcast z ostrożną i typową prognozą PV na dziś i jutro](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/solcast.jpg)
 
 #### Co oznaczają P10 i P50
 
@@ -45,6 +53,8 @@ Katalog zawiera profile wybranych europejskich, niskonapięciowych falowników h
 
 Konfiguracja własna pozwala ręcznie określić parametry falownika i przypisać wymagane encje. Integracja obsługuje **Zero Export To Load**, gdzie dom jest mierzony na wyjściu LOAD, oraz **Zero Export To CT**, gdzie osobne odczyty portu GRID i licznika CT pozwalają uwzględnić również odbiorniki między falownikiem a przyłączem. Możliwość sterowania zależy od dostępności wymaganych pomiarów i nastaw TOU w Home Assistant. [Katalog modeli](custom_components/deye_ems/inverter_models.py)
 
+![Widok topologii LOAD i CT z bilansem mocy](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/load-ct.jpg)
+
 ### Własne odbiorniki
 
 W panelu wybierz **Dodaj odbiornik**. Podaj nazwę, wybierz licznik energii w Wh lub kWh i opcjonalnie encję chwilowej mocy w W lub kW. Możesz w ten sposób osobno modelować np. pompę ciepła, grzałkę CWU lub ładowarkę samochodu. Konfigurację zmieniasz w trybie obserwacji. Przełącznik ON/OFF włącza lub wyłącza osobne modelowanie kanału z zachowaniem konfiguracji. Nie przełącza fizycznego urządzenia.
@@ -56,15 +66,21 @@ Przy kolejnych przeliczeniach planu EMS pobiera z historii Home Assistant nowe d
 
 Żeby uniknąć podwójnego doliczania energii, EMS odejmuje historyczne zużycie osobno modelowanego odbiornika od pomiaru łącznego, a następnie sumuje prognozę odbiornika z prognozą pozostałego zużycia. Ograniczanie importu nadal korzysta z bieżących pomiarów instalacji. [Konfiguracja odbiorników](INSTALL.md#dodatkowe-zużycia)
 
+![Konfiguracja własnego odbiornika i wykorzystanie jego historii](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/odbiorniki.jpg)
+
 ### Taryfy
 
 Do nowej konfiguracji można wybrać **TAURON Dystrybucja G11, G12, G12w i G13**. Kalendarz stosuje reguły danego profilu, w tym sezonowość, dni tygodnia i święta tam, gdzie przewiduje je taryfa. Przy zapisie trzeba potwierdzić zgodność profilu z umową oraz wybrać sposób pracy zegara licznika. Katalog zawiera też profile informacyjne innych operatorów i zachowuje wcześniej zapisane profile zgodnie z ich regułami. Zakres dostępny dla nowej konfiguracji określa selektor taryf. [Katalog taryf](custom_components/deye_ems/tariff_profiles.json) · [Reguły wyboru](custom_components/deye_ems/tariff_settings.py)
+
+![Sześć slotów taryfy G13 z celami ładowania i minimalnym zapasem](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/taryfy.jpg)
 
 ### Bateria, BMS i YamBMS
 
 - **Deye** jest domyślnym źródłem danych. EMS odczytuje z encji falownika SoC, napięcie, bieżący limit prądu ładowania oraz alarmy i błędy baterii dostępne z komunikacji falownika z BMS.
 - **YamBMS** jest opcjonalnym źródłem danych magazynu. Może udostępniać zagregowany SoC, napięcie, limit prądu i blokadę ładowania z jednego lub kilku BMS. EMS odczytuje te dane z encji Home Assistant, a polecenia ładowania nadal przekazuje falownikowi Deye.
 - **Ręczne przypisanie** pozwala wskazać encje z własnej integracji BMS. Przy sprzęcie takim jak JK-BMS zgodność zależy od tego, czy Deye, YamBMS lub osobna integracja poprawnie udostępnia wymagane pomiary oraz sygnały blokady lub alarmu.
+
+![Limity ładowania falownika, BMS i dostępny prąd](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/bateria-bms.jpg)
 
 ### Instalacja i dokumentacja
 
@@ -87,9 +103,17 @@ Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego 
 3. **Safeguards.** The battery reserve, battery status, measurement freshness and consistency with the configured installation all constrain control. Observation mode shows the plan and diagnostics without taking control of the inverter.
 4. **TOP BALANCE.** An operator can set an SoC target up to 100%, within the inverter’s accepted range, and start grid charging even during an expensive tariff period. EMS respects installation and BMS limits. When the target is reached or the operator stops the session, EMS restores the slot settings and resumes the normal plan. The BMS handles cell balancing.
 
+*Screenshots show the demonstration dashboard with sample data.*
+
+![Projected SoC chart with energy shortage risk](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/plan-soc.jpg)
+
+![TOP BALANCE button and target SoC field](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/top-balance.jpg)
+
 ### Built-in Solcast
 
 Deye EMS includes a Solcast API client configured from its Home Assistant panel. You can configure one or more PV sites, set the polling interval and match the request budget to your account. The panel shows P50 and P10 forecasts for today, the rest of today and tomorrow, and identifies whether the data came from the API, the local cache or Home Assistant entities. EMS checks forecast freshness and coverage before using it to plan charging. Forecasts exposed by existing Home Assistant entities are also supported. [Solcast setup](INSTALL.md#solcast--konfiguracja-w-panelu)
+
+![Solcast cards with cautious and typical PV forecasts for today and tomorrow](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/solcast.jpg)
 
 #### What P10 and P50 mean
 
@@ -113,6 +137,8 @@ The catalogue includes profiles for selected European low-voltage Deye hybrid in
 
 A custom profile allows manual entry of inverter parameters and mapping of the required entities. The integration supports **Zero Export To Load**, where household demand is measured at the LOAD output, and **Zero Export To CT**, where separate GRID-port and CT readings also account for loads between the inverter and the service connection. Control requires the relevant measurements and writable Time of Use (TOU) settings in Home Assistant. [Inverter catalogue](custom_components/deye_ems/inverter_models.py)
 
+![LOAD and CT layout with the power balance](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/load-ct.jpg)
+
 ### Custom loads
 
 In the panel, select **Add load**. Enter a name, choose an energy meter in Wh or kWh, and optionally select a live power entity in W or kW. This lets you model devices such as a heat pump, water heater or EV charger separately. Edit the configuration in observation mode. The ON/OFF switch enables or disables separate modelling for the channel and preserves its configuration. It does not switch the physical device.
@@ -124,15 +150,21 @@ When recalculating the plan, EMS reads the latest available hourly statistics fr
 
 To avoid double-counting, EMS subtracts each separately modelled device’s historical demand from the aggregate measurement, then adds the device forecast to the forecast for the remaining demand. Import limiting continues to use live installation measurements. [Load setup](INSTALL.md#dodatkowe-zużycia)
 
+![Custom load configuration and history coverage](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/odbiorniki.jpg)
+
 ### Tariffs
 
 New configurations can select **TAURON Dystrybucja G11, G12, G12w and G13**. The calendar applies each profile’s rules, including seasons, weekdays and public holidays where relevant. Setup asks the operator to confirm that the tariff matches their contract and to select the meter’s clock basis. The catalogue also contains reference profiles for other operators. Existing saved profiles are retained according to their own rules. The tariff selector determines which profiles are available for new configurations. [Tariff catalogue](custom_components/deye_ems/tariff_profiles.json) · [Selection rules](custom_components/deye_ems/tariff_settings.py)
+
+![Six G13 tariff slots with charging targets and minimum reserve](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/taryfy.jpg)
 
 ### Battery, BMS and YamBMS
 
 - **Deye** is the default battery data source. EMS reads the SoC, voltage, current charge limit, alarms and faults that the inverter exposes from its BMS link.
 - **YamBMS** is an optional battery data source. It can expose aggregate SoC, voltage, charge current limit and charge blocking from one or more BMS units. EMS reads those Home Assistant entities and continues to send charge commands to the Deye inverter.
 - **Manual mapping** allows entities from a separate BMS integration. With hardware such as JK-BMS, compatibility depends on whether Deye, YamBMS or another integration exposes the required measurements and charge-blocking or alarm signals correctly.
+
+![Inverter charge limit, BMS limit and available charging current](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/bateria-bms.jpg)
 
 ### Installation and documentation
 
