@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.5.7](https://github.com/gaszu/deye-ems/releases/tag/v2.5.7)
+**Aktualne wydanie / Current release:** [Deye EMS 2.6.0](https://github.com/gaszu/deye-ems/releases/tag/v2.6.0)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -178,13 +178,15 @@ Install through Marketplace or use the ZIP from a published release. Once the in
 
 W obu trybach wewnętrzne CT Deye mierzy port GRID. W Zero Export To CT zewnętrzne CT mierzy przyłącze. In both modes, Deye internal CT measures the GRID port. External CT measures the utility connection in Zero Export To CT.
 
-Poniższy przewodnik opisuje wydanie **2.5.7**. The layout below describes release **2.5.7**.
+Deye EMS można również osadzić w natywnym pulpicie Home Assistant. Deye EMS can also be embedded in a native Home Assistant dashboard. [Instalacja / Setup](INSTALL.md#deye-ems-w-natywnym-pulpicie-home-assistant)
+
+Poniższy przewodnik opisuje wydanie **2.6.0**. The layout below describes release **2.6.0**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.5.7** |
-| [tests](tests) | Testy offline / Offline tests · **2.5.7** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.5.7** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.5.7** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.6.0** |
+| [tests](tests) | Testy offline / Offline tests · **2.6.0** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.6.0** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.6.0** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).

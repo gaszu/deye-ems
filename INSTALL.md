@@ -6,7 +6,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
 
-Instrukcja dla wydania [Deye EMS 2.5.7](https://github.com/gaszu/deye-ems/releases/tag/v2.5.7).
+Instrukcja dla wydania [Deye EMS 2.6.0](https://github.com/gaszu/deye-ems/releases/tag/v2.6.0).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -216,3 +216,44 @@ Przy doborze osobnych profili zużycia każdy licznik jest sprawdzany osobno. Ka
 Górny pasek Home Assistant daje dostęp do natywnego menu bocznego oraz do przeglądu i ustawień HA. Odrębne menu EMS prowadzą do sekcji panelu.
 
 Pasek HA pozostaje przy górnej krawędzi podczas przewijania. Przycisk menu steruje natywnym panelem bocznym Home Assistant.
+
+## Deye EMS w natywnym pulpicie Home Assistant
+
+1. W **Ustawienia → Pulpity → Zasoby** dodaj moduł JavaScript o adresie
+   `/deye_ems_static/deye-ems-panel.js`. Adres jest stały przy aktualizacjach EMS.
+2. Utwórz osobny pulpit administratora i wybierz układ widoku **Panel**.
+3. Dodaj jedną kartę ręcznie, z konfiguracją `type: custom:deye-ems-dashboard-card`.
+
+Lewy pasek, tytuł widoku i nawigację pulpitu renderuje Home Assistant. Wewnątrz
+karty pozostają dotychczasowy pasek i menu EMS. Dostęp do sterowania wymaga
+uprawnień administratora, tak jak w widoku samodzielnym.
+
+Aby wyświetlić natywne zakładki u góry, w edytorze konfiguracji surowej pulpitu użyj wielu widoków:
+
+```yaml
+title: Deye EMS
+views:
+  - title: Przegląd
+    path: przeglad
+    type: panel
+    cards:
+      - type: custom:deye-ems-dashboard-card
+  - title: Pomiary
+    path: pomiary
+    type: panel
+    cards:
+      - type: custom:deye-ems-dashboard-card
+        section: meters
+  - title: Prognoza
+    path: prognoza
+    type: panel
+    cards:
+      - type: custom:deye-ems-dashboard-card
+        section: forecast
+  - title: Ustawienia
+    path: ustawienia
+    type: panel
+    cards:
+      - type: custom:deye-ems-dashboard-card
+        section: settings
+```
