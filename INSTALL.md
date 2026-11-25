@@ -1,6 +1,8 @@
 # Instalacja i obsługa Deye EMS
 
-Instrukcja dla wydania [Deye EMS 2.4.3](https://github.com/gaszu/deye-ems/releases/tag/v2.4.3).
+W trybie Zero Export To CT EMS używa wewnętrznego CT Deye (suma i wymagane fazy) jako pomiaru portu GRID, a zewnętrznego CT jako pomiaru przyłącza. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
+
+Instrukcja dla wydania [Deye EMS 2.5.0](https://github.com/gaszu/deye-ems/releases/tag/v2.5.0).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 

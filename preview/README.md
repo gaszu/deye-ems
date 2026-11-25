@@ -1,6 +1,6 @@
 # Podgląd panelu Deye EMS
 
-Podgląd dokumentuje wydanie **2.4.3** i ładuje panel z bieżącego drzewa kodu.
+Podgląd dokumentuje wydanie **2.5.0** i ładuje panel z bieżącego drzewa kodu.
 
 Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
 

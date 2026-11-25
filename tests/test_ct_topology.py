@@ -172,12 +172,38 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
                     h.set("grid_l1_power", 2000, "W")
                     h.set("grid_power", 2000, "W")
                 elif mutation == "same_meter":
-                    h.co._sources["ct_grid_power"] = SOURCES["grid_power"]
+                    h.co._sources["ct_grid_power"] = h.co._sources["grid_power"]
                 else:
                     h.set("ct_grid_l1_power", 0, "W", age=21)
                 self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
                 with self.assertRaisesRegex(ValueError, "Topologia CT"):
                     h.co._preflight()
+
+    def test_legacy_aliases_cannot_feed_port_limit_in_ct_mode(self):
+        h = ct_harness()
+        h.set("grid_power", 6000, "W")
+        h.set("ct_grid_power", 13000, "W")
+        for phase, port, utility in ((1, 2000, 4400), (2, 2000, 4300), (3, 2000, 4300)):
+            h.set(f"grid_l{phase}_power", port, "W")
+            h.set(f"ct_grid_l{phase}_power", utility, "W")
+            h.set_entity(SOURCES[f"grid_l{phase}_power"], utility, "W")
+        h.set_entity(SOURCES["grid_power"], 13000, "W")
+        inputs = h.co._read_inputs(h.now)
+        self.assertTrue(inputs["telemetry_valid"])
+        self.assertEqual(inputs["grid_port_power"], 6000)
+        self.assertEqual(inputs["grid_power"], 13000)
+        self.assertEqual(inputs["outside_load_w"], 7000)
+        self.assertEqual(h.co._options["sources"]["grid_power"], SOURCES["grid_power"])
+        self.assertEqual(h.co.options["sources"]["grid_power"], "sensor.deye_inverter_internal_ct_power")
+        del h.states[h.co._sources["grid_power"]]
+        self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
+
+    def test_custom_ct_port_mapping_and_load_defaults_are_preserved(self):
+        manual = "sensor.independent_grid_port_meter"
+        h = Harness(options={"topology": "load_with_external_ct",
+                             "sources": {"grid_power": manual}})
+        self.assertEqual(h.co._sources["grid_power"], manual)
+        self.assertEqual(Harness().co._sources["grid_power"], SOURCES["grid_power"])
 
     def test_negative_branch_on_one_phase_cannot_be_hidden_by_other_phases(self):
         with self.assertRaises(ValueError):
@@ -189,7 +215,7 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
             rows = fixtures.ProfilesAndCache().rows
             return {SOURCES["load_power"]: rows(h.now, 3000),
                     SOURCES["ct_grid_power"]: rows(h.now, 0),
-                    SOURCES["grid_power"]: rows(h.now, -2000)}
+                    h.co._sources["grid_power"]: rows(h.now, -2000)}
         h.co._statistics_provider = provider
         result = await h.co._load_profile(h.now)
         self.assertTrue(result["profiles"])

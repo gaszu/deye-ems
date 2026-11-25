@@ -81,9 +81,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._options = {**DEFAULT_OPTIONS, **initial, **dict(entry.options)}
         self._tariff_clock_explicit = "tariff_clock_basis" in initial or "tariff_clock_basis" in dict(entry.options)
         self._options["battery_source_profile"] = battery_source_profile(initial, dict(entry.options))
-        self._sources = {**DEFAULT_SOURCES, **initial.get("sources", {}),
-                         **dict(entry.options).get("sources", {})}
-        self._options["sources"] = dict(self._sources)
+        self._options["sources"] = {**DEFAULT_SOURCES, **initial.get("sources", {}),
+                                    **dict(entry.options).get("sources", {})}
+        self._sources = self._metering_sources()
         self._options["solcast"] = {**initial.get("solcast", {}),
                                    **dict(entry.options).get("solcast", {})}
         self._solcast_factory = solcast_factory
@@ -171,6 +171,25 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return ("grid_power", "load_power", "grid_l1_power", "grid_l2_power",
                 "grid_l3_power", "load_l1_power", "load_l2_power", "load_l3_power")
 
+    def _metering_sources(self):
+        sources = dict(self._options["sources"])
+        if self._options["topology"] != "load_with_external_ct":
+            return sources
+        prefix = self._options.get("entity_prefix", "deye_inverter_")
+        if not isinstance(prefix, str) or not prefix:
+            prefix = "deye_inverter_"
+        prefix = prefix.rstrip("_") + "_"
+        # In CT mode the legacy Deye GRID aliases can report the external CT.
+        # Resolve generated aliases to the internal meter before any telemetry,
+        # statistics or control reads. Never fall back to the external reading.
+        # Keep saved assignments intact for rollback and preserve custom meters.
+        for key in self._native_grid_keys():
+            suffix = key.removeprefix("grid")
+            if sources[key] in (DEFAULT_SOURCES[key], f"sensor.{prefix}{key}"):
+                name = sources[key].removesuffix(key)
+                sources[key] = f"{name}internal_ct{suffix}"
+        return sources
+
     def _native_grid_keys(self):
         return tuple(key for key in self._native_power_keys() if key.startswith("grid"))
 
@@ -178,6 +197,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     def options(self):
         public = {key: self._options[key] for key in {*DEFAULT_OPTIONS, "sources", "extra_loads"}
                   if key != "solcast" and key in self._options}
+        public["sources"] = dict(self._sources)
         config = self._options.get("solcast", {})
         public["solcast_configured"] = self._solcast_configured()
         public["solcast_site_count"] = len(config.get("resource_ids", []))
@@ -361,7 +381,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             if key in ("sources", "extra_loads", "topology", "combined_output_limit_kw") and self.mode == "active":
                 raise ValueError("Switch to shadow before changing hardware mappings")
             if key == "sources":
-                value = {**self._sources, **value}
+                value = {**self._options["sources"], **value}
             candidate = {**self._options, key: value}
             if key == "min_soc_percent":
                 bound = self._soc_lower_bound()
@@ -374,7 +394,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             self._options[key] = value
             if key != "update_seconds":
                 self._memory["plan"] = {}
-            self._sources = {**DEFAULT_SOURCES, **self._options.get("sources", {})}
+            self._sources = self._metering_sources()
             if key in ("min_soc_percent", "reserve_margin_soc_percent", "sources", "extra_loads",
                        "pv_peak_kwp", "pv_forecast_reference_kwp", "pv_forecast_mode"):
                 self._memory["target_cache"] = {}
