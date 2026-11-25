@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-6-8";
-const PANEL_VERSION = "2.6.8";
+const PANEL_TAG = "deye-ems-panel-2-6-9";
+const PANEL_VERSION = "2.6.9";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -699,8 +699,9 @@ class DeyeEMSPanel extends HTMLElement {
   scrollToPanelSection(target){
     // Link focus stays on the heading, but the scroll offset belongs to the
     // card above it. Otherwise its top padding can disappear under the bar.
-    // The overview starts at the top of the panel, including any notices.
-    const section=(target.id==="ems-overview"?target.closest("main"):target.closest("section"))??target;
+    // The overview grid uses its own offset so returning to it cannot
+    // scroll the first row behind the sticky controls in Lovelace.
+    const section=target.closest("section")??target;
     section.scrollIntoView({block:"start",inline:"nearest"});
     this.updatePanelClip();
   }
