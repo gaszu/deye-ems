@@ -1,6 +1,6 @@
 # Specyfikacja silnika Deye EMS
 
-Specyfikacja wydania [Deye EMS 2.4.2](https://github.com/gaszu/deye-ems/releases/tag/v2.4.2). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
+Specyfikacja wydania [Deye EMS 2.4.3](https://github.com/gaszu/deye-ems/releases/tag/v2.4.3). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
 
 ## Pomiary i topologie
 

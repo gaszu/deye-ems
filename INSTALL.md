@@ -1,6 +1,6 @@
 # Instalacja i obsługa Deye EMS
 
-Instrukcja dla wydania [Deye EMS 2.4.2](https://github.com/gaszu/deye-ems/releases/tag/v2.4.2).
+Instrukcja dla wydania [Deye EMS 2.4.3](https://github.com/gaszu/deye-ems/releases/tag/v2.4.3).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 

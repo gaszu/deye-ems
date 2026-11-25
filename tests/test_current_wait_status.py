@@ -55,6 +55,24 @@ class CurrentWaitStatus(unittest.TestCase):
             status = runtime.describe_current_wait({**g, **changes})
             self.assertNotEqual(status["current_hold_reason"], "connection_headroom_blocked")
 
+    def test_total_connection_limit_with_three_phases_below_phase_limits(self):
+        g = self.sample(total_limit_w=12000, grid_w=11700,
+                        grid_phases_w=[3900, 3900, 3900])
+        self.assertEqual(runtime.describe_current_wait(g)["current_hold_reason"],
+                         "connection_headroom_blocked")
+
+    def test_inverter_port_limit_with_remaining_connection_headroom(self):
+        g = self.sample(total_limit_w=16000, grid_w=12900,
+                        grid_phases_w=[4300, 4300, 4300],
+                        inverter_grid_import_limit_w=10000, grid_port_w=12900,
+                        grid_port_phases_w=[4300, 4300, 4300],
+                        grid_charge_active=True, grid_charge_enabled=True,
+                        battery_power_w=-42)
+        g["current_policy"]["observed_at"] = None
+        status = runtime.describe_current_wait(g)
+        self.assertEqual(status["current_hold_reason"], "inverter_grid_headroom_blocked")
+        self.assertIsNone(status["next_current_change_at"])
+
     def test_readback_and_unknown_history_have_no_prediction(self):
         for change in (dict(pending_current_a=20), dict(ordinary_history_known=False)):
             status = runtime.describe_current_wait(self.sample(**change))

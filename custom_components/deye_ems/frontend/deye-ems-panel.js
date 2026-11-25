@@ -1,6 +1,10 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-4-2";
-const PANEL_VERSION = "2.4.2";
+const PANEL_TAG = "deye-ems-panel-2-4-3";
+const PANEL_VERSION = "2.4.3";
+const chargePauseMessages = {
+  connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
+  inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
+};
 const labels = {
   min_soc_percent: "Minimalny bezpieczny SoC (%)",
   capacity_kwh: "Pojemność magazynu (kWh)",
@@ -401,9 +405,9 @@ class DeyeEMSPanel extends HTMLElement {
     if(p.mode!=="active")return "Tryb obserwacji — EMS nie steruje ładowaniem.";
     if(!this.snapshotFresh())return "Brak aktualnego stanu sterowania. Oczekiwanie na świeży odczyt.";
     if(reason==="waiting_for_startup_control")return "Oczekiwanie na spełnienie warunków sterowania po starcie.";
-    // The backend only attributes a pause to the connection with valid measurements.
-    if(input.telemetry_valid===true&&c.current_hold_reason==="connection_headroom_blocked")
-      return "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu";
+    // The backend distinguishes connection and inverter GRID limits using fresh measurements.
+    if(input.telemetry_valid===true&&Object.hasOwn(chargePauseMessages,c.current_hold_reason))
+      return chargePauseMessages[c.current_hold_reason];
     const plain=String(reason).replace(/^safety_/,"");
     const hard=new Set(["bms_blocked","hardware_mode_mismatch","owner_conflict","ownership_conflict","grid_headroom","inverter_grid_headroom","deye_charge_cap","actuator_cap","converter_cap","battery_charge_headroom"]);
     if(hard.has(plain)&&Object.hasOwn(reasons,plain))return reasons[plain];
@@ -1531,7 +1535,7 @@ class DeyeEMSPanel extends HTMLElement {
       '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Następny cel baterii",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
-      card("Doładowanie z sieci",fresh&&active&&d.inputs?.telemetry_valid===true&&c.current_hold_reason==="connection_headroom_blocked"?"Wstrzymane":fresh&&typeof c.grid_charge_enabled==="boolean"?(c.grid_charge_enabled?"Włączone":"Wyłączone"):"—","",fresh?statusText:"Oczekiwanie na odczyt")+'</div>'+
+      card("Doładowanie z sieci",fresh&&active&&d.inputs?.telemetry_valid===true&&Object.hasOwn(chargePauseMessages,c.current_hold_reason)?"Wstrzymane":fresh&&typeof c.grid_charge_enabled==="boolean"?(c.grid_charge_enabled?"Włączone":"Wyłączone"):"—","",fresh?statusText:"Oczekiwanie na odczyt")+'</div>'+
       '<section class="top-balance" aria-label="TOP BALANCE"><div class="actions"><button id="top-balance" '+(this.busy||restoring||!balancing&&(!active||!fresh)?'disabled':'')+'>'+(restoring?'Przywracanie nastaw…':balancing?'Wyłącz TOP BALANCE':'TOP BALANCE')+'</button>'+
       '<label>Docelowy SoC (%)<input id="top-balance-target" type="number" min="1" max="100" step="1" value="'+esc(balanceTarget)+'" '+(balancing||restoring?'disabled':'')+'></label></div>'+
       '<p class="legend">Ładowanie z sieci także w drogiej strefie. Po osiągnięciu celu EMS przywróci zwykłą regulację.</p></section>'+
