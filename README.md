@@ -19,7 +19,7 @@
 3. **Zabezpieczenia.** Ustawienia rezerwy, stan baterii, aktualność pomiarów i zgodność odczytów z konfiguracją ograniczają działanie regulatora. Tryb obserwacji pokazuje plan i diagnostykę bez przejmowania sterowania falownikiem.
 4. **TOP BALANCE.** Operator może zadać własny cel SoC do 100%, w zakresie akceptowanym przez falownik, i uruchomić ładowanie z sieci także w drogiej strefie. EMS respektuje limity instalacji i BMS. Po osiągnięciu celu lub ręcznym zakończeniu przywraca nastawy slotu i wraca do zwykłego planu. Balansowaniem ogniw zajmuje się BMS.
 
-*Zrzuty ekranu pochodzą z panelu demonstracyjnego i pokazują dane przykładowe.*
+*Kolorowe zrzuty panelu Deye EMS 2.4.1 z rzeczywistymi pomiarami z jednej instalacji. Nazwy encji zostały ukryte.*
 
 ![Prognoza SoC z wykresem i ryzykiem niedoboru](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/plan-soc.jpg)
 
@@ -53,7 +53,7 @@ Katalog zawiera profile wybranych europejskich, niskonapięciowych falowników h
 
 Konfiguracja własna pozwala ręcznie określić parametry falownika i przypisać wymagane encje. Integracja obsługuje **Zero Export To Load**, gdzie dom jest mierzony na wyjściu LOAD, oraz **Zero Export To CT**, gdzie osobne odczyty portu GRID i licznika CT pozwalają uwzględnić również odbiorniki między falownikiem a przyłączem. Możliwość sterowania zależy od dostępności wymaganych pomiarów i nastaw TOU w Home Assistant. [Katalog modeli](custom_components/deye_ems/inverter_models.py)
 
-![Widok topologii LOAD i CT z bilansem mocy](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/load-ct.jpg)
+![Widok topologii LOAD z bilansem mocy](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/load-ct.jpg)
 
 ### Własne odbiorniki
 
@@ -103,7 +103,7 @@ Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego 
 3. **Safeguards.** The battery reserve, battery status, measurement freshness and consistency with the configured installation all constrain control. Observation mode shows the plan and diagnostics without taking control of the inverter.
 4. **TOP BALANCE.** An operator can set an SoC target up to 100%, within the inverter’s accepted range, and start grid charging even during an expensive tariff period. EMS respects installation and BMS limits. When the target is reached or the operator stops the session, EMS restores the slot settings and resumes the normal plan. The BMS handles cell balancing.
 
-*Screenshots show the demonstration dashboard with sample data.*
+*Colour screenshots of Deye EMS 2.4.1 using real measurements from one installation. Entity IDs are masked.*
 
 ![Projected SoC chart with energy shortage risk](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/plan-soc.jpg)
 
@@ -137,7 +137,7 @@ The catalogue includes profiles for selected European low-voltage Deye hybrid in
 
 A custom profile allows manual entry of inverter parameters and mapping of the required entities. The integration supports **Zero Export To Load**, where household demand is measured at the LOAD output, and **Zero Export To CT**, where separate GRID-port and CT readings also account for loads between the inverter and the service connection. Control requires the relevant measurements and writable Time of Use (TOU) settings in Home Assistant. [Inverter catalogue](custom_components/deye_ems/inverter_models.py)
 
-![LOAD and CT layout with the power balance](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/load-ct.jpg)
+![LOAD layout with the power balance](https://raw.githubusercontent.com/gaszu/deye-ems/main/preview/screenshots/load-ct.jpg)
 
 ### Custom loads
 
