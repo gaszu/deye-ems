@@ -1,12 +1,12 @@
 # Instalacja i obsługa Deye EMS
 
-Menu górne prowadzi do głównych widoków. Menu boczne zawiera odnośniki do sekcji, a na telefonie jest dostępne pod przyciskiem „Sekcje”.
+Menu boczne EMS zawiera odnośniki do sekcji. Na telefonie jest dostępne pod przyciskiem „Sekcje”.
 
 Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach. Zielony oznacza poprawny stan, czerwony błąd, żółty informację, a niebieski grupuje odczyty odbiorów.
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
 
-Instrukcja dla wydania [Deye EMS 2.6.5](https://github.com/gaszu/deye-ems/releases/tag/v2.6.5).
+Instrukcja dla wydania [Deye EMS 2.6.6](https://github.com/gaszu/deye-ems/releases/tag/v2.6.6).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -276,4 +276,4 @@ Widok jest ukryty w zakładkach podczas przeglądania pozostałych widoków.
 Home Assistant może wyświetlić go jako bieżącą zakładkę po otwarciu EMS.
 Adres `/deye-ems?standalone=1` otwiera samodzielny panel bez przekierowania.
 
-Menu EMS, stan sterowania i przycisk „Zatrzymaj i obserwuj” pozostają widoczne pod natywnym nagłówkiem HA podczas przewijania.
+Stan sterowania i przycisk „Zatrzymaj i obserwuj” pozostają widoczne na półprzezroczystym pasku pod natywnym nagłówkiem HA.

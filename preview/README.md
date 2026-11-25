@@ -1,10 +1,10 @@
 # Podgląd panelu Deye EMS
 
-Menu górne prowadzi do głównych widoków. Menu boczne zawiera odnośniki do sekcji, a na telefonie jest dostępne pod przyciskiem „Sekcje”.
+Menu boczne EMS zawiera odnośniki do sekcji. Na telefonie jest dostępne pod przyciskiem „Sekcje”.
 
 Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach. Zielony oznacza poprawny stan, czerwony błąd, żółty informację, a niebieski grupuje odczyty odbiorów.
 
-Podgląd dokumentuje wydanie **2.6.5** i ładuje panel z bieżącego drzewa kodu.
+Podgląd dokumentuje wydanie **2.6.6** i ładuje panel z bieżącego drzewa kodu.
 
 Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
 
