@@ -173,19 +173,17 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
 
     def _metering_sources(self):
         sources = dict(self._options["sources"])
-        if self._options["topology"] != "load_with_external_ct":
-            return sources
         prefix = self._options.get("entity_prefix", "deye_inverter_")
         if not isinstance(prefix, str) or not prefix:
             prefix = "deye_inverter_"
         prefix = prefix.rstrip("_") + "_"
-        # In CT mode the legacy Deye GRID aliases can report the external CT.
-        # Resolve generated aliases to the internal meter before any telemetry,
-        # statistics or control reads. Never fall back to the external reading.
+        # The GRID port is measured by internal CT in either inverter mode.
+        # Legacy GRID aliases can follow external CT; resolve generated aliases
+        # before telemetry, statistics or control reads without a meter fallback.
         # Keep saved assignments intact for rollback and preserve custom meters.
         for key in self._native_grid_keys():
             suffix = key.removeprefix("grid")
-            if sources[key] in (DEFAULT_SOURCES[key], f"sensor.{prefix}{key}"):
+            if sources[key] in (f"sensor.deye_inverter_{key}", f"sensor.{prefix}{key}"):
                 name = sources[key].removesuffix(key)
                 sources[key] = f"{name}internal_ct{suffix}"
         return sources

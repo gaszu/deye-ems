@@ -1,6 +1,6 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button", "update"]
 
 DEFAULT_OPTIONS = {
@@ -77,7 +77,7 @@ DEFAULT_SOURCES = {
     "battery_alarm": "binary_sensor.deye_inverter_battery_alarm",
     "battery_fault": "binary_sensor.deye_inverter_battery_fault",
     "battery_power": "sensor.deye_inverter_battery_power",
-    "grid_power": "sensor.deye_inverter_grid_power",
+    "grid_power": "sensor.deye_inverter_internal_ct_power",
     "load_power": "sensor.deye_inverter_load_power",
     "grid_current_number": "number.deye_inverter_maximum_battery_grid_charge_current",
     "max_charge_current_number": "number.deye_inverter_maximum_battery_charge_current",
@@ -95,8 +95,8 @@ DEFAULT_SOURCES = {
     "asymmetric_phase_feeding": "switch.deye_inverter_asymmetric_phase_feeding",
 }
 for _phase in range(1, 4):
-    for _kind in ("grid", "load"):
-        DEFAULT_SOURCES[f"{_kind}_l{_phase}_power"] = f"sensor.deye_inverter_{_kind}_l{_phase}_power"
+    DEFAULT_SOURCES[f"grid_l{_phase}_power"] = f"sensor.deye_inverter_internal_ct_l{_phase}_power"
+    DEFAULT_SOURCES[f"load_l{_phase}_power"] = f"sensor.deye_inverter_load_l{_phase}_power"
 for _slot in range(1, 7):
     DEFAULT_SOURCES[f"tou_soc_{_slot}"] = f"number.deye_inverter_time_of_use_{_slot}_soc"
     DEFAULT_SOURCES[f"tou_gc_{_slot}"] = f"switch.deye_inverter_time_of_use_{_slot}_grid_charge"

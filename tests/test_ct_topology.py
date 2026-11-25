@@ -8,9 +8,9 @@ import test_runtime as fixtures
 import test_installable as boundary
 
 
-def ct_harness():
+def ct_harness(**options):
     h = Harness(options={"topology": "load_with_external_ct", "inverter_max_power_kw": 10,
-                         "extra_loads_managed": True, "extra_loads": []})
+                         "extra_loads_managed": True, "extra_loads": [], **options})
     h.set("work_mode", "Zero Export To CT")
     h.set("load_power", 3000, "W")
     h.set("grid_power", -2000, "W")
@@ -180,20 +180,22 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
                     h.co._preflight()
 
     def test_legacy_aliases_cannot_feed_port_limit_in_ct_mode(self):
-        h = ct_harness()
+        legacy = {key: f"sensor.deye_inverter_{key}" for key in
+                  ("grid_power", "grid_l1_power", "grid_l2_power", "grid_l3_power")}
+        h = ct_harness(sources=legacy)
         h.set("grid_power", 6000, "W")
         h.set("ct_grid_power", 13000, "W")
         for phase, port, utility in ((1, 2000, 4400), (2, 2000, 4300), (3, 2000, 4300)):
             h.set(f"grid_l{phase}_power", port, "W")
             h.set(f"ct_grid_l{phase}_power", utility, "W")
-            h.set_entity(SOURCES[f"grid_l{phase}_power"], utility, "W")
-        h.set_entity(SOURCES["grid_power"], 13000, "W")
+            h.set_entity(legacy[f"grid_l{phase}_power"], utility, "W")
+        h.set_entity(legacy["grid_power"], 13000, "W")
         inputs = h.co._read_inputs(h.now)
         self.assertTrue(inputs["telemetry_valid"])
         self.assertEqual(inputs["grid_port_power"], 6000)
         self.assertEqual(inputs["grid_power"], 13000)
         self.assertEqual(inputs["outside_load_w"], 7000)
-        self.assertEqual(h.co._options["sources"]["grid_power"], SOURCES["grid_power"])
+        self.assertEqual(h.co._options["sources"]["grid_power"], legacy["grid_power"])
         self.assertEqual(h.co.options["sources"]["grid_power"], "sensor.deye_inverter_internal_ct_power")
         del h.states[h.co._sources["grid_power"]]
         self.assertFalse(h.co._read_inputs(h.now)["telemetry_valid"])
@@ -203,7 +205,11 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
         h = Harness(options={"topology": "load_with_external_ct",
                              "sources": {"grid_power": manual}})
         self.assertEqual(h.co._sources["grid_power"], manual)
-        self.assertEqual(Harness().co._sources["grid_power"], SOURCES["grid_power"])
+        load = Harness(options={"sources": {"grid_power": "sensor.deye_inverter_grid_power"}})
+        self.assertEqual(load.co._sources["grid_power"], "sensor.deye_inverter_internal_ct_power")
+        for key in ("ct_grid_power", "ct_grid_l1_power", "ct_grid_l2_power", "ct_grid_l3_power"):
+            load.states.pop(load.co._sources[key], None)
+        self.assertTrue(load.co._read_inputs(load.now)["telemetry_valid"])
 
     def test_negative_branch_on_one_phase_cannot_be_hidden_by_other_phases(self):
         with self.assertRaises(ValueError):

@@ -46,7 +46,7 @@ class InverterModelFlows(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["inverter_phases"], 1)
         self.assertEqual(data["inverter_max_power_kw"], 5)
         self.assertEqual((data["min_soc_percent"], data["capacity_kwh"], data["pv_peak_kwp"]), (60, 30, 7))
-        self.assertEqual(data["sources"]["grid_power"], "sensor.deye_example_grid_power")
+        self.assertEqual(data["sources"]["grid_power"], "sensor.deye_example_internal_ct_power")
         self.assertFalse(any(data["sources"][f"{kind}_l{i}_power"]
                              for kind in ("grid", "load") for i in (1, 2, 3)))
         self.assertNotIn("confirm_model", data)
