@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-6-2";
-const PANEL_VERSION = "2.6.2";
+const PANEL_TAG = "deye-ems-panel-2-6-3";
+const PANEL_VERSION = "2.6.3";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -644,6 +644,7 @@ class DeyeEMSPanel extends HTMLElement {
       (direction?'<span class="meter-direction">'+esc(direction)+'</span>':'')+phaseHtml+'</article>';
   }
   homeAssistantBarHtml(){
+    if(this.dashboardEmbedded)return "";
     // HA owns the sidebar and its display mode. Use its native toolbar when
     // registered, and dispatch the same HA event from either menu control.
     const label="Przełącz menu boczne Home Assistant";
@@ -1637,9 +1638,9 @@ class DeyeEMSPanel extends HTMLElement {
       // Only the opaque HA toolbar is sticky. Keeping the EMS header in normal
       // flow prevents its translucent background from showing cards beneath it.
       ".ems-header{position:static;flex-direction:column;align-items:stretch;gap:12px}.ems-ha-bar{--ems-ha-bar-height:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px));position:sticky;top:0;z-index:5;height:var(--ems-ha-bar-height);background:var(--primary-background-color,#2c2c2e);--app-header-background-color:var(--primary-background-color,#2c2c2e);color:var(--app-header-text-color,var(--primary-text-color))}.ems-ha-bar.fallback{display:flex;align-items:center;gap:12px;padding:var(--safe-area-inset-top,0px) 16px 0;border-bottom:1px solid var(--divider-color)}.ems-ha-bar a{color:inherit;text-decoration:none;padding:6px}.ems-ha-title{font-weight:650;margin-inline-end:auto}.ems-ha-bar button{padding:6px 9px;color:inherit}.ems-top-nav,.ems-side-nav{display:flex;gap:6px}.ems-top-nav{flex-wrap:wrap}.ems-top-nav a,.ems-side-nav a{display:block;padding:8px 12px;border-radius:10px;color:var(--primary-text-color);text-decoration:none;font-weight:600}.ems-top-nav a:hover,.ems-side-nav a:hover{background:var(--secondary-background-color);color:var(--primary-color)}.ems-layout{display:grid;grid-template-columns:154px minmax(0,1fr);gap:16px}.ems-side-nav{position:sticky;top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 12px);align-self:start;flex-direction:column;padding:8px;background:var(--ems-surface);border-radius:var(--ha-card-border-radius,12px)}.ems-content{min-width:0}.ems-menu-toggle{display:none}[data-panel-section]:focus-visible{outline-offset:1px}[id^=ems-][tabindex]{scroll-margin-top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 16px)}@media(max-width:900px){.ems-layout{display:block}.ems-menu-toggle{display:inline-flex}.ems-side-nav{display:none;position:static;margin-bottom:12px}.ems-side-nav.menu-open{display:flex;flex-flow:row wrap}}@media(max-width:520px){.ems-top-nav a{padding:7px 8px}}"+
-      // Lovelace owns the viewport and the primary HA toolbar in dashboard mode.
-      // The existing EMS bar stays visible in flow so it cannot cover sections.
-      ":host([dashboard-embedded]){background:transparent;min-height:0}:host([dashboard-embedded]) .ems-ha-bar{position:relative;z-index:auto}:host([dashboard-embedded]) main{padding-top:14px}:host([dashboard-embedded]) .ems-side-nav{top:12px}"+
+      // Lovelace supplies the surrounding navigation. The card retains the
+      // panel theme's own background, including a configured wallpaper.
+      ":host([dashboard-embedded]){min-height:0}:host([dashboard-embedded]) main{padding-top:14px}:host([dashboard-embedded]) .ems-side-nav{top:12px}"+
       "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}header,article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){header{flex-direction:column;gap:10px}.mode-controls{width:100%;justify-content:space-between}.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
       '</style>'+this.homeAssistantBarHtml()+'<main><header class="ems-header" aria-label="Sterowanie EMS"><div class="mode-controls"><div class="pill '+modeStyle+(active?'':' shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div><nav class="ems-top-nav" aria-label="Menu górne">'+
       this.navigationHtml([["ems-overview","Przegląd"],["ems-meters","Pomiary"],["ems-forecast","Prognoza"],["ems-settings","Ustawienia"]])+
@@ -1745,6 +1746,7 @@ if(!customElements.get(PANEL_TAG))customElements.define(PANEL_TAG,DeyeEMSPanel);
 
 
 class DeyeEMSDashboardCard extends DeyeEMSPanel {
+  get dashboardEmbedded(){return true;}
   setConfig(config){
     if(config?.type!=="custom:deye-ems-dashboard-card")throw new Error("Nieprawidłowy typ karty Deye EMS.");
     const sections={overview:"ems-overview",meters:"ems-meters",forecast:"ems-forecast",settings:"ems-settings"};
