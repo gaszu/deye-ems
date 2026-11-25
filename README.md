@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.6.0](https://github.com/gaszu/deye-ems/releases/tag/v2.6.0)
+**Aktualne wydanie / Current release:** [Deye EMS 2.6.2](https://github.com/gaszu/deye-ems/releases/tag/v2.6.2)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -180,13 +180,13 @@ W obu trybach wewnętrzne CT Deye mierzy port GRID. W Zero Export To CT zewnętr
 
 Deye EMS można również osadzić w natywnym pulpicie Home Assistant. Deye EMS can also be embedded in a native Home Assistant dashboard. [Instalacja / Setup](INSTALL.md#deye-ems-w-natywnym-pulpicie-home-assistant)
 
-Poniższy przewodnik opisuje wydanie **2.6.0**. The layout below describes release **2.6.0**.
+Poniższy przewodnik opisuje wydanie **2.6.2**. The layout below describes release **2.6.2**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.6.0** |
-| [tests](tests) | Testy offline / Offline tests · **2.6.0** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.6.0** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.6.0** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.6.2** |
+| [tests](tests) | Testy offline / Offline tests · **2.6.2** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.6.2** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.6.2** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).

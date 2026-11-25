@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-6-0";
-const PANEL_VERSION = "2.6.0";
+const PANEL_TAG = "deye-ems-panel-2-6-2";
+const PANEL_VERSION = "2.6.2";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -125,9 +125,27 @@ class DeyeEMSPanel extends HTMLElement {
   hardwareDraft={};hardwareError="";hardwareNotice="";hardwareSequence=0;
   storeSyncSequence=0;storeSyncFlight=null;storeSyncAttempts=new Map();storeSyncTimer=null;storeRequestCancel=null;storeSyncStatus="";
   constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;this.sourceOpen=false;this.sourceBusy=false;this.sourceCommitting=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";this.sourceSequence=0;}
-  set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
-  connectedCallback(){if(this._hass&&!this.started){this.started=true;this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
+  set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;void this.openNativeDashboard();this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
+  connectedCallback(){if(this._hass&&!this.started){this.started=true;void this.openNativeDashboard();this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
   disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;this.cancelStoreSync();clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);void this.cancelTariff(false,true);}
+  nativeDashboardPath(config){
+    // Redirect only after the administrator has created the agreed hidden view.
+    // Existing dashboards without it and the direct recovery URL keep the panel.
+    const view=Array.isArray(config?.views)&&config.views.find(row=>
+      row?.path==="deye-ems"&&row.visible===false&&row.type==="panel"&&
+      row.cards?.length===1&&row.cards[0]?.type==="custom:deye-ems-dashboard-card");
+    return view?"/lovelace/deye-ems":null;
+  }
+  async openNativeDashboard(){
+    if(location.pathname!=="/deye-ems"||new URLSearchParams(location.search).has("standalone")||
+       this._hass?.user?.is_admin!==true)return;
+    try{
+      const path=this.nativeDashboardPath(await this._hass.callWS({type:"lovelace/config"}));
+      if(path&&this.isConnected&&location.pathname==="/deye-ems"&&!this.hasUnsavedChanges())location.replace(path);
+    }catch{
+      // Without readable dashboard configuration the original panel remains usable.
+    }
+  }
   async refresh(){if(!this._hass||this.busy)return;const request=++this.requestSequence;try{const payload=await this._hass.callWS({type:"deye_ems/status"});if(request!==this.requestSequence||this.busy)return;this.payload=this.mergeUpdateStatus(payload);this.error="";}catch(e){if(request!==this.requestSequence||this.busy)return;this.error=e.message||String(e);}void this.syncStoreMetadata();this.render();}
   async command(args,draftKey=null,errorMessage=null){
     if(this.busy)return false;
