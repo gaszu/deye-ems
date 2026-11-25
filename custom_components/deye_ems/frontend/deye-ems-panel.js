@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-6-7";
-const PANEL_VERSION = "2.6.7";
+const PANEL_TAG = "deye-ems-panel-2-6-8";
+const PANEL_VERSION = "2.6.8";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -127,7 +127,7 @@ class DeyeEMSPanel extends HTMLElement {
   constructor(){super();this.attachShadow({mode:"open"});this.busy=false;this.error="";this.payload=null;this.drafts={};this.requestSequence=0;this.loadDraft=null;this.loadDelete=null;this.loadError="";this.solcastOpen=false;this.solcastBusy=false;this.solcastCommitting=false;this.solcastFlow=null;this.solcastDraft={};this.solcastSecret="";this.solcastError="";this.solcastNotice="";this.solcastSequence=0;this.solcastConfirmDisable=false;this.solcastRefreshTimer=null;this.solcastSavedAt=0;this.appearanceDraft=null;this.appearanceError="";this.appliedThemeValues=new Map();this.appearanceMissing=false;this.updatesBusy=false;this.updatesError="";this.updatesSequence=0;this.sourceOpen=false;this.sourceBusy=false;this.sourceCommitting=false;this.sourceFlow=null;this.sourceDraft={};this.sourceError="";this.sourceNotice="";this.sourceSequence=0;}
   set hass(value){this._hass=value;const themeChanged=this.applyPanelTheme();if(this.isConnected&&!this.started){this.started=true;void this.openNativeDashboard();this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else if(themeChanged)this.render();}
   connectedCallback(){if(this._hass&&!this.started){this.started=true;void this.openNativeDashboard();this.refresh();this.timer=setInterval(()=>this.refresh(),10000);}else this.render();}
-  disconnectedCallback(){++this.updatesSequence;this.updatesBusy=false;this.cancelStoreSync();clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);void this.cancelTariff(false,true);}
+  disconnectedCallback(){this.panelScrollListeners?.abort();this.panelScrollListeners=null;++this.updatesSequence;this.updatesBusy=false;this.cancelStoreSync();clearInterval(this.timer);this.started=false;void this.cancelSolcast(false,true);void this.cancelSources(false,true);void this.cancelHardware(false,true);void this.cancelTariff(false,true);}
   nativeDashboardPath(config){
     // Redirect only after the administrator has created the agreed hidden view.
     // Existing dashboards without it and the direct recovery URL keep the panel.
@@ -674,11 +674,35 @@ class DeyeEMSPanel extends HTMLElement {
       if(target.isConnected)this.scrollToPanelSection(target);
     });
   }
+  bindPanelScroll(){
+    if(this.panelScrollListeners||!this.isConnected)return;
+    this.panelScrollListeners=new AbortController();
+    const options={capture:true,passive:true,signal:this.panelScrollListeners.signal};
+    const update=()=>this.updatePanelClip();
+    // HA can scroll inside its own shadow tree, where scroll events do not
+    // cross the shadow boundary. Listen on each containing tree.
+    for(let root=this.getRootNode();root.host;root=root.host.getRootNode()){
+      root.addEventListener("scroll",update,options);
+    }
+    window.addEventListener("scroll",update,options);
+    window.addEventListener("resize",update,options);
+  }
+  updatePanelClip(){
+    const controls=this.shadowRoot.querySelector(".ems-controls");
+    const content=this.shadowRoot.querySelector(".ems-content");
+    if(!controls||!content)return;
+    // Clip only the scrolling cards. The transparent controls and their
+    // backdrop still show the dashboard wallpaper while cards pass below.
+    const overlap=controls.getBoundingClientRect().bottom+24-content.getBoundingClientRect().top;
+    content.style.clipPath=overlap>0?"inset("+overlap+"px -100vmax -100vmax)":"";
+  }
   scrollToPanelSection(target){
     // Link focus stays on the heading, but the scroll offset belongs to the
     // card above it. Otherwise its top padding can disappear under the bar.
-    const section=target.closest("section")??target;
+    // The overview starts at the top of the panel, including any notices.
+    const section=(target.id==="ems-overview"?target.closest("main"):target.closest("section"))??target;
     section.scrollIntoView({block:"start",inline:"nearest"});
+    this.updatePanelClip();
   }
   revealSection(target,details){
     // Settings must be expanded before the browser can scroll to their content.
@@ -1646,7 +1670,7 @@ class DeyeEMSPanel extends HTMLElement {
       ".ems-header{position:static;flex-direction:column;align-items:stretch;gap:12px}.ems-ha-bar{--ems-ha-bar-height:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px));position:sticky;top:0;z-index:5;height:var(--ems-ha-bar-height);background:var(--primary-background-color,#2c2c2e);--app-header-background-color:var(--primary-background-color,#2c2c2e);color:var(--app-header-text-color,var(--primary-text-color))}.ems-ha-bar.fallback{display:flex;align-items:center;gap:12px;padding:var(--safe-area-inset-top,0px) 16px 0;border-bottom:1px solid var(--divider-color)}.ems-ha-bar a{color:inherit;text-decoration:none;padding:6px}.ems-ha-title{font-weight:650;margin-inline-end:auto}.ems-ha-bar button{padding:6px 9px;color:inherit}.ems-side-nav{display:flex;gap:6px}.ems-side-nav a{display:block;padding:8px 12px;border-radius:10px;color:var(--primary-text-color);text-decoration:none;font-weight:600}.ems-side-nav a:hover{background:var(--secondary-background-color);color:var(--primary-color)}.ems-layout{display:grid;grid-template-columns:154px minmax(0,1fr);gap:16px}.ems-side-nav{position:sticky;top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 12px);align-self:start;flex-direction:column;padding:8px;background:var(--ems-surface);border-radius:var(--ha-card-border-radius,12px)}.ems-content{min-width:0}.ems-menu-toggle{display:none}[data-panel-section]:focus-visible{outline-offset:1px}[id^=ems-][tabindex]{scroll-margin-top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 16px)}@media(max-width:900px){.ems-layout{display:block}.ems-menu-toggle{display:inline-flex}.ems-side-nav{display:none;position:static;margin-bottom:12px}.ems-side-nav.menu-open{display:flex;flex-flow:row wrap}}"+
       // The controls share the theme's translucent card surface. Blur the
       // content behind the sticky row so its text never competes with controls.
-      "main{--ems-controls-height:76px;--ems-ha-offset:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px))}.ems-controls{position:sticky;top:var(--ems-ha-offset);z-index:4;min-height:var(--ems-controls-height);display:flex;align-items:center;padding:8px 16px;margin-bottom:12px;background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:blur(14px);border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px)}.ems-controls .ems-header{width:100%;margin:0;padding:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none}.ems-controls .mode-controls{flex-wrap:nowrap}.ems-controls .pill,.ems-controls #mode{white-space:nowrap;font-size:16px}.ems-controls .pill{padding:10px 16px}.ems-controls #mode{padding:12px 18px}[id^=ems-][tabindex],section:has(>[id^=ems-][tabindex]){scroll-margin-top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 24px)}.ems-side-nav{top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 12px)}@media(max-width:900px){main{--ems-controls-height:106px}.ems-controls{padding:8px 12px}.ems-controls .ems-header{gap:4px}.ems-controls .ems-menu-toggle{align-self:flex-start;padding:4px 9px}.ems-side-nav.menu-open{position:fixed;top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 8px);inset-inline:14px;z-index:6;max-height:50vh;overflow:auto;background:var(--primary-background-color,#2c2c2e)}}@media(max-width:420px){.ems-controls .pill,.ems-controls #mode{font-size:14px;padding:9px 10px}}"+
+      "main{--ems-controls-height:76px;--ems-ha-offset:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px))}.ems-controls{position:sticky;top:var(--ems-ha-offset);z-index:4;min-height:var(--ems-controls-height);display:flex;align-items:center;padding:8px 16px;margin-bottom:24px;background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:blur(14px);border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px)}.ems-controls .ems-header{width:100%;margin:0;padding:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none}.ems-controls .mode-controls{flex-wrap:nowrap}.ems-controls .pill,.ems-controls #mode{white-space:nowrap;font-size:16px}.ems-controls .pill{padding:10px 16px}.ems-controls #mode{padding:12px 18px}[id^=ems-][tabindex],section:has(>[id^=ems-][tabindex]){scroll-margin-top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 24px)}.ems-side-nav{top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 12px)}@media(max-width:900px){main{--ems-controls-height:106px}.ems-controls{padding:8px 12px}.ems-controls .ems-header{gap:4px}.ems-controls .ems-menu-toggle{align-self:flex-start;padding:4px 9px}.ems-side-nav.menu-open{position:fixed;top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 8px);inset-inline:14px;z-index:6;max-height:50vh;overflow:auto;background:var(--primary-background-color,#2c2c2e)}}@media(max-width:420px){.ems-controls .pill,.ems-controls #mode{font-size:14px;padding:9px 10px}}"+
       // Lovelace supplies the surrounding navigation. The card retains the
       // panel theme's own background, including a configured wallpaper.
       ":host([dashboard-embedded]){min-height:0}:host([dashboard-embedded]) main{padding-top:14px}"+
@@ -1709,6 +1733,8 @@ class DeyeEMSPanel extends HTMLElement {
         if(this.settingsElement===details)this.settingsExpanded=details.open;
       });
     }
+    this.bindPanelScroll();
+    this.updatePanelClip();
     this.bindNavigation(details);
     this.openDashboardSection(details);
     this.bindModelChart(rows);

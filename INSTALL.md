@@ -6,7 +6,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
 
-Instrukcja dla wydania [Deye EMS 2.6.7](https://github.com/gaszu/deye-ems/releases/tag/v2.6.7).
+Instrukcja dla wydania [Deye EMS 2.6.8](https://github.com/gaszu/deye-ems/releases/tag/v2.6.8).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -213,7 +213,7 @@ Panel pokazuje SoC w P10/P50 przed terminem oraz ewentualny niedobór energii w 
 
 Przy doborze osobnych profili zużycia każdy licznik jest sprawdzany osobno. Kanał z brakami pozostaje w zużyciu łącznym. Profile mogą korzystać tylko ze wspólnych godzin, w których ich łączne zużycie mieści się w pomiarze domu.
 
-Górny pasek Home Assistant daje dostęp do natywnego menu bocznego oraz do przeglądu i ustawień HA. Odrębne menu EMS prowadzą do sekcji panelu.
+Widok Lovelace korzysta z natywnego paska i menu Home Assistant. W panelu EMS jego boczne menu prowadzi do sekcji. Pasek przycisków sterowania pozostaje widoczny przy przewijaniu.
 
 Pasek HA pozostaje przy górnej krawędzi podczas przewijania. Przycisk menu steruje natywnym panelem bocznym Home Assistant.
 

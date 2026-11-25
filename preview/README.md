@@ -4,7 +4,7 @@ Menu boczne EMS zawiera odnośniki do sekcji. Na telefonie jest dostępne pod pr
 
 Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach. Zielony oznacza poprawny stan, czerwony błąd, żółty informację, a niebieski grupuje odczyty odbiorów.
 
-Podgląd dokumentuje wydanie **2.6.7** i ładuje panel z bieżącego drzewa kodu.
+Podgląd dokumentuje wydanie **2.6.8** i ładuje panel z bieżącego drzewa kodu. Boczne menu przewija do sekcji, a karty znikają pod paskiem sterowania z zachowaniem odstępu również podczas ręcznego przewijania.
 
 Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
 
@@ -33,4 +33,4 @@ zakłada stałej liczby sześciu slotów.
 
 Otwarcie podglądu nie instaluje ani nie aktualizuje integracji w HA.
 
-Górny pasek Home Assistant daje dostęp do natywnego menu bocznego oraz do przeglądu i ustawień HA. Odrębne menu EMS prowadzą do sekcji panelu.
+Widok Lovelace korzysta z natywnego paska i menu Home Assistant. W panelu EMS jego boczne menu prowadzi do sekcji. Pasek przycisków sterowania pozostaje widoczny przy przewijaniu.
