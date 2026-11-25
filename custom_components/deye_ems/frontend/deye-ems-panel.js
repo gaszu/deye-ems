@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-6-6";
-const PANEL_VERSION = "2.6.6";
+const PANEL_TAG = "deye-ems-panel-2-6-7";
+const PANEL_VERSION = "2.6.7";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -671,8 +671,14 @@ class DeyeEMSPanel extends HTMLElement {
     // Native view navigation should land once. Polling must leave the user
     // where they are, and moving focus would steal it from HA's view tabs.
     requestAnimationFrame(()=>{
-      if(target.isConnected)target.scrollIntoView({block:"start"});
+      if(target.isConnected)this.scrollToPanelSection(target);
     });
+  }
+  scrollToPanelSection(target){
+    // Link focus stays on the heading, but the scroll offset belongs to the
+    // card above it. Otherwise its top padding can disappear under the bar.
+    const section=target.closest("section")??target;
+    section.scrollIntoView({block:"start",inline:"nearest"});
   }
   revealSection(target,details){
     // Settings must be expanded before the browser can scroll to their content.
@@ -701,7 +707,7 @@ class DeyeEMSPanel extends HTMLElement {
       this.revealSection(target,details);
       setMenu(false);
       target.focus({preventScroll:true});
-      target.scrollIntoView({block:"start"});
+      this.scrollToPanelSection(target);
     }));
   }
   topologyHtml(){
@@ -1640,7 +1646,7 @@ class DeyeEMSPanel extends HTMLElement {
       ".ems-header{position:static;flex-direction:column;align-items:stretch;gap:12px}.ems-ha-bar{--ems-ha-bar-height:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px));position:sticky;top:0;z-index:5;height:var(--ems-ha-bar-height);background:var(--primary-background-color,#2c2c2e);--app-header-background-color:var(--primary-background-color,#2c2c2e);color:var(--app-header-text-color,var(--primary-text-color))}.ems-ha-bar.fallback{display:flex;align-items:center;gap:12px;padding:var(--safe-area-inset-top,0px) 16px 0;border-bottom:1px solid var(--divider-color)}.ems-ha-bar a{color:inherit;text-decoration:none;padding:6px}.ems-ha-title{font-weight:650;margin-inline-end:auto}.ems-ha-bar button{padding:6px 9px;color:inherit}.ems-side-nav{display:flex;gap:6px}.ems-side-nav a{display:block;padding:8px 12px;border-radius:10px;color:var(--primary-text-color);text-decoration:none;font-weight:600}.ems-side-nav a:hover{background:var(--secondary-background-color);color:var(--primary-color)}.ems-layout{display:grid;grid-template-columns:154px minmax(0,1fr);gap:16px}.ems-side-nav{position:sticky;top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 12px);align-self:start;flex-direction:column;padding:8px;background:var(--ems-surface);border-radius:var(--ha-card-border-radius,12px)}.ems-content{min-width:0}.ems-menu-toggle{display:none}[data-panel-section]:focus-visible{outline-offset:1px}[id^=ems-][tabindex]{scroll-margin-top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 16px)}@media(max-width:900px){.ems-layout{display:block}.ems-menu-toggle{display:inline-flex}.ems-side-nav{display:none;position:static;margin-bottom:12px}.ems-side-nav.menu-open{display:flex;flex-flow:row wrap}}"+
       // The controls share the theme's translucent card surface. Blur the
       // content behind the sticky row so its text never competes with controls.
-      "main{--ems-controls-height:76px;--ems-ha-offset:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px))}.ems-controls{position:sticky;top:var(--ems-ha-offset);z-index:4;min-height:var(--ems-controls-height);display:flex;align-items:center;padding:8px 16px;margin-bottom:12px;background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:blur(14px);border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px)}.ems-controls .ems-header{width:100%;margin:0;padding:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none}.ems-controls .mode-controls{flex-wrap:nowrap}.ems-controls .pill,.ems-controls #mode{white-space:nowrap;font-size:16px}.ems-controls .pill{padding:10px 16px}.ems-controls #mode{padding:12px 18px}[id^=ems-][tabindex]{scroll-margin-top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 16px)}.ems-side-nav{top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 12px)}@media(max-width:900px){main{--ems-controls-height:106px}.ems-controls{padding:8px 12px}.ems-controls .ems-header{gap:4px}.ems-controls .ems-menu-toggle{align-self:flex-start;padding:4px 9px}.ems-side-nav.menu-open{position:fixed;top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 8px);inset-inline:14px;z-index:6;max-height:50vh;overflow:auto;background:var(--primary-background-color,#2c2c2e)}}@media(max-width:420px){.ems-controls .pill,.ems-controls #mode{font-size:14px;padding:9px 10px}}"+
+      "main{--ems-controls-height:76px;--ems-ha-offset:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px))}.ems-controls{position:sticky;top:var(--ems-ha-offset);z-index:4;min-height:var(--ems-controls-height);display:flex;align-items:center;padding:8px 16px;margin-bottom:12px;background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:blur(14px);border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px)}.ems-controls .ems-header{width:100%;margin:0;padding:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none}.ems-controls .mode-controls{flex-wrap:nowrap}.ems-controls .pill,.ems-controls #mode{white-space:nowrap;font-size:16px}.ems-controls .pill{padding:10px 16px}.ems-controls #mode{padding:12px 18px}[id^=ems-][tabindex],section:has(>[id^=ems-][tabindex]){scroll-margin-top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 24px)}.ems-side-nav{top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 12px)}@media(max-width:900px){main{--ems-controls-height:106px}.ems-controls{padding:8px 12px}.ems-controls .ems-header{gap:4px}.ems-controls .ems-menu-toggle{align-self:flex-start;padding:4px 9px}.ems-side-nav.menu-open{position:fixed;top:calc(var(--ems-ha-offset) + var(--ems-controls-height) + 8px);inset-inline:14px;z-index:6;max-height:50vh;overflow:auto;background:var(--primary-background-color,#2c2c2e)}}@media(max-width:420px){.ems-controls .pill,.ems-controls #mode{font-size:14px;padding:9px 10px}}"+
       // Lovelace supplies the surrounding navigation. The card retains the
       // panel theme's own background, including a configured wallpaper.
       ":host([dashboard-embedded]){min-height:0}:host([dashboard-embedded]) main{padding-top:14px}"+
