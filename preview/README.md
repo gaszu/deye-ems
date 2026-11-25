@@ -1,8 +1,8 @@
 # Podgląd panelu Deye EMS
 
-Sekcja układu pod kartami głównego panelu pokazuje osobne odczyty faz portu GRID oraz przyłącza w trybie CT. W trybie LOAD pokazuje fazy portu GRID.
+Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach.
 
-Podgląd dokumentuje wydanie **2.5.3** i ładuje panel z bieżącego drzewa kodu.
+Podgląd dokumentuje wydanie **2.5.4** i ładuje panel z bieżącego drzewa kodu.
 
 Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
 

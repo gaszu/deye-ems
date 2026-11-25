@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-5-3";
-const PANEL_VERSION = "2.5.3";
+const PANEL_TAG = "deye-ems-panel-2-5-4";
+const PANEL_VERSION = "2.5.4";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -591,21 +591,39 @@ class DeyeEMSPanel extends HTMLElement {
     if(key==="outside_load_w"&&(topology!=="load_with_external_ct"||input.outside_power_valid!==true))return null;
     return this.kw(key);
   }
-  gridPhaseReadoutHtml(port=false){
-    const o=this.payload?.options||{},h=o.hardware_profile||{},ct=o.topology==="load_with_external_ct",load=o.topology==="load_only";
-    const phases=h.phases??o.inverter_phases,connection=h.connection_phases??o.connection_phases;
-    // In CT mode grid_* is utility exchange and grid_port_* retains internal CT.
-    // In LOAD mode grid_* already measures the port, so one phase row is enough.
-    // A single-phase port has structural zeroes on its unconnected phases.
-    const utility=ct&&!port, key=ct&&port?"grid_port_":"grid_";
-    const label=utility?"CT":load||port?"GRID":"Sieć";
-    const single=utility?connection===1:phases===1;
-    if(single){
-      const phase=h.inverter_phase??o.inverter_phase;
-      if(!["L1","L2","L3"].includes(phase))return "Faza podłączenia niepotwierdzona: — kW";
-      return label+" "+phase+(utility?" (przyłącze jednofazowe)":" (port jednofazowy)")+": "+num(this.topologyKw(key+phase.toLowerCase()+"_power"))+" kW";
-    }
-    return label+" L1 / L2 / L3: "+[1,2,3].map(phase=>num(this.topologyKw(key+"l"+phase+"_power"))).join(" / ")+" kW";
+  meteringPhases(port=false){
+    const o=this.payload?.options||{},h=o.hardware_profile||{};
+    const ct=o.topology==="load_with_external_ct",utility=ct&&!port;
+    const single=(utility?h.connection_phases??o.connection_phases:h.phases??o.inverter_phases)===1;
+    const phase=h.inverter_phase??o.inverter_phase;
+    const key=ct&&port?"grid_port_":"grid_";
+    // The unconnected phases of a single-phase port are structural zeroes.
+    // External CT on a three-phase connection still has three real readings.
+    const names=single?["L1","L2","L3"].includes(phase)?[phase]:[]:["L1","L2","L3"];
+    return names.map(name=>({name,power:this.topologyKw(key+name.toLowerCase()+"_power")}));
+  }
+  gridPhaseReadoutHtml(){
+    const ct=this.payload?.options?.topology==="load_with_external_ct",phases=this.meteringPhases();
+    const label=ct?"CT":this.payload?.options?.topology==="load_only"?"GRID":"Sieć";
+    if(!phases.length)return "Faza podłączenia niepotwierdzona: — kW";
+    if(phases.length===1)return label+" "+phases[0].name+(ct?" (przyłącze jednofazowe)":" (port jednofazowy)")+": "+num(phases[0].power)+" kW";
+    return label+" L1 / L2 / L3: "+phases.map(({power})=>num(power)).join(" / ")+" kW";
+  }
+  meteringTile(label,key,description,phases=null){
+    const power=this.topologyKw(key);
+    // Keep signed phase readings. The total uses a magnitude and a verbal
+    // direction so an inverter export is never described as grid import.
+    let direction="";
+    if(phases)direction=power===null?"Brak odczytu":power===0?"Brak przepływu":
+      key==="grid_power"?(power>0?"Pobór z sieci":"Oddawanie do sieci"):
+      (power>0?"Pobór przez falownik":"Oddawanie z falownika");
+    const style=phases&&power!==null&&power!==0?(power>0?" meter-import":" meter-export"):"";
+    const phaseHtml=phases?(phases.length?'<dl class="meter-phases">'+phases.map(({name,power})=>
+      '<div><dt>'+esc(name)+'</dt><dd>'+esc(num(power))+' <small>kW</small></dd></div>').join("")+'</dl>':
+      '<p class="legend">Faza podłączenia niepotwierdzona.</p>'):"";
+    return '<article class="meter-tile'+style+'"><h3>'+esc(label)+'</h3><span class="label">'+esc(description)+'</span>'+
+      '<strong>'+esc(num(phases&&power!==null?Math.abs(power):power))+' <small>kW</small></strong>'+
+      (direction?'<span class="meter-direction">'+esc(direction)+'</span>':'')+phaseHtml+'</article>';
   }
   topologyHtml(){
     const o=this.payload?.options||{},input=this.payload?.data?.inputs,topology=o.topology;
@@ -615,8 +633,6 @@ class DeyeEMSPanel extends HTMLElement {
     const mismatch=known&&actualMode!==null&&actualMode!==savedMode;
     const topologyError=fresh&&Boolean(input?.topology_error);
     const heading=ct?"Układ LOAD i CT":load?"Układ LOAD":"Układ instalacji";
-    const outside=ct?num(this.topologyKw("outside_load_w"))+" kW":load?"nieobliczane w układzie LOAD":"nieustalone";
-    const exchange=ct?"Sieć na CT":load?"Sieć na porcie GRID":"Wymiana z siecią";
     let notice="";
     if(!known)notice="Nie rozpoznano zapisanego układu instalacji. Pomiary nie są przypisane do układu LOAD ani CT.";
     else if(!fresh)notice="Brak aktualnego odczytu układu. Pomiary wymagają aktualizacji z ostatnich 30 sekund.";
@@ -624,11 +640,13 @@ class DeyeEMSPanel extends HTMLElement {
     else if(input.telemetry_valid!==true)notice="Brak poprawnych pomiarów układu. Nieprawidłowe odczyty są pokazane jako —.";
     else if(ct&&input.outside_power_valid!==true)notice="Brak poprawnego bilansu CT i portu GRID. Moc odbiorów między GRID a CT jest nieznana.";
     return '<section aria-label="Układ instalacji"><h2>'+heading+'</h2><p>Zapisany układ EMS: '+esc(savedMode??"nierozpoznany")+' · odczyt trybu falownika: '+esc(actualMode??(fresh?"brak poprawnego odczytu":"brak aktualnego odczytu"))+'.</p>'+
-      '<p>LOAD: '+num(this.topologyKw("raw_load_power"))+' kW · odbiory między GRID a CT: '+outside+' · port GRID falownika: '+num(this.topologyKw("grid_port_power"))+' kW.</p>'+
-      '<p>Dom w modelu EMS: '+num(this.topologyKw("load_power"))+' kW · '+exchange+': '+num(this.topologyKw("grid_power"))+' kW.</p>'+
-      (known?'<p>Wewnętrzny CT · port GRID: '+esc(this.gridPhaseReadoutHtml(true))+'.</p>':'')+
-      (ct?'<p>Zewnętrzny CT · przyłącze: '+esc(this.gridPhaseReadoutHtml())+'.</p>':'')+
-      '<p class="legend">Dodatnia moc GRID oznacza pobór, ujemna — wypływ z falownika. '+(ct?'O wymianie z siecią decyduje pomiar CT. Dom obejmuje LOAD i odbiory między GRID a CT.':load?'Wymiana z siecią jest mierzona na porcie GRID. Dom obejmuje pomiar LOAD; odbiory poza LOAD nie są wyliczane.':'Źródło wymiany z siecią i zakres pomiaru domu wymagają rozpoznania zapisanego układu.')+'</p>'+
+      (known?'<div class="meter-grid">'+
+        (ct?this.meteringTile("Przyłącze","grid_power","Zewnętrzny CT",this.meteringPhases()):"")+
+        this.meteringTile("Port GRID falownika","grid_port_power","Wewnętrzny CT",this.meteringPhases(true))+
+        this.meteringTile(ct?"Dom · łącznie":"Dom · LOAD",ct?"load_power":"raw_load_power",
+          ct?"Wyjście LOAD: "+num(this.topologyKw("raw_load_power"))+" kW":"Odbiory za wyjściem LOAD")+
+        (ct?this.meteringTile("Odbiory między GRID a CT","outside_load_w","Wyliczone z bilansu obu mierników"):"")+'</div>':"")+
+      (known?'<p class="legend">Na fazach dodatnia moc oznacza pobór, a ujemna oddawanie. '+(ct?'O wymianie z siecią decyduje pomiar CT. Dom obejmuje LOAD i odbiory między GRID a CT.':'Dom obejmuje pomiar LOAD; odbiory poza LOAD nie są wyliczane.')+'</p>':'')+
       '<p class="legend">Moc znamionowa falownika '+num(numeric(o.inverter_max_power_kw))+' kW jest wspólna dla wyjścia LOAD i oddawania przez port GRID.'+(ct?' Odbiory między GRID a CT mogą pobrać pozostałą moc bezpośrednio z sieci; ta część nie przechodzi przez falownik.':'')+'</p>'+
       (notice?'<p class="notice warning">'+notice+'</p>':'')+
       (mismatch?'<p class="notice warning">Niezgodność trybu falownika z zapisanym układem EMS. Wymagany tryb: '+esc(savedMode)+'. Sprawdź konfigurację przed uruchomieniem sterowania.</p>':'')+
@@ -1526,6 +1544,7 @@ class DeyeEMSPanel extends HTMLElement {
     const phaseModel=o.hardware_profile?.phases===1?"Falownik jednofazowy — faza "+(o.hardware_profile.inverter_phase||"niepotwierdzona"):fresh&&d.inputs?.grid_charge_balanced===true?"Bilansowanie poboru GRID potwierdzone":"Wariant zachowawczy — bilansowanie GRID niepotwierdzone";
     const basicField=(key,button)=>{const r=key==="min_soc_percent"?[boundValid?lowerBound:40,90,1]:ranges[key],value=Object.hasOwn(this.drafts,key)?this.drafts[key]:(key==="min_soc_percent"?Math.max(numeric(o[key])??40,r[0]):o[key]??"");return '<label>'+esc(labels[key])+'<input data-key="'+key+'" type="number" min="'+r[0]+'" max="'+r[1]+'" step="'+r[2]+'" value="'+esc(value)+'"><button data-save="'+key+'" '+(this.busy||key==="min_soc_percent"&&!boundValid?'disabled':'')+'>'+esc(button)+'</button></label>';};
     this.shadowRoot.innerHTML='<style>'+
+      ".meter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.meter-tile{padding:16px;border-inline-start:3px solid var(--divider-color,#d2d8df)}.meter-tile h3{margin:0 0 3px;font-size:16px}.meter-tile strong{font-variant-numeric:tabular-nums}.meter-import{border-inline-start-color:var(--info-color,#3478a7)}.meter-export{border-inline-start-color:var(--success-color,#27816b)}.meter-direction{font-size:13px;font-weight:650}.meter-phases{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}.meter-phases div{flex:1 1 70px;background:var(--secondary-background-color,#edf1f5);padding:6px 8px;border-radius:6px}.meter-phases dt{color:var(--secondary-text-color);font-size:12px}.meter-phases dd{margin:1px 0 0;font-weight:650;font-variant-numeric:tabular-nums}.meter-phases small{font-size:11px;font-weight:400}@media(max-width:560px){.meter-grid{grid-template-columns:1fr}}"+
       ".model-power{margin-top:16px}.model-power .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.model-power .label{font-size:14px}.model-power .model-power-value{font-size:clamp(27px,3.5vw,36px)}.model-power-value small{font-size:16px}@media(max-width:480px){.model-power .grid{grid-template-columns:1fr}}"+
       ".model-chart{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;margin-top:12px}.model-chart-scale{position:relative;height:230px;color:var(--secondary-text-color);font-size:12px}.model-chart-scale span{position:absolute;right:0;transform:translateY(-50%)}.model-chart-scale{min-width:36px}.model-chart-scale span:nth-child(2){top:50%}.model-chart-scale span:last-child{top:100%}.model-chart-plot{position:relative;border-left:1px solid var(--divider-color);border-bottom:1px solid var(--divider-color)}#model-chart{cursor:crosshair;touch-action:pan-y}#model-chart-crosshair line{stroke:var(--secondary-text-color);stroke-dasharray:4 4;vector-effect:non-scaling-stroke}#model-chart-readout{position:absolute;top:4px;margin:4px;padding:6px 8px;border-radius:6px;background:var(--card-background-color,var(--primary-background-color));color:var(--primary-text-color);border:1px solid var(--divider-color);font-size:12px;pointer-events:none}.model-chart-times{position:relative;height:19px;margin-top:6px;color:var(--secondary-text-color);font-size:12px}.model-chart-times time{position:absolute;white-space:nowrap;transform:translateX(-50%)}.model-chart-times time:first-child{transform:none}.model-chart-times time:last-child:not(:first-child){transform:translateX(-100%)}.model-chart-body>p{margin:0 0 8px}@media(max-width:520px){.model-chart-times time:not(:first-child):not(:last-child){display:none}}"+
       ":host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color,#fafafa));color:var(--primary-text-color,#212121);font:15px var(--primary-font-family,var(--ha-font-family-body,system-ui))}*{box-sizing:border-box}main{max-width:1180px;margin:auto;padding:32px 24px 64px}header{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 16px}.eyebrow{color:var(--secondary-text-color);font-size:12px;letter-spacing:1.7px;text-transform:uppercase;margin-bottom:8px}.pill{padding:9px 14px;border-radius:var(--ha-border-radius-pill,100px);background:var(--label-badge-background-color,var(--secondary-background-color));color:var(--label-badge-text-color,var(--primary-text-color));border:1px solid var(--divider-color);font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}header,article,section{background:var(--ha-card-background,var(--card-background-color,#fff));backdrop-filter:var(--ha-card-backdrop-filter,none);border-width:var(--ha-card-border-width,1px);border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));box-shadow:var(--ha-card-box-shadow,none);color:var(--primary-text-color);padding:22px}.label,.sub{display:block;color:var(--secondary-text-color);font-size:13px}.sub{margin-top:10px;min-height:16px}strong{display:block;font-size:32px;line-height:1.5;letter-spacing:-1px}strong small{font-weight:450;letter-spacing:0;font-size:16px;margin-left:5px}section{margin-top:18px}.notice{padding:14px 18px;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,12px);line-height:1.6;margin:18px 0}.warning{border-inline-start:4px solid var(--warning-color)}.error{border-inline-start:4px solid var(--error-color)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}"+

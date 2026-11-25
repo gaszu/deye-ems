@@ -1,10 +1,10 @@
 # Specyfikacja silnika Deye EMS
 
-Sekcja układu pod kartami głównego panelu pokazuje osobne odczyty faz portu GRID oraz przyłącza w trybie CT. W trybie LOAD pokazuje fazy portu GRID.
+Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach.
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów.
 
-Specyfikacja wydania [Deye EMS 2.5.3](https://github.com/gaszu/deye-ems/releases/tag/v2.5.3). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
+Specyfikacja wydania [Deye EMS 2.5.4](https://github.com/gaszu/deye-ems/releases/tag/v2.5.4). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
 
 ## Pomiary i topologie
 

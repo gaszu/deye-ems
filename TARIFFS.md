@@ -1,6 +1,6 @@
 # Taryfy i harmonogram sterowania Deye EMS
 
-Opis dotyczy wydania [Deye EMS 2.5.3](https://github.com/gaszu/deye-ems/releases/tag/v2.5.3). Nową konfigurację można zapisać dla **TAURON Dystrybucja G11, G12, G12w lub G13**. Wybierz profil zgodny z umową i potwierdź zegar licznika. EMS używa profilu do planowania i sterowania ładowaniem. Rozliczenie energii odbywa się zgodnie z umową z dostawcą. [Dostępne profile](custom_components/deye_ems/tariff_settings.py)
+Opis dotyczy wydania [Deye EMS 2.5.4](https://github.com/gaszu/deye-ems/releases/tag/v2.5.4). Nową konfigurację można zapisać dla **TAURON Dystrybucja G11, G12, G12w lub G13**. Wybierz profil zgodny z umową i potwierdź zegar licznika. EMS używa profilu do planowania i sterowania ładowaniem. Rozliczenie energii odbywa się zgodnie z umową z dostawcą. [Dostępne profile](custom_components/deye_ems/tariff_settings.py)
 
 ## Godziny zapisane w profilach EMS
 
