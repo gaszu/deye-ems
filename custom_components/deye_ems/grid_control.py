@@ -240,12 +240,13 @@ def calculate_grid_charge_increase_cap(g: dict) -> dict:
                             - (g["grid_port_phases_w"][layout[2]] if single else max(g["grid_port_phases_w"])))
     # Scale per-phase headroom only when native GRID measurements confirm balanced charging.
     multiplier = 3 if not single and g.get("grid_charge_balanced") is True else 1
-    available = max(0, min(total_available, phase_available * multiplier,
-                           port_available, port_phase_available * multiplier))
+    connection_available = min(total_available, phase_available * multiplier)
+    available = max(0, min(connection_available, port_available, port_phase_available * multiplier))
     per_amp = g["battery_voltage_v"] / g.get("charge_efficiency", .9)
     delta = math.floor(available / per_amp)
     return dict(increase_cap_a=max(0, min(cap["cap_a"], math.floor(g["current_a"] + delta))),
                 grid_step_headroom_a=delta, telemetry_ok=True,
+                connection_step_headroom_a=max(0, math.floor(connection_available / per_amp)),
                 reason="grid_step_headroom")
 
 

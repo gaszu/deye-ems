@@ -278,6 +278,17 @@ def describe_current_wait(g):
     if reason in ("target_reached", "target_hysteresis", "pv_covers_charge_need"):
         status["current_hold_reason"] = "pv_covers_charge_need" if reason == "pv_covers_charge_need" else "target_reached"
         return status
+    # A switch can stay on while the battery receives negligible power.
+    # Report the measured connection limit before the generic policy wait,
+    # keeping port GRID limits and the dispatch decision separate.
+    if (g.get("hardware_ok") is True and g.get("cheap_window") is True
+            and result.get("need_a", 0) > 0
+            and reason != "window_or_policy_blocked"
+            and g["battery_power_w"] >= -g["battery_voltage_v"]
+            and (result.get("connection_grid_excess_w", 0) > 0
+                 or calculate_grid_charge_increase_cap(g)["connection_step_headroom_a"] == 0)):
+        status["current_hold_reason"] = "connection_headroom_blocked"
+        return status
     if (g.get("hardware_ok") is not True or g.get("cheap_window") is not True
             or result.get("safety") or result.get("need_a", 0) <= 0 and not tapering(g)):
         return status

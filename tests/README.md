@@ -1,4 +1,4 @@
-# Testy Deye EMS 2.4.1
+# Testy Deye EMS 2.4.2
 
 Testy korzystają z danych syntetycznych. W katalogu głównym repozytorium uruchom:
 

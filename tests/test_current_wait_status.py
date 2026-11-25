@@ -42,6 +42,19 @@ class CurrentWaitStatus(unittest.TestCase):
         self.assertNotIn("recovery_remaining_s", status)
         self.assertIsNone(status["next_current_change_at"])
 
+    def test_connection_phase_headroom_explains_pause_with_enabled_switch(self):
+        g = self.sample(grid_w=5900, grid_phases_w=[4800, 600, 500],
+                        grid_charge_enabled=True, grid_charge_active=True,
+                        battery_power_w=-42)
+        g["current_policy"]["observed_at"] = None
+        status = runtime.describe_current_wait(g)
+        self.assertEqual(status["current_hold_reason"], "connection_headroom_blocked")
+        self.assertIsNone(status["next_current_change_at"])
+        for changes in (dict(battery_power_w=-1200), dict(telemetry_valid=False),
+                        dict(grid_w=1700, grid_phases_w=[600, 600, 500])):
+            status = runtime.describe_current_wait({**g, **changes})
+            self.assertNotEqual(status["current_hold_reason"], "connection_headroom_blocked")
+
     def test_readback_and_unknown_history_have_no_prediction(self):
         for change in (dict(pending_current_a=20), dict(ordinary_history_known=False)):
             status = runtime.describe_current_wait(self.sample(**change))
