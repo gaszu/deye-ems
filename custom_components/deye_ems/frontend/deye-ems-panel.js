@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-5-1";
-const PANEL_VERSION = "2.5.1";
+const PANEL_TAG = "deye-ems-panel-2-5-2";
+const PANEL_VERSION = "2.5.2";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -591,18 +591,21 @@ class DeyeEMSPanel extends HTMLElement {
     if(key==="outside_load_w"&&(topology!=="load_with_external_ct"||input.outside_power_valid!==true))return null;
     return this.kw(key);
   }
-  gridPhaseReadoutHtml(){
+  gridPhaseReadoutHtml(port=false){
     const o=this.payload?.options||{},h=o.hardware_profile||{},ct=o.topology==="load_with_external_ct",load=o.topology==="load_only";
     const phases=h.phases??o.inverter_phases,connection=h.connection_phases??o.connection_phases;
-    // The other inverter phases are structural zeroes in a one-phase layout,
-    // not measurements of utility phases. Only a three-phase CT supplies all
-    // three actual utility readouts for a single-phase inverter installation.
-    if(phases===1&&(load||ct&&connection===1)){
+    // In CT mode grid_* is utility exchange and grid_port_* retains internal CT.
+    // In LOAD mode grid_* already measures the port, so one phase row is enough.
+    // A single-phase port has structural zeroes on its unconnected phases.
+    const utility=ct&&!port, key=ct&&port?"grid_port_":"grid_";
+    const label=utility?"CT":load||port?"GRID":"Sieć";
+    const single=utility?connection===1:phases===1;
+    if(single){
       const phase=h.inverter_phase??o.inverter_phase;
       if(!["L1","L2","L3"].includes(phase))return "Faza podłączenia niepotwierdzona: — kW";
-      return (ct?"CT ":"GRID ")+phase+(ct?" (przyłącze jednofazowe)":" (port jednofazowy)")+": "+num(this.topologyKw("grid_"+phase.toLowerCase()+"_power"))+" kW";
+      return label+" "+phase+(utility?" (przyłącze jednofazowe)":" (port jednofazowy)")+": "+num(this.topologyKw(key+phase.toLowerCase()+"_power"))+" kW";
     }
-    return (ct?"CT":load?"GRID":"Sieć")+" L1 / L2 / L3: "+num(this.topologyKw("grid_l1_power"))+" / "+num(this.topologyKw("grid_l2_power"))+" / "+num(this.topologyKw("grid_l3_power"))+" kW";
+    return label+" L1 / L2 / L3: "+[1,2,3].map(phase=>num(this.topologyKw(key+"l"+phase+"_power"))).join(" / ")+" kW";
   }
   topologyHtml(){
     const o=this.payload?.options||{},input=this.payload?.data?.inputs,topology=o.topology;
@@ -623,6 +626,8 @@ class DeyeEMSPanel extends HTMLElement {
     return '<section aria-label="Układ instalacji"><h2>'+heading+'</h2><p>Zapisany układ EMS: '+esc(savedMode??"nierozpoznany")+' · odczyt trybu falownika: '+esc(actualMode??(fresh?"brak poprawnego odczytu":"brak aktualnego odczytu"))+'.</p>'+
       '<p>LOAD: '+num(this.topologyKw("raw_load_power"))+' kW · odbiory między GRID a CT: '+outside+' · port GRID falownika: '+num(this.topologyKw("grid_port_power"))+' kW.</p>'+
       '<p>Dom w modelu EMS: '+num(this.topologyKw("load_power"))+' kW · '+exchange+': '+num(this.topologyKw("grid_power"))+' kW.</p>'+
+      (known?'<p>Wewnętrzny CT · port GRID: '+esc(this.gridPhaseReadoutHtml(true))+'.</p>':'')+
+      (ct?'<p>Zewnętrzny CT · przyłącze: '+esc(this.gridPhaseReadoutHtml())+'.</p>':'')+
       '<p class="legend">Dodatnia moc GRID oznacza pobór, ujemna — wypływ z falownika. '+(ct?'O wymianie z siecią decyduje pomiar CT. Dom obejmuje LOAD i odbiory między GRID a CT.':load?'Wymiana z siecią jest mierzona na porcie GRID. Dom obejmuje pomiar LOAD; odbiory poza LOAD nie są wyliczane.':'Źródło wymiany z siecią i zakres pomiaru domu wymagają rozpoznania zapisanego układu.')+'</p>'+
       '<p class="legend">Moc znamionowa falownika '+num(numeric(o.inverter_max_power_kw))+' kW jest wspólna dla wyjścia LOAD i oddawania przez port GRID.'+(ct?' Odbiory między GRID a CT mogą pobrać pozostałą moc bezpośrednio z sieci; ta część nie przechodzi przez falownik.':'')+'</p>'+
       (notice?'<p class="notice warning">'+notice+'</p>':'')+

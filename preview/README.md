@@ -1,6 +1,8 @@
 # Podgląd panelu Deye EMS
 
-Podgląd dokumentuje wydanie **2.5.1** i ładuje panel z bieżącego drzewa kodu.
+Panel w sekcji układu pokazuje osobne odczyty faz portu GRID oraz przyłącza w trybie CT. W trybie LOAD pokazuje fazy portu GRID.
+
+Podgląd dokumentuje wydanie **2.5.2** i ładuje panel z bieżącego drzewa kodu.
 
 Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
 
