@@ -1,10 +1,12 @@
 # Instalacja i obsługa Deye EMS
 
+Menu górne prowadzi do głównych widoków. Menu boczne zawiera odnośniki do sekcji, a na telefonie jest dostępne pod przyciskiem „Sekcje”.
+
 Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach. Zielony oznacza poprawny stan, czerwony błąd, żółty informację, a niebieski grupuje odczyty odbiorów.
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
 
-Instrukcja dla wydania [Deye EMS 2.5.5](https://github.com/gaszu/deye-ems/releases/tag/v2.5.5).
+Instrukcja dla wydania [Deye EMS 2.5.6](https://github.com/gaszu/deye-ems/releases/tag/v2.5.6).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -210,3 +212,5 @@ Wybór LOAD/CT jest dostępny bezpośrednio w panelu w sekcji **Pomiar i sterowa
 Panel pokazuje SoC w P10/P50 przed terminem oraz ewentualny niedobór energii w chronionym oknie. Silnik ocenia osiągalność każdego celu osobno, a panel rozróżnia cel planu i cel używany przez regulator. Podniesienie celu ochronnego na podstawie nieosiągalnego planu wymaga ryzyka wyczerpania rezerwy. Diagnostyka odbiornika podaje dostępne i wykorzystane godziny Recorder oraz zakres osobnego profilu. Problemy telemetrii podczas startu i w czasie pracy są rozróżniane.
 
 Przy doborze osobnych profili zużycia każdy licznik jest sprawdzany osobno. Kanał z brakami pozostaje w zużyciu łącznym. Profile mogą korzystać tylko ze wspólnych godzin, w których ich łączne zużycie mieści się w pomiarze domu.
+
+Górny pasek Home Assistant daje dostęp do natywnego menu bocznego oraz do przeglądu i ustawień HA. Odrębne menu EMS prowadzą do sekcji panelu.

@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-5-5";
-const PANEL_VERSION = "2.5.5";
+const PANEL_TAG = "deye-ems-panel-2-5-6";
+const PANEL_VERSION = "2.5.6";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -312,7 +312,7 @@ class DeyeEMSPanel extends HTMLElement {
       this.telemetryDetailRows().filter(row=>!this.telemetryRowValid(row)).map(row=>row.source+":"+String(row.reason)+":"+String(row.timestamp_source)).join("|")].join(":");
   }
   telemetryDiagnosticsHtml(){
-    const heading='<section aria-label="Diagnostyka pomiarów"><h2>Diagnostyka pomiarów</h2>';
+    const heading='<section aria-label="Diagnostyka pomiarów"><h2 id="ems-diagnostics" tabindex="-1">Diagnostyka pomiarów</h2>';
     if(!this.snapshotFresh())return heading+'<p class="notice warning">Brak bieżącej diagnostyki. Ostatni stan silnika jest nieaktualny lub ma nieprawidłowy czas. Oczekiwanie na świeży odczyt z HA.</p></section>';
     const stream=this.reportStreamHtml(),rows=this.telemetryDetailRows(),failed=rows.filter(row=>!this.telemetryRowValid(row)),healthy=rows.length-failed.length;
     if(!rows.length)return heading+stream+'<p>Brak szczegółów pomiarów w bieżącym odczycie silnika.</p></section>';
@@ -625,6 +625,45 @@ class DeyeEMSPanel extends HTMLElement {
       '<strong>'+esc(num(phases&&power!==null?Math.abs(power):power))+' <small>kW</small></strong>'+
       (direction?'<span class="meter-direction">'+esc(direction)+'</span>':'')+phaseHtml+'</article>';
   }
+  homeAssistantBarHtml(){
+    // HA owns the actual sidebar. Its menu button respects the current
+    // layout and notification state. Direct panel loads can precede its
+    // registration, so the fallback emits the same composed HA event.
+    const menu=customElements.get("ha-menu-button")?'<ha-menu-button></ha-menu-button>':
+      '<button id="ems-ha-menu" class="secondary" aria-label="Otwórz menu Home Assistant">☰</button>';
+    return '<nav class="ems-ha-bar" aria-label="Home Assistant">'+menu+
+      '<a class="ems-ha-title" href="/">Home Assistant</a><a href="/config">Ustawienia HA</a></nav>';
+  }
+  navigationHtml(links){
+    return links.map(([id,label])=>'<a href="#'+id+'" data-panel-section="'+id+'">'+label+'</a>').join("");
+  }
+  bindNavigation(details){
+    this.shadowRoot.getElementById("ems-ha-menu")?.addEventListener("click",()=>{
+      this.dispatchEvent(new CustomEvent("hass-toggle-menu",{bubbles:true,composed:true}));
+    });
+    const menu=this.shadowRoot.getElementById("ems-section-menu");
+    const toggle=this.shadowRoot.getElementById("ems-menu-toggle");
+    const setMenu=open=>{
+      this.sectionMenuOpen=open;
+      menu?.classList.toggle("menu-open",open);
+      toggle?.setAttribute("aria-expanded",String(open));
+    };
+    toggle?.addEventListener("click",()=>setMenu(!this.sectionMenuOpen));
+    this.shadowRoot.querySelectorAll("[data-panel-section]").forEach(link=>link.addEventListener("click",event=>{
+      if(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+      const target=this.shadowRoot.getElementById(link.dataset.panelSection);
+      if(!target)return;
+      event.preventDefault();
+      // A link into collapsed settings must reveal its target before focusing it.
+      if(details?.contains(target)){
+        details.open=true;
+        this.settingsExpanded=true;
+      }
+      setMenu(false);
+      target.focus({preventScroll:true});
+      target.scrollIntoView({block:"start"});
+    }));
+  }
   topologyHtml(){
     const o=this.payload?.options||{},input=this.payload?.data?.inputs,topology=o.topology;
     const ct=topology==="load_with_external_ct",load=topology==="load_only",known=ct||load;
@@ -639,7 +678,7 @@ class DeyeEMSPanel extends HTMLElement {
     else if(!input||input.topology!==topology)notice="Brak odczytu zgodnego z zapisanym układem. Oczekiwanie na aktualizację pomiarów.";
     else if(input.telemetry_valid!==true)notice="Brak poprawnych pomiarów układu. Nieprawidłowe odczyty są pokazane jako —.";
     else if(ct&&input.outside_power_valid!==true)notice="Brak poprawnego bilansu CT i portu GRID. Moc odbiorów między GRID a CT jest nieznana.";
-    return '<section aria-label="Układ instalacji"><h2>'+heading+'</h2><p>Zapisany układ EMS: '+esc(savedMode??"nierozpoznany")+' · odczyt trybu falownika: '+esc(actualMode??(fresh?"brak poprawnego odczytu":"brak aktualnego odczytu"))+'.</p>'+
+    return '<section aria-label="Układ instalacji"><h2 id="ems-meters" tabindex="-1">'+heading+'</h2><p>Zapisany układ EMS: '+esc(savedMode??"nierozpoznany")+' · odczyt trybu falownika: '+esc(actualMode??(fresh?"brak poprawnego odczytu":"brak aktualnego odczytu"))+'.</p>'+
       (known?'<div class="meter-grid">'+
         (ct?this.meteringTile("Przyłącze","grid_power","Zewnętrzny CT",this.meteringPhases()):"")+
         this.meteringTile("Port GRID falownika","grid_port_power","Wewnętrzny CT",this.meteringPhases(true))+
@@ -1556,17 +1595,23 @@ class DeyeEMSPanel extends HTMLElement {
       ".slot-plan-heading{margin-top:24px}.slot-plan-heading h3{font-size:21px;margin-bottom:6px}.slot-plan-heading p,.slot-plan-note{line-height:1.6;color:var(--secondary-text-color);font-size:13px;max-width:760px}.slot-day{margin-top:22px}.slot-day>h3{font-size:16px;margin:0 0 12px}.slot-grid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(130px,1fr);gap:12px;overflow-x:auto;padding-bottom:6px}.slot-card{padding:18px 14px;text-align:center;min-width:0;box-shadow:none;border-radius:16px}.slot-card.is-current{border-color:var(--primary-color);background:var(--ha-color-fill-primary-quiet-resting,var(--ha-card-background,var(--card-background-color,#fff)))}.slot-card.is-past{background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;text-align:left;min-height:26px}.slot-zone{font-size:12px;font-weight:650;color:var(--secondary-text-color)}.slot-card h4{font-size:15px;line-height:1.5;margin:10px 0 6px}.slot-permission{font-size:12px;min-height:36px;line-height:1.5;margin:0 0 10px;color:var(--secondary-text-color)}.slot-badge{display:inline-block;font-size:10px;line-height:1.5;font-weight:650;padding:3px 7px;border-radius:20px;background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-badge.current{background:var(--ha-color-primary-90,var(--secondary-background-color));color:var(--primary-text-color)}.slot-badge.fallback{background:var(--ha-color-warning-90,var(--secondary-background-color));color:var(--primary-text-color);margin:6px 0}.slot-gauge{position:relative;width:min(100%,112px);height:112px;margin:0 auto;color:var(--primary-color)}.slot-gauge.reserve{color:var(--secondary-text-color)}.slot-gauge svg{width:112px;height:112px;transform:rotate(-90deg);overflow:visible}.slot-gauge circle{fill:none;stroke-width:8}.gauge-track{stroke:var(--divider-color)}.gauge-value{stroke:currentColor;stroke-linecap:round}.gauge-reading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:2px;color:var(--primary-text-color)}.gauge-reading b{font-size:29px;font-weight:650;letter-spacing:-1px}.gauge-reading span{font-size:13px;color:var(--secondary-text-color)}.slot-role{font-size:13px;font-weight:650;margin:10px 0 4px}.slot-explanation{font-size:11px;line-height:1.5;color:var(--secondary-text-color);min-height:33px;margin:0}.slot-reserve{font-size:11px;color:var(--secondary-text-color);margin:7px 0}.slot-projection{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider-color)}.slot-projection span,.slot-projection small{display:block;color:var(--secondary-text-color);font-size:11px;line-height:1.5}.slot-projection b{display:block;font-size:15px;line-height:1.7;font-weight:600}.slot-plan-note{margin-bottom:0}.stats article{padding:18px}.stats strong{font-size:28px;overflow-wrap:anywhere}.stats .sub{line-height:1.5}.slot-grid article strong{font-size:28px}details>summary{font-size:17px;line-height:1.5}details{border-top:1px solid var(--divider-color);margin-top:24px}details[open]>summary{margin-bottom:4px}@media(max-width:480px){.slot-card{padding:14px 9px}.slot-card h4{font-size:13px}.slot-zone{font-size:10px}.slot-card-top{align-items:flex-start;flex-direction:column}.slot-gauge,.slot-gauge svg{width:100px;height:100px}.slot-explanation{min-height:48px}.stats strong{font-size:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}"+
       // Use the HA theme surface and its switch/slider accents. Keep explicit semantic labels and iOS status fallbacks.
       ":host{--ems-ok:var(--switch-checked-track-color,#30d158);--ems-bad:var(--error-color,#ff453a);--ems-info:#ffd60a;--ems-load:var(--paper-slider-active-color,#0984ff);--ems-surface:var(--ha-card-background,var(--card-background-color,#fff))}.notice{--ems-tone:var(--ems-info);--ems-tint:#ffd60a20;border-inline-start:4px solid var(--ems-tone);background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}.notice.error{--ems-tone:var(--ems-bad);--ems-tint:#ff453a33}.notice.success{--ems-tone:var(--ems-ok);--ems-tint:#30d15824}.pill.status-good,.pill.status-info{border-color:var(--ems-tone);background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}.pill.status-good{--ems-tone:var(--ems-ok);--ems-tint:#30d15824}.pill.status-info{--ems-tone:var(--ems-info);--ems-tint:#ffd60a24}"+
+      ".ems-header{flex-direction:column;align-items:stretch;gap:12px}.ems-ha-bar{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 8px;border-radius:10px;background:var(--app-header-background-color,var(--ems-surface));color:var(--app-header-text-color,var(--primary-text-color))}.ems-ha-bar a{color:inherit;text-decoration:none;padding:6px}.ems-ha-title{font-weight:650;margin-inline-end:auto}.ems-ha-bar button{padding:6px 9px;color:inherit}.ems-side-nav{scroll-margin-top:var(--ha-header-height,56px)}.ems-top-nav,.ems-side-nav{display:flex;gap:6px}.ems-top-nav{flex-wrap:wrap}.ems-top-nav a,.ems-side-nav a{display:block;padding:8px 12px;border-radius:10px;color:var(--primary-text-color);text-decoration:none;font-weight:600}.ems-top-nav a:hover,.ems-side-nav a:hover{background:var(--secondary-background-color);color:var(--primary-color)}.ems-layout{display:grid;grid-template-columns:154px minmax(0,1fr);gap:16px}.ems-side-nav{position:sticky;top:218px;align-self:start;flex-direction:column;padding:8px;background:var(--ems-surface);border-radius:var(--ha-card-border-radius,12px)}.ems-content{min-width:0}.ems-menu-toggle{display:none}[data-panel-section]:focus-visible{outline-offset:1px}[id^=ems-][tabindex]{scroll-margin-top:220px}@media(max-width:900px){.ems-layout{display:block}.ems-menu-toggle{display:inline-flex}.ems-side-nav{display:none;position:static;margin-bottom:12px}.ems-side-nav.menu-open{display:flex;flex-flow:row wrap}}@media(max-width:520px){[id^=ems-][tabindex]{scroll-margin-top:270px}.ems-top-nav a{padding:7px 8px}}"+
       "@media(max-width:760px){main{padding:24px 14px}.grid,.stats,.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start}h1{font-size:24px}header,article,section{padding:16px}strong{font-size:27px}}@media(max-width:600px){header{flex-direction:column;gap:10px}.mode-controls{width:100%;justify-content:space-between}.load-row{align-items:flex-start;flex-direction:column}}@media(max-width:420px){.fields{grid-template-columns:1fr}.pill{font-size:12px;padding:8px}header{gap:8px}.sub{font-size:11px}}"+
-      '</style><main><header aria-label="Sterowanie EMS"><div class="mode-controls"><div class="pill '+modeStyle+(active?'':' shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div></header>'+
+      '</style><main><header class="ems-header" aria-label="Sterowanie EMS">'+this.homeAssistantBarHtml()+'<div class="mode-controls"><div class="pill '+modeStyle+(active?'':' shadow')+'">'+mode+'</div><button id="mode" '+(this.busy?'disabled':'')+'>'+(active||pendingStart?'Zatrzymaj i obserwuj':'Włącz sterowanie')+'</button></div><nav class="ems-top-nav" aria-label="Menu górne">'+
+      this.navigationHtml([["ems-overview","Przegląd"],["ems-meters","Pomiary"],["ems-forecast","Prognoza"],["ems-settings","Ustawienia"]])+
+      '<button class="secondary ems-menu-toggle" id="ems-menu-toggle" aria-controls="ems-section-menu" aria-expanded="'+Boolean(this.sectionMenuOpen)+'">Sekcje</button></nav></header>'+
+      '<div class="ems-layout"><nav id="ems-section-menu" aria-label="Menu boczne" class="ems-side-nav'+(this.sectionMenuOpen?' menu-open':'')+'">'+
+      this.navigationHtml([["ems-overview","Podsumowanie"],["ems-meters",ctTopology?"Układ LOAD i CT":loadTopology?"Układ LOAD":"Układ instalacji"],["ems-balance","TOP BALANCE"],["ems-forecast","Prognoza modelu"],["ems-tariff","Taryfa"],["ems-diagnostics","Diagnostyka"],["ems-settings","Konfiguracja"]])+
+      '</nav><div class="ems-content">'+
       (this.actionError?'<div role="alert" class="notice error" data-action-error="true"><p><b>Ostatnia nieudana akcja</b></p><p>'+esc(this.actionError.message)+'</p><button id="action-error-dismiss" class="secondary">Zamknij komunikat</button></div>':'')+
       (this.error&&this.error!==this.actionError?.message?'<div role="alert" class="notice error">'+esc(this.error)+'</div>':'')+this.runtimeErrorHtml()+this.startupControlHtml()+this.postSaveHtml()+
-      '<div class="grid stats">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
+      '<div class="grid stats" id="ems-overview" tabindex="-1" aria-label="Podsumowanie">'+card("Akumulator",num(this.measurement("soc")),"%",'Rezerwa EMS '+num(floor)+'%')+
       card("Sieć / dom",num(this.topologyKw("grid_power"))+' / '+num(this.topologyKw("load_power")),"kW",ctTopology?"Sieć mierzona na CT · dom: LOAD + odbiory między GRID a CT":loadTopology?"Sieć na porcie GRID: + pobór, − eksport · dom: pomiar LOAD":"Oczekiwanie na rozpoznanie zapisanego układu")+
       card("Następny cel baterii",num(fresh?c.target_soc:null),"%",time(fresh?c.target_deadline:null)+' · '+selectedSource)+
       card("Doładowanie z sieci",fresh&&active&&d.inputs?.telemetry_valid===true&&Object.hasOwn(chargePauseMessages,c.current_hold_reason)?"Wstrzymane":fresh&&typeof c.grid_charge_enabled==="boolean"?(c.grid_charge_enabled?"Włączone":"Wyłączone"):"—","",fresh?statusText:"Oczekiwanie na odczyt")+'</div>'+
       // Keep live metering visible while the configuration controls stay collapsed.
       this.topologyHtml()+
-      '<section class="top-balance" aria-label="TOP BALANCE"><div class="actions"><button id="top-balance" '+(this.busy||restoring||!balancing&&(!active||!fresh)?'disabled':'')+'>'+(restoring?'Przywracanie nastaw…':balancing?'Wyłącz TOP BALANCE':'TOP BALANCE')+'</button>'+
+      '<section class="top-balance" id="ems-balance" tabindex="-1" aria-label="TOP BALANCE"><div class="actions"><button id="top-balance" '+(this.busy||restoring||!balancing&&(!active||!fresh)?'disabled':'')+'>'+(restoring?'Przywracanie nastaw…':balancing?'Wyłącz TOP BALANCE':'TOP BALANCE')+'</button>'+
       '<label>Docelowy SoC (%)<input id="top-balance-target" type="number" min="1" max="100" step="1" value="'+esc(balanceTarget)+'" '+(balancing||restoring?'disabled':'')+'></label></div>'+
       '<p class="legend">Ładowanie z sieci także w drogiej strefie. Po osiągnięciu celu EMS przywróci zwykłą regulację.</p></section>'+
       (!fresh?'<div class="notice warning">Brak aktualnego odczytu silnika. Pomiary wymagają aktualizacji z ostatnich 30 sekund.</div>':'')+
@@ -1574,13 +1619,13 @@ class DeyeEMSPanel extends HTMLElement {
       (owners.length?'<div class="notice error">Przejęcie sterowania blokują: '+owners.map(esc).join(", ")+'</div>':'')+
       ((plan.unreachable||c.unreachable)?'<div class="notice warning">Dostępna energia lub moc może nie wystarczyć do osiągnięcia celu. Limit poboru ma pierwszeństwo.</div>':'')+
 
-      '<section><h2>Prognoza modelu</h2>'+this.modelTargetsHtml()+
+      '<section><h2 id="ems-forecast" tabindex="-1">Prognoza modelu</h2>'+this.modelTargetsHtml()+
       this.modelChartHtml(rows,floor)+this.pvPriorityHtml()+
       '</section>'+
       this.tariffCalendarHtml()+
       this.solcastForecastHtml()+this.solcastUsageHtml()+'<details><summary id="settings-toggle">Ustawienia zaawansowane i szczegóły</summary>'+
-      '<section aria-label="O panelu"><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div></section>'+
-      '<section><h2>Taryfa energii</h2>'+this.tariffEditorHtml()+'</section>'+
+      '<section id="ems-settings" tabindex="-1" aria-label="O panelu"><div><div class="eyebrow">Silnik lokalny · '+esc(o.tariff_calendar?.tariff||"Profil taryfy")+' · Deye</div><h1>Energia pod kontrolą</h1></div></section>'+
+      '<section><h2 id="ems-tariff" tabindex="-1">Taryfa energii</h2>'+this.tariffEditorHtml()+'</section>'+
       this.hardwareHtml()+this.updatesHtml()+
       '<section><h2>Pomiar i sterowanie</h2><label>Tryb pomiaru EMS<select id="topology" data-topology="true" '+(active||this.busy?'disabled':'')+'><option value="load_only" '+(selectedTopology==="load_only"?'selected':'')+'>Zero Export To Load</option><option value="load_with_external_ct" '+(selectedTopology==="load_with_external_ct"?'selected':'')+'>Zero Export To CT</option></select></label><p>Zapisany tryb EMS: '+esc(savedTopologyLabel)+'. '+(selectedTopology!==(o.topology??"load_only")?'Niezapisana zmiana.':'')+'</p><p>Odczyt trybu falownika: '+esc(fresh?d.inputs?.inverter_work_mode??"brak odczytu":"brak aktualnego odczytu")+'</p><p class="legend">LOAD: dom na wyjściu LOAD. CT: pomiar przy przyłączu i odbiory między CT a portem GRID. Wybór konfiguruje model EMS; przed włączeniem sterowania tryb falownika musi być zgodny. Zmiana wymaga obserwacji i sprawdzenia przypisań pomiarów.</p><button id="topology-save" '+(active||this.busy?'disabled':'')+'>Zapisz tryb pomiaru</button></section>'+
       this.sourcesHtml()+
@@ -1597,7 +1642,7 @@ class DeyeEMSPanel extends HTMLElement {
       this.physicalTariffHtml()+'<section><h2>Prognozowane przepływy</h2><div class="table"><table><thead><tr><th>Termin</th><th>PV kW</th><th>Dom kW</th><th>SoC %</th><th>Grid kW</th></tr></thead><tbody>'+
       rows.filter((_,i)=>i%2===0).map(r=>'<tr><td>'+esc(time(r.timestamp))+'</td><td>'+num(r.pv_kw)+'</td><td>'+num(r.load_kw)+'</td><td>'+num(r.soc_percent)+'</td><td>'+num(r.grid_import_kw)+'</td></tr>').join("")+
       '</tbody></table></div></section></details><footer>Własny silnik Deye EMS · Plan '+esc(time(plan.generated_at))+
-      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja '+PANEL_VERSION+'.</footer></main>';
+      '<br>Bez EMHASS i zewnętrznej usługi obliczeniowej. Ograniczenie importu reaguje na pomiary; nie zastępuje zabezpieczeń falownika i BMS. Wersja '+PANEL_VERSION+'.</footer></div></div></main>';
     const details=this.shadowRoot.querySelector("details");
     this.settingsElement=details;
     if(details){
@@ -1612,6 +1657,7 @@ class DeyeEMSPanel extends HTMLElement {
         if(this.settingsElement===details)this.settingsExpanded=details.open;
       });
     }
+    this.bindNavigation(details);
     this.bindModelChart(rows);
     this.bindLoads();
     this.bindSolcast();
