@@ -100,9 +100,13 @@ async def async_update_panel(hass):
 
 async def _async_options_changed(hass, entry):
     manager = get_post_save_manager(hass)
-    ticket = manager.begin(entry)
     previous = getattr(entry, "runtime_data", None)
-    if previous is not None and getattr(previous, "mode", None) == "active":
+    # A superseded pause can already have saved shadow but still be waiting
+    # for register readback. The next save must also verify that old owner.
+    needs_pause = previous is not None and (getattr(previous, "mode", None) == "active"
+        or manager.requires_reload(entry.entry_id, previous) is True)
+    ticket = manager.begin(entry)
+    if needs_pause:
         try:
             # Internal guarded pause keeps the saved activation intent, but uses
             # normal GC OFF / 0 A commands and requires register readbacks before

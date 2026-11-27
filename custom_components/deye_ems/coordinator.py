@@ -341,7 +341,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         if shutdown is not None:
             await shutdown()
 
-    async def async_set_option(self, key, value):
+    async def async_set_option(self, key, value, *, from_number_entity=False):
+        if from_number_entity and key not in OPTION_RANGES:
+            raise ValueError("Expected a numeric EMS setting")
         if key not in DEFAULT_OPTIONS and key not in ("sources", "extra_loads"):
             raise ValueError("Unknown EMS setting")
         if key in ("inverter_model", "inverter_phases", "connection_phases", "inverter_phase"):
@@ -376,17 +378,28 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 raise ValueError("Setting outside its allowed range")
             value = int(number) if key == "update_seconds" else number
         async with self._lock:
-            if key in ("sources", "extra_loads", "topology", "combined_output_limit_kw") and self.mode == "active":
+            if (key in ("sources", "extra_loads", "topology", "combined_output_limit_kw")
+                    and self.mode == "active" and not from_number_entity):
                 raise ValueError("Switch to shadow before changing hardware mappings")
             if key == "sources":
                 value = {**self._options["sources"], **value}
-            candidate = {**self._options, key: value}
+            # Merge queued HA saves for related parameters before validating the
+            # whole set. The live coordinator keeps the old hardware limits.
+            saved = dict(self.entry.options)
+            candidate = {**self._options, **(saved if from_number_entity else {}), key: value}
             if key == "min_soc_percent":
                 bound = self._soc_lower_bound()
                 if bound is None or value < bound:
                     raise ValueError("Rezerwa musi wynosić co najmniej Battery low SOC + 5 p.p.; wymagany poprawny odczyt encji.")
             if max(candidate["min_soc_percent"], self._soc_lower_bound() or 40) + candidate["reserve_margin_soc_percent"] > candidate["grid_max_soc_percent"]:
                 raise ValueError("Minimum SoC plus reserve must not exceed the grid target ceiling")
+            if from_number_entity:
+                if candidate[key] != saved.get(key, self._options[key]):
+                    # The options listener owns the guarded pause and readback,
+                    # reload, fresh plan and reactivation. Never hot-apply a
+                    # pending number while the old coordinator owns control.
+                    self.hass.config_entries.async_update_entry(self.entry, options={**saved, key: value})
+                return
             await self._cancel_planning()
             self._planning_revision += 1
             self._options[key] = value

@@ -4,7 +4,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów.
 
-Specyfikacja wydania [Deye EMS 2.7.1](https://github.com/gaszu/deye-ems/releases/tag/v2.7.1). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
+Specyfikacja wydania [Deye EMS 2.7.2](https://github.com/gaszu/deye-ems/releases/tag/v2.7.2). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
 
 ## Pomiary i topologie
 
@@ -61,3 +61,5 @@ Panel pokazuje SoC w P10/P50 przed terminem oraz ewentualny niedobór energii w 
 Przy doborze osobnych profili zużycia każdy licznik jest sprawdzany osobno. Kanał z brakami pozostaje w zużyciu łącznym. Profile mogą korzystać tylko ze wspólnych godzin, w których ich łączne zużycie mieści się w pomiarze domu.
 
 Panel wylicza aktualny prąd ładowania z wartości mocy i napięcia DC baterii. Uwzględnia wszystkie źródła energii; przy rozładowaniu pokazuje 0 A, a przy braku świeżej wartości pokazuje kreskę.
+
+Encje nastaw liczbowych HA zapisują opcje dla nowego koordynatora. Dotychczasowy koordynator stosuje poprzednie limity do czasu potwierdzonej pauzy, a wznowienie wymaga standardowej weryfikacji po zapisie.

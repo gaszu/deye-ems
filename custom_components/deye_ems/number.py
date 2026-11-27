@@ -47,5 +47,5 @@ class DeyeEMSNumber(DeyeEMSEntity, NumberEntity):
                                      self.coordinator.options.get("min_soc_bound_valid", False))
 
     async def async_set_native_value(self, value):
-        await self.coordinator.async_set_option(self.key, value)
+        await self.coordinator.async_set_option(self.key, value, from_number_entity=True)
 

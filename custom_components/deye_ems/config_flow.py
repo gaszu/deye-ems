@@ -636,9 +636,6 @@ class DeyeEMSOptionsFlow(TariffFlowMixin, config_entries.OptionsFlow):
         values["min_soc_lower_bound"] = bound
         errors = {}
         if user_input is not None:
-            if (self._mapping_locked() and "combined_output_limit_kw" in user_input
-                    and user_input["combined_output_limit_kw"] != values["combined_output_limit_kw"]):
-                return self.async_abort(reason="stop_before_mapping")
             errors = _errors({**values, **user_input})
             proposed = user_input.get("min_soc_percent", values["min_soc_percent"])
             if proposed < (bound if bound is not None else 40):

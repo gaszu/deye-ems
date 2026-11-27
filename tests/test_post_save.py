@@ -457,6 +457,16 @@ class PostSaveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.old.mode, "shadow")
         self.assertEqual(h.manager._tasks, set())
 
+    async def test_further_save_rechecks_unconfirmed_pause_on_same_owner(self):
+        h = Harness()
+        h.old.mode = "shadow"
+        h.manager.begin(h.entry)
+        h.old.async_set_mode = AsyncMock(side_effect=ValueError("configuration_pause_unconfirmed"))
+        h.hass.config_entries.async_reload = AsyncMock()
+        await self.listener(h)(h.hass, h.entry)
+        h.old.async_set_mode.assert_awaited_once()
+        h.hass.config_entries.async_reload.assert_not_awaited()
+
     async def test_manual_stop_during_internal_pause_wins_and_never_unloads_owner(self):
         h = Harness()
         h.old.mode = "active"

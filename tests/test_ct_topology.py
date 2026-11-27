@@ -263,8 +263,25 @@ class CTTopology(unittest.IsolatedAsyncioTestCase):
         result = await flow.async_step_topology({"topology": "load_with_external_ct"})
         self.assertEqual(result["reason"], "stop_before_mapping")
         result = await flow.async_step_parameters({"combined_output_limit_kw": 9})
-        self.assertEqual(result["reason"], "stop_before_mapping")
+        self.assertEqual(result["data"]["combined_output_limit_kw"], 9)
         h = ct_harness()
         h.active()
         with self.assertRaises(ValueError):
             await h.co.async_set_option("combined_output_limit_kw", 9)
+
+
+    async def test_number_settings_stage_values_without_hot_applying_safety_limits(self):
+        h = ct_harness()
+        h.active()
+        old_limit = h.co.options["combined_output_limit_kw"]
+        await h.co.async_set_option("combined_output_limit_kw", 9, from_number_entity=True)
+        self.assertEqual(h.co.entry.options["combined_output_limit_kw"], 9)
+        self.assertEqual(h.co.options["combined_output_limit_kw"], old_limit)
+        await h.co.async_set_option("grid_import_limit_kw", 8, from_number_entity=True)
+        self.assertEqual(h.co.entry.options["combined_output_limit_kw"], 9)
+        self.assertEqual(h.co.entry.options["grid_import_limit_kw"], 8)
+        with self.assertRaises(ValueError):
+            await h.co.async_set_option("combined_output_limit_kw", -1, from_number_entity=True)
+        self.assertEqual(h.co.entry.options["combined_output_limit_kw"], 9)
+        self.assertEqual(h.co.mode, "active")
+        self.assertFalse(h.calls)
