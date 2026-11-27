@@ -1,6 +1,6 @@
 # Taryfy i harmonogram sterowania Deye EMS
 
-Opis dotyczy wydania [Deye EMS 2.6.10](https://github.com/gaszu/deye-ems/releases/tag/v2.6.10). Nową konfigurację można zapisać dla **TAURON Dystrybucja G11, G12, G12w lub G13**. Wybierz profil zgodny z umową i potwierdź zegar licznika. EMS używa profilu do planowania i sterowania ładowaniem. Rozliczenie energii odbywa się zgodnie z umową z dostawcą. [Dostępne profile](custom_components/deye_ems/tariff_settings.py)
+Opis dotyczy wydania [Deye EMS 2.7.0](https://github.com/gaszu/deye-ems/releases/tag/v2.7.0). Nową konfigurację można zapisać dla **TAURON Dystrybucja G11, G12, G12w lub G13**. Wybierz profil zgodny z umową i potwierdź zegar licznika. EMS używa profilu do planowania i sterowania ładowaniem. Rozliczenie energii odbywa się zgodnie z umową z dostawcą. [Dostępne profile](custom_components/deye_ems/tariff_settings.py)
 
 ## Godziny zapisane w profilach EMS
 
@@ -29,3 +29,5 @@ Sześć slotów TOU falownika odwzorowuje techniczny szablon doby. Podział na s
 ## Istniejące profile i archiwum
 
 Silnik zachowuje wcześniej zapisane profile zgodnie z ich dostępnością, ważnością i regułami. Dotychczasowy własny harmonogram `legacy_g13` jest oddzielnym profilem od TAURON G13. Pełny katalog, w tym profile innych operatorów, jest dostępny w źródłach. Historyczne zestawienia i źródła są dostępne w archiwalnej wersji dokumentu. [Katalog profili](custom_components/deye_ems/tariff_profiles.json) · [Archiwalna dokumentacja](https://github.com/gaszu/deye-ems/blob/c20c92cac6ffbd62432102594d39d0a02f7487ef/TARIFFS.md)
+
+W zimowym oknie G13 13:00–16:00 EMS ładuje do popołudniowego celu z możliwie wysokim bezpiecznym prądem. Po dojściu do celu zatrzymuje ładowanie i wznawia je po spadku o 5 p.p. w otwartym oknie.

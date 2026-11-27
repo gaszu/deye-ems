@@ -374,7 +374,7 @@ def calculate_grid_charge(g: dict, *, ordinary_policy=None) -> dict:
                    and _number(storage_eta) and .5 <= storage_eta <= 1)
     total_pace = gap * 1000 / hours / storage_eta if allowed and power_valid else 0
     if allowed and power_valid and cap["telemetry_ok"] and (soc < minimum or
-            g.get("fast_night_charge") is True and gap > 0):
+            g.get("fast_target_charge") is True and gap > 0):
         # Reserve recovery and overnight priority request the maximum TOTAL charge;
         # local/PV contribution still displaces grid inside that budget.
         total_pace = max(total_pace, min(g["battery_total_cap_a"], g["bms_cap_a"]) * voltage)

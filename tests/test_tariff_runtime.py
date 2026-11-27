@@ -182,46 +182,50 @@ class OperatorPlanner(unittest.TestCase):
 
 
 class OperatorRuntime(unittest.IsolatedAsyncioTestCase):
-    async def test_night_charges_at_safe_cap_then_holds_grid_charge_at_zero(self):
-        h = Harness(when=datetime(2026, 11, 10, 21, tzinfo=TZ), options=options("tauron_g13_2026"))
-        for row in h.co._tou_program(h.now)["rows"]:
-            h.set(f"tou_time_{row['slot']}", row["time"])
-        h.active()
-        slot = h.co._window(h.now)[4]
-        gc = f"tou_gc_{slot}"
-        await h.tick()
-        initial = h.current_calls()[-1]
-        self.assertGreater(initial, 10)
-        h.advance(10)
-        await h.tick()
-        self.assertEqual(h.co._state(gc).state, "on")
-        target = h.co._target(h.now)[0]
-        h.set("soc", target, "%")
-        h.advance(10)
-        await h.tick()
-        self.assertEqual(h.current_calls()[-1], 0)
-        self.assertEqual(h.co._state(gc).state, "on")
-        h.set("soc", target - 4, "%")
-        h.advance(120)
-        await h.tick()
-        self.assertEqual(h.current_calls(), [initial, 0])
-        self.assertEqual(h.co._state(gc).state, "on")
-        h.set("load_power", "unavailable", "W")
-        h.advance(10)
-        await h.tick()
-        self.assertEqual(h.co._state(gc).state, "on")
-        h.set("load_power", 1800, "W")
-        h.set("soc", target - 5, "%")
-        h.advance(10)
-        await h.tick()
-        self.assertGreater(h.current_calls()[-1], 10)
-        self.assertEqual([action for _, action, data in h.calls
-                          if data["entity_id"] == h.co._sources[gc]], ["turn_on"])
-        h.advance(int((h.now.replace(hour=7, minute=0, second=0) + timedelta(days=1) - h.now).total_seconds()))
-        await h.tick()
-        self.assertEqual(h.current_calls()[-1], 0)
-        self.assertEqual([h.co._state(f"tou_gc_{i}").state for i in range(1, 7)],
-                         ["on" if h.co._slot_charge_eligible(h.now, i) else "off" for i in range(1, 7)])
+    async def test_priority_windows_charge_at_safe_cap_then_hold_at_zero(self):
+        for hour, end in ((13, datetime(2026, 11, 10, 16, tzinfo=TZ)),
+                          (21, datetime(2026, 11, 11, 7, tzinfo=TZ))):
+            with self.subTest(hour=hour):
+                h = Harness(when=datetime(2026, 11, 10, hour, tzinfo=TZ), options=options("tauron_g13_2026"))
+                for row in h.co._tou_program(h.now)["rows"]:
+                    h.set(f"tou_time_{row['slot']}", row["time"])
+                h.active()
+                slot = h.co._window(h.now)[4]
+                gc = f"tou_gc_{slot}"
+                await h.tick()
+                initial = h.current_calls()[-1]
+                self.assertGreater(initial, 10)
+                h.advance(10)
+                await h.tick()
+                self.assertEqual(h.co._state(gc).state, "on")
+                target = h.co._target(h.now)[0]
+                h.set("soc", target, "%")
+                h.advance(10)
+                await h.tick()
+                self.assertEqual(h.current_calls()[-1], 0)
+                self.assertEqual(h.co._state(gc).state, "on")
+                h.set("soc", target - 4, "%")
+                h.advance(120)
+                await h.tick()
+                self.assertEqual(h.current_calls(), [initial, 0])
+                self.assertEqual(h.co._state(gc).state, "on")
+                h.set("load_power", "unavailable", "W")
+                h.advance(10)
+                await h.tick()
+                self.assertEqual(h.co._state(gc).state, "on")
+                h.set("load_power", 1800, "W")
+                h.set("soc", target - 5, "%")
+                h.advance(10)
+                await h.tick()
+                self.assertGreater(h.current_calls()[-1], 10)
+                self.assertEqual([action for _, action, data in h.calls
+                                  if data["entity_id"] == h.co._sources[gc]], ["turn_on"])
+                h.advance(int((end - h.now).total_seconds()))
+                await h.tick()
+                self.assertEqual(h.current_calls()[-1], 0)
+                self.assertEqual([h.co._state(f"tou_gc_{i}").state for i in range(1, 7)],
+                                 ["on" if h.co._slot_charge_eligible(h.now, i) else "off" for i in range(1, 7)])
+
 
     async def test_winter_and_summer_program_every_grid_charge_flag_during_peak(self):
         for month in (7, 11):

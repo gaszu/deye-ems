@@ -4,7 +4,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów.
 
-Specyfikacja wydania [Deye EMS 2.6.10](https://github.com/gaszu/deye-ems/releases/tag/v2.6.10). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
+Specyfikacja wydania [Deye EMS 2.7.0](https://github.com/gaszu/deye-ems/releases/tag/v2.7.0). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
 
 ## Pomiary i topologie
 
@@ -41,8 +41,8 @@ Panel oznacza rodzaj dnia dla dziś i jutra według czasu lokalnego. Informacja 
 ## Regulacja ładowania
 
 - **Grid Charge.** W potwierdzonej taryfie uzbrajane są dozwolone sloty TOU, gdy przejdą zabezpieczenia. W dozwolonym slocie prąd może pozostawać na 0 A po osiągnięciu celu. Koniec okna lub warunek ochronny może wymagać wyłączenia ładowania.
-- **Okno nocne.** W dozwolonym oknie potwierdzonej taryfy od 21:00 do 07:00 czasu lokalnego EMS dąży do celu SoC z bieżącą bezpieczną mocą. Między dodatnimi poleceniami zachowuje co najmniej 120 s. Po osiągnięciu celu ustawia 0 A. Zatrzask celu stosuje histerezę 5 p.p. z uwzględnieniem rezerwy.
-- **Zwykłe ładowanie.** Poza przyspieszonym trybem nocnym EMS dopasowuje prąd do potrzeb i czasu pozostałego do celu. Zwykłe korekty mają rampę do 10 A i co najmniej 600 s między dodatnimi poleceniami, z uwzględnieniem progów, kroku urządzenia i limitów. Po miękkim celu prąd może być stopniowo wygaszany. Twardy limit SoC może zatrzymać go od razu.
+- **Szybkie okna ładowania.** W dozwolonym oknie potwierdzonej taryfy od 21:00 do 07:00 oraz zimą w G13 od 13:00 do 16:00 EMS dąży do celu SoC z bieżącą bezpieczną mocą. Między dodatnimi poleceniami zachowuje co najmniej 120 s. Po osiągnięciu celu ustawia 0 A. Zatrzask celu stosuje histerezę 5 p.p. z uwzględnieniem rezerwy.
+- **Zwykłe ładowanie.** Poza szybkim oknem EMS dopasowuje prąd do potrzeb i czasu pozostałego do celu. Zwykłe korekty mają rampę do 10 A i co najmniej 600 s między dodatnimi poleceniami, z uwzględnieniem progów, kroku urządzenia i limitów. Po miękkim celu prąd może być stopniowo wygaszany. Twardy limit SoC może zatrzymać go od razu.
 - **Ochrona.** Nagły wzrost obciążenia, ograniczenie BMS albo nieprawidłowe dane mogą spowodować natychmiastową redukcję. Po ustaniu ograniczenia dodatnie korekty podlegają odstępom regulatora. Przed wysłaniem polecenia EMS ponownie sprawdza pomiary, uprawnienie i nastawy.
 - **Diagnostyka.** Silnik rozróżnia wyliczoną nastawę, próbę polecenia, przyjęcie przez usługę, odczyt urządzenia i fizyczną moc baterii. Trwały zapis prób wspiera wznowienie po restarcie i ogranicza powtarzanie poleceń. Tryb obserwacji umożliwia weryfikację planu, a start sterowania wymaga prawidłowych danych i braku wykrytego konfliktu właścicieli.
 

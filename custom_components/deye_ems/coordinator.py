@@ -718,6 +718,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                     raise ValueError("Sprawdź cel SoC, aktualne pomiary i zegar falownika.")
                 if not await self._top_balance_capture(slot, int(target)):
                     raise ValueError("Brak prawidłowego odczytu nastaw lub falownik nie przyjmuje zadanego SoC.")
+                # Begin the handshake on the manual command instead of waiting
+                # for the next periodic or debounced coordinator refresh.
+                now = self._now()
+                await self._top_balance_tick(self._read_inputs(now), now)
             else:
                 raise ValueError("Brak polecenia TOP BALANCE.")
         await self.async_request_refresh()
@@ -792,7 +796,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 and not gc.attributes.get("restored", False) and attempt is not None
                 and (not attempt["ordinary"] and value < current
                      or attempt["ordinary"] and current < value
-                     and self._ordinary_dispatch_ready(now, own_attempt=attempt, fast=True)
+                     and self._top_balance_dispatch_ready(inputs, now, own_attempt=attempt)
                      and value <= calculate_grid_charge_increase_cap(grid)["increase_cap_a"]))
 
     async def _top_balance_tick(self, inputs, now):
@@ -1693,7 +1697,24 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return False
         return (history.get("ordinary_positive_known") is True and
                 dispatch_ready(now.timestamp(), history.get("possible_at"), history.get("not_sent_at"),
-                               history.get("ordinary_positive_at"), fast=fast or self._fast_night_charge(now)))
+                               history.get("ordinary_positive_at"), fast=fast or self._fast_target_charge(now)))
+
+    def _top_balance_dispatch_ready(self, inputs, now, *, own_attempt=None):
+        if inputs["current_a"] != 0:
+            return self._ordinary_dispatch_ready(now, own_attempt=own_attempt, fast=True)
+        history = self._dispatch_history(now, own_attempt=own_attempt)
+        if not self._top_balance_zero(inputs, self._grid_input(
+                inputs, now, self._memory["top_balance"]["target"], True)):
+            return False
+        # A manual start with confirmed zero can skip the previous ordinary
+        # increase's cadence. Keep retry/backoff for uncertain commands.
+        possible_at = history.get("possible_at")
+        state = self._state("grid_current_number")
+        report = _stamp(getattr(state, "last_reported", None) or getattr(state, "last_updated", None))
+        if (history.get("possible_a") == 0 and possible_at is not None and report is not None
+                and possible_at < report <= now.timestamp()):
+            possible_at = None
+        return dispatch_ready(now.timestamp(), possible_at, history.get("not_sent_at"), None, fast=True)
 
     async def _service(self, entity_id, action, value=None):
         if self._startup_control_issue is not None:
@@ -1725,7 +1746,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         winter, night, afternoon, _, active_slot = self._window(now)
         target, emergency, _ = self._target(now)
         floor = self._effective_min_soc()
-        fast = self._fast_night_charge(now)
+        fast = self._fast_target_charge(now)
         allowed = (night or afternoon) and self._tariff_control_ok(now) and (winter or emergency or fast or
                    inputs["soc"] is not None and inputs["soc"] < floor)
         live_grid = self._grid_input(inputs, now, target, emergency)
@@ -1932,7 +1953,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         chain = self._grid_reduction_chain
         old_ledger = deepcopy(self._memory["ledger"].get(self._sources["grid_current_number"], {}))
         ordinary = value > 0 and not force
-        if ordinary and not self._ordinary_dispatch_ready(now, fast=top_balance):
+        ready = (self._top_balance_dispatch_ready(before, now) if top_balance
+                 else self._ordinary_dispatch_ready(now)) if ordinary else True
+        if not ready:
             self._command_suppressed(value, "ordinary", "ordinary_dispatch_wait")
             return False
         target, emergency, _ = self._target(now)
@@ -1948,7 +1971,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         self._current_grid_attempt = context
         try:
             accepted = await self._attempt(self._sources["grid_current_number"], "set_value", value,
-                                           now_ts, cooldown=10, force=force, current_attempt=context)
+                                           now_ts, cooldown=0 if top_balance and ordinary and before["current_a"] == 0 else 10,
+                                           force=force, current_attempt=context)
         finally:
             self._current_grid_attempt = None
         if context["prepared"]:
@@ -2070,10 +2094,16 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         return any(row["slot"] == slot and row["grid_charge_allowed"] is True
                    for row in self._tou_program(now).get("rows", []))
 
-    def _fast_night_charge(self, now):
+    def _fast_target_charge(self, now):
         local = now.astimezone(_TZ)
-        return (self._real_tariff() and (local.hour >= 21 or local.hour < 7)
-                and self._window(now)[1])
+        if not self._real_tariff():
+            return False
+        winter, cheap, _, _, _ = self._window(now)
+        # Confirmed tariff permission comes first. The extra delivery window is
+        # specific to the winter G13 preparation for the 16:00 peak.
+        winter_g13_afternoon = (winter and 13 <= local.hour < 16
+                                and self._options.get("tariff_profile") == "tauron_g13_2026")
+        return cheap and (local.hour >= 21 or local.hour < 7 or winter_g13_afternoon)
 
     def _tariff_gc_slot_ready(self, now, slot):
         if not self._real_tariff() or not self._slot_charge_eligible(now, slot):
@@ -2144,9 +2174,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             items = tariff_target_items(now, self._calendar_options())
             if items:
                 remaining = min(24, remaining, (items[0]["at"].timestamp()-now.timestamp())/3600)
-        fast = self._fast_night_charge(now)
+        fast = self._fast_target_charge(now)
         return {"now_ts": now.timestamp(), "winter": winter, "cheap_window": night or afternoon,
-                "fast_night_charge": fast,
+                "fast_target_charge": fast,
                 "tariff_window_valid": self._tariff_control_ok(now) if self._real_tariff() else False,
                 "inverter_phases": self._options.get("inverter_phases", 3),
                 "connection_phases": self._options.get("connection_phases", 3),
@@ -2366,7 +2396,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                  and control.get("telemetry_ok", False) and self._hardware_modes_ok() and self._clocks_ok(self._now()))
         current_winter, current_night, current_afternoon, _, live_slot = self._window(self._now())
         slot_open = (current_night or current_afternoon) and self._tariff_control_ok(self._now())
-        permitted = slot_open and (current_winter or emergency or self._fast_night_charge(self._now())
+        permitted = slot_open and (current_winter or emergency or self._fast_target_charge(self._now())
                                    or observed["soc"] is not None and observed["soc"] < floor)
         active_gc = self._state(f"tou_gc_{active_slot}")
         observed_grid = self._grid_input(observed, self._now(), target, emergency)

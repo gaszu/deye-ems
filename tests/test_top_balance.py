@@ -1,6 +1,7 @@
 """TOP BALANCE uses real coordinator guards with an offline inverter."""
 from datetime import datetime
 import unittest
+from unittest.mock import AsyncMock
 
 from test_runtime import Harness, TZ
 
@@ -29,6 +30,34 @@ class TopBalance(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.co._state("tou_gc_5").state, "off")
         self.assertEqual(float(h.co._state("tou_soc_5").state), 40)
         self.assertEqual(h.co._memory["top_balance"], {})
+
+    async def test_manual_command_prepares_slot_before_requesting_refresh(self):
+        h = self.prepare()
+        h.co.async_request_refresh = AsyncMock()
+        await h.co.async_set_top_balance(True, 100)
+        self.assertEqual(float(h.co._state("tou_soc_5").state), 100)
+        self.assertFalse(h.current_calls())
+        h.co.async_request_refresh.assert_awaited_once()
+
+    async def test_manual_start_skips_ordinary_cadence_after_confirmed_zero(self):
+        h = Harness(options={"winter_weather_soc_percent": 75})
+        h.set("tou_soc_6", 95, "%", attributes={"max": 100})
+        h.set("soc", 40, "%")
+        h.active()
+        await h.tick()
+        previous = h.current_calls()[-1]
+        self.assertGreater(previous, 0)
+        h.advance(5)
+        await h.co._grid_attempt(0, h.now.timestamp(), force=True)
+        h.advance(5)
+        start = h.now
+        await h.co.async_set_top_balance(True, 100)
+        for _ in range(3):
+            h.advance(10)
+            await h.tick()
+        self.assertLess((h.now - start).total_seconds(), 120)
+        self.assertEqual(h.current_calls()[-2], 0)
+        self.assertGreater(h.current_calls()[-1], 0)
 
     async def test_rejects_goal_above_actuator_limit(self):
         h = self.prepare()

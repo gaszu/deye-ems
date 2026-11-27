@@ -3,7 +3,7 @@
 The coordinator owns durable policy state. No service calls or physical ACKs here.
 The old pure controller remains a regression-tested safety/cap calculation; its
 stepped ramp is bypassed by the explicit ordinary-policy callback. The
-durable interval is 600 seconds normally and 120 seconds at night.
+durable interval is 600 seconds normally and 120 seconds in priority windows.
 """
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def initial_dispatch_ready(g):
         return False
     if ("ordinary_last_positive_possible_ts" not in g or not dispatch_ready(
             now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"),
-            g["ordinary_last_positive_possible_ts"], fast=g.get("fast_night_charge") is True)):
+            g["ordinary_last_positive_possible_ts"], fast=g.get("fast_target_charge") is True)):
         return False
     if not policy_ready(policy, now):
         return False
@@ -115,7 +115,7 @@ def update_policy(g, previous):
                                                and soc < g["minimum_soc_percent"]):
             stopped = False
         hours = g.get("remaining_h")
-        if g.get("fast_night_charge") is not True and _finite(hours) and 0 < hours <= 1 and not final_seen:
+        if g.get("fast_target_charge") is not True and _finite(hours) and 0 < hours <= 1 and not final_seen:
             if soc < target:
                 stopped = False
             final_seen = True
@@ -137,7 +137,7 @@ def _ordinary(g, result):
     now = g["now_ts"]
     scheduled = ("ordinary_last_positive_possible_ts" in g and dispatch_ready(
         now, g.get("ordinary_last_possible_ts"), g.get("ordinary_last_not_sent_ts"),
-        g["ordinary_last_positive_possible_ts"], fast=g.get("fast_night_charge") is True))
+        g["ordinary_last_positive_possible_ts"], fast=g.get("fast_target_charge") is True))
     initial = initial_dispatch_ready(g)
     if not scheduled:
         result["reason"] = "scheduled_hold"
@@ -164,11 +164,11 @@ def _ordinary(g, result):
     # A sub-5A hardware cap must still permit a safe initial start.
     if candidate == 0 and wanted > 0 and g["current_a"] == 0:
         candidate = math.floor(min(wanted, upper))
-    # Night increases use the measured headroom above; ordinary reductions
+    # Priority-window increases use the measured headroom above; ordinary reductions
     # remain stepped. Protective reductions bypass this path.
     current = g["current_a"]
     material_change = abs(candidate - current) >= DEADBAND_A
-    if candidate > current and g.get("fast_night_charge") is not True:
+    if candidate > current and g.get("fast_target_charge") is not True:
         candidate = min(candidate, math.floor((current + MAX_STEP_A) / QUANTUM_A) * QUANTUM_A)
     elif candidate < current:
         candidate = max(candidate, math.ceil(max(current - MAX_STEP_A, 0) / QUANTUM_A) * QUANTUM_A)
@@ -221,14 +221,14 @@ def calculate_grid_charge(g):
         result["reason"] = "maximum_soc_reached"
         return result
     if policy.get("stopped", True):
-        if g.get("fast_night_charge") is not True and tapering(g):
+        if g.get("fast_target_charge") is not True and tapering(g):
             return _base({**g, "soc": g.get("target_soc"), "taper_to_zero": True}, ordinary_policy=_ordinary)
         result = _base({**g, "soc": g.get("target_soc")}, ordinary_policy=_ordinary)
         if result.get("reason") == "target_reached":
             result["reason"] = "target_hysteresis"
         return result
     result = _base(g, ordinary_policy=_ordinary)
-    if (g.get("fast_night_charge") is True or result.get("safety")
+    if (g.get("fast_target_charge") is True or result.get("safety")
             or not result.get("telemetry_ok") or g.get("cheap_window") is not True):
         return result
     if result.get("need_a", 0) > 10:
@@ -308,7 +308,7 @@ def describe_current_wait(g):
         return status
     eligible = now
     retry = now
-    interval = COMMAND_SETTLE_SECONDS if g.get("fast_night_charge") is True else ORDINARY_INTERVAL_SECONDS
+    interval = COMMAND_SETTLE_SECONDS if g.get("fast_target_charge") is True else ORDINARY_INTERVAL_SECONDS
     for key, delay in (("ordinary_last_positive_possible_ts", interval),
                        ("ordinary_last_possible_ts", COMMAND_SETTLE_SECONDS),
                        ("ordinary_last_not_sent_ts", 60)):

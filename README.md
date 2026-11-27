@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.6.10](https://github.com/gaszu/deye-ems/releases/tag/v2.6.10)
+**Aktualne wydanie / Current release:** [Deye EMS 2.7.0](https://github.com/gaszu/deye-ems/releases/tag/v2.7.0)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -15,7 +15,7 @@
 ### Jak działa
 
 1. **Planowanie.** EMS łączy prognozę PV, profil zużycia z historii Home Assistant i kalendarz taryfy. Panel pokazuje prognozę SoC, cele ładowania i plan na dziś oraz jutro.
-2. **Sterowanie.** W slotach dopuszczających ładowanie EMS zarządza ustawieniem Grid Charge i reguluje prąd. Bierze pod uwagę aktualne pomiary, dostępną moc, limity falownika i przyłącza oraz ograniczenia BMS. W dozwolonym oknie nocnym priorytetem jest osiągnięcie porannego celu SoC. Po osiągnięciu celu histereza zapobiega częstemu wznawianiu ładowania.
+2. **Sterowanie.** W slotach dopuszczających ładowanie EMS zarządza ustawieniem Grid Charge i reguluje prąd. Bierze pod uwagę aktualne pomiary, dostępną moc, limity falownika i przyłącza oraz ograniczenia BMS. W dozwolonym oknie nocnym oraz zimą w G13 od 13:00 do 16:00 EMS dochodzi do celu możliwie szybko przy bezpiecznym prądzie. Po osiągnięciu celu histereza zapobiega częstemu wznawianiu ładowania.
 3. **Zabezpieczenia.** Ustawienia rezerwy, stan baterii, aktualność pomiarów i zgodność odczytów z konfiguracją ograniczają działanie regulatora. Tryb obserwacji pokazuje plan i diagnostykę bez przejmowania sterowania falownikiem.
 4. **TOP BALANCE.** Operator może zadać własny cel SoC do 100%, w zakresie akceptowanym przez falownik, i uruchomić ładowanie z sieci także w drogiej strefie. EMS respektuje limity instalacji i BMS. Po osiągnięciu celu lub ręcznym zakończeniu przywraca nastawy slotu i wraca do zwykłego planu. Balansowaniem ogniw zajmuje się BMS.
 
@@ -99,7 +99,7 @@ Zainstaluj integrację przez Marketplace albo użyj paczki ZIP z opublikowanego 
 ### How it works
 
 1. **Planning.** The engine combines the PV forecast, a demand profile derived from Home Assistant history and the tariff calendar. The dashboard shows the projected SoC, charge targets and the plan for today and tomorrow.
-2. **Control.** In slots that allow grid charging, EMS manages the inverter’s Grid Charge setting and adjusts the charge current. It uses live measurements, available power, inverter and service connection limits, and BMS constraints. During an eligible overnight window, it prioritises the morning SoC target. After reaching the target, hysteresis avoids frequent restarts.
+2. **Control.** In slots that allow grid charging, EMS manages the inverter’s Grid Charge setting and adjusts the charge current. It uses live measurements, available power, inverter and service connection limits, and BMS constraints. In eligible overnight windows and the winter G13 window from 13:00 to 16:00, EMS charges to the target at the safe available current. After reaching the target, hysteresis avoids frequent restarts.
 3. **Safeguards.** The battery reserve, battery status, measurement freshness and consistency with the configured installation all constrain control. Observation mode shows the plan and diagnostics without taking control of the inverter.
 4. **TOP BALANCE.** An operator can set an SoC target up to 100%, within the inverter’s accepted range, and start grid charging even during an expensive tariff period. EMS respects installation and BMS limits. When the target is reached or the operator stops the session, EMS restores the slot settings and resumes the normal plan. The BMS handles cell balancing.
 
@@ -180,13 +180,13 @@ W obu trybach wewnętrzne CT Deye mierzy port GRID. W Zero Export To CT zewnętr
 
 Deye EMS można również osadzić w natywnym pulpicie Home Assistant. Deye EMS can also be embedded in a native Home Assistant dashboard. [Instalacja / Setup](INSTALL.md#deye-ems-w-natywnym-pulpicie-home-assistant)
 
-Poniższy przewodnik opisuje wydanie **2.6.10**. The layout below describes release **2.6.10**.
+Poniższy przewodnik opisuje wydanie **2.7.0**. The layout below describes release **2.7.0**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.6.10** |
-| [tests](tests) | Testy offline / Offline tests · **2.6.10** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.6.10** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.6.10** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.0** |
+| [tests](tests) | Testy offline / Offline tests · **2.7.0** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.0** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.0** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).
