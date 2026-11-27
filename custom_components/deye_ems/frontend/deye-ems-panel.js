@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-7-0";
-const PANEL_VERSION = "2.7.0";
+const PANEL_TAG = "deye-ems-panel-2-7-1";
+const PANEL_VERSION = "2.7.1";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -1636,6 +1636,11 @@ class DeyeEMSPanel extends HTMLElement {
     const lowerBound=numeric(o.min_soc_lower_bound),boundValid=o.min_soc_bound_valid===true&&lowerBound!==null&&lowerBound>=5&&lowerBound<=90;
     const rawFloor=numeric(o.effective_min_soc_percent)??numeric(o.min_soc_percent),floor=rawFloor!==null&&rawFloor>=5&&rawFloor<=90?rawFloor:null;
     const fresh=this.snapshotFresh(),request=fresh?c.next_a:null,readSetting=fresh&&d.inputs?.telemetry_valid===true?c.read_setting_a??d.inputs.current_a:null;
+    // Battery power is negative when charging. This DC estimate includes PV
+    // and grid input, so it is independent of the inverter's grid setpoint.
+    const batteryWatts=fresh?numeric(d.inputs?.battery_power):null;
+    const batteryVolts=fresh?numeric(d.inputs?.voltage):null;
+    const batteryChargeAmps=batteryWatts!==null&&batteryVolts>0?Math.max(0,-batteryWatts/batteryVolts):null;
     const deyeLimitValid=fresh&&d.inputs?.grid_charge_limit_valid===true;
     const deyeLimit=deyeLimitValid?numeric(d.inputs.deye_grid_charge_limit_a):null;
     const deyeSetting=deyeLimitValid?numeric(d.inputs.deye_max_charge_current_a):null;
@@ -1692,7 +1697,7 @@ class DeyeEMSPanel extends HTMLElement {
       card("Doładowanie z sieci",chargePaused?"Wstrzymane":fresh&&typeof c.grid_charge_enabled==="boolean"?(c.grid_charge_enabled?"Włączone":"Wyłączone"):"—","",fresh?statusText:"Oczekiwanie na odczyt",chargePaused?"alert":fresh&&c.grid_charge_enabled===true?"good":"info")+'</div>'+
       // Keep live metering visible while the configuration controls stay collapsed.
       this.topologyHtml()+
-      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.','load')+card(batteryLimit.label,num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A",batteryLimit.note,"info")+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu ograniczeń baterii, falownika i przyłącza.",deyeLimitValid&&d.inputs?.telemetry_valid===true&&c.cap_a>0?"good":"info")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. '+esc(batteryLimit.forecast)+' Ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
+      '<section><h2>Ładowanie akumulatora z sieci</h2><div class="grid stats">'+card("Automatyczny limit Deye −5%",num(deyeLimit,0),"A",'Maksymalny prąd ładowania ustawiony w Deye: '+num(deyeSetting,0)+' A.','load')+card(batteryLimit.label,num(fresh&&d.inputs?.bms_valid===true?d.inputs.bms_cap_a:null,0),"A",batteryLimit.note,"info")+card("Bieżący dostępny prąd",num(deyeLimitValid&&d.inputs?.telemetry_valid===true?c.cap_a:null,0),"A","Po uwzględnieniu ograniczeń baterii, falownika i przyłącza.",deyeLimitValid&&d.inputs?.telemetry_valid===true&&c.cap_a>0?"good":"info")+card("Aktualny prąd ładowania baterii",num(batteryChargeAmps,1),"A","Wyliczony z mocy i napięcia baterii. Obejmuje PV i sieć.",batteryChargeAmps>0?"good":"info")+'</div><p class="legend">Limit jest odczytywany automatycznie z Deye. Algorytm dobiera niższą nastawę do potrzeb i dostępnej mocy. '+esc(batteryLimit.forecast)+' Ładowanie z PV i sieci korzysta ze wspólnego budżetu baterii. Moc portu GRID falownika: '+num(this.kw("grid_port_power"))+' kW (+ pobór, − oddawanie) · limit mocy falownika: '+num(o.inverter_max_power_kw)+' kW. Limit przyłącza pozostaje osobny.</p>'+(!deyeLimitValid?'<p class="notice warning">Brak poprawnego odczytu limitu Deye. Ładowanie z sieci pozostaje zablokowane.</p>':'')+'</section>'+
       '<section class="top-balance" id="ems-balance" tabindex="-1" aria-label="TOP BALANCE"><div class="actions"><button id="top-balance" '+(this.busy||restoring||!balancing&&(!active||!fresh)?'disabled':'')+'>'+(restoring?'Przywracanie nastaw…':balancing?'Wyłącz TOP BALANCE':'TOP BALANCE')+'</button>'+
       '<label>Docelowy SoC (%)<input id="top-balance-target" type="number" min="1" max="100" step="1" value="'+esc(balanceTarget)+'" '+(balancing||restoring?'disabled':'')+'></label></div>'+
       '<p class="legend">Ładowanie z sieci także w drogiej strefie. Po osiągnięciu celu EMS przywróci zwykłą regulację.</p></section>'+
