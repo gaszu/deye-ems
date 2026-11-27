@@ -38,3 +38,5 @@ Widok Lovelace korzysta z natywnego paska i menu Home Assistant. W panelu EMS je
 Prognozę i licznik zapytań pokazuje wspólna sekcja Solcast. Podsumowanie i cele SoC używają kolorowych kafelków w stylu sekcji LOAD/CT.
 
 Kafelki limitów i bieżącego prądu ładowania są pod układem LOAD/CT. Prąd jest wyliczany z mocy i napięcia DC baterii.
+
+Zrzuty strony głównej GitHuba są w [screenshots/dark-2.7.2](screenshots/dark-2.7.2). Pokazują bieżący komponent w ciemnym motywie podglądu z przykładowymi danymi. Przy zmianie interfejsu odśwież dotknięte zrzuty i oba opisy w głównym README.

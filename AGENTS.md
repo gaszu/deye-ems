@@ -24,6 +24,8 @@ For each release, check that the manifest, backend and panel version and registr
 
 Keep the GitHub repository homepage current after every public change. Verify the rendered README in both languages and the visible release label. Keep the homepage focused on product behavior, installation and user-facing links. Keep release workflow details out of the project overview.
 
+When a public release changes visible EMS behavior or layout, update both languages of the GitHub README and replace the affected screenshots with captures of the released panel. Use the offline preview and synthetic data. Verify the rendered images, their captions and the release label on GitHub.
+
 At each release, verify the explicit version on all four public repository-layout rows: custom_components/deye_ems, preview, release-notes, and tests. Verify the directory rows and current file descriptions on the GitHub homepage together.
 
 For every public fix and release, review the full tree recursively, including file and directory descriptions visible on GitHub. Verify affected headings, version labels, links, code comments and last-change titles against the actual published state before reporting completion. Internal review belongs in the repository workflow, outside the user-facing homepage.
