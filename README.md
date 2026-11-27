@@ -80,7 +80,7 @@ Przy kolejnych przeliczeniach planu EMS pobiera z historii Home Assistant nowe d
 
 Do nowej konfiguracji można wybrać **TAURON Dystrybucja G11, G12, G12w i G13**. Kalendarz stosuje reguły danego profilu, w tym sezonowość, dni tygodnia i święta tam, gdzie przewiduje je taryfa. Przy zapisie trzeba potwierdzić zgodność profilu z umową oraz wybrać sposób pracy zegara licznika. Katalog zawiera też profile informacyjne innych operatorów i zachowuje wcześniej zapisane profile zgodnie z ich regułami. Zakres dostępny dla nowej konfiguracji określa selektor taryf. [Katalog taryf](custom_components/deye_ems/tariff_profiles.json) · [Reguły wyboru](custom_components/deye_ems/tariff_settings.py)
 
-![Sześć slotów G13 w zimowy dzień roboczy z celami ładowania, minimalnym zapasem i prognozą SoC](preview/screenshots/dark-2.7.2/taryfy.png)
+![Fragment planu G13 od 13:00 do północy z celami ładowania, minimalnym zapasem i prognozą SoC](preview/screenshots/dark-2.7.2/taryfy-g13-popoludnie.png)
 
 ### Bateria, BMS i YamBMS
 
@@ -174,7 +174,7 @@ To avoid double-counting, EMS subtracts each separately modelled device’s hist
 
 New configurations can select **TAURON Dystrybucja G11, G12, G12w and G13**. The calendar applies each profile’s rules, including seasons, weekdays and public holidays where relevant. Setup asks the operator to confirm that the tariff matches their contract and to select the meter’s clock basis. The catalogue also contains reference profiles for other operators. Existing saved profiles are retained according to their own rules. The tariff selector determines which profiles are available for new configurations. [Tariff catalogue](custom_components/deye_ems/tariff_profiles.json) · [Selection rules](custom_components/deye_ems/tariff_settings.py)
 
-![Six G13 time slots on a winter weekday with charging targets, minimum reserve and projected SoC](preview/screenshots/dark-2.7.2/taryfy.png)
+![G13 plan from 13:00 to midnight with charging targets, minimum reserve and projected SoC](preview/screenshots/dark-2.7.2/taryfy-g13-popoludnie.png)
 
 ### Battery, BMS and YamBMS
 
