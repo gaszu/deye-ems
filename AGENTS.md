@@ -1,6 +1,6 @@
 # Deye EMS — development guidance
 
-Current Deye EMS release: **2.7.5**.
+Current Deye EMS release: **2.7.6**.
 
 - Maintain an independently installable Home Assistant custom integration with a local engine. Runtime must not depend on EMHASS, auxiliary helpers or user automations.
 - Preserve the engine contract documented in SPECIFICATION.md. Treat source mappings, safety settings, capacity and power ratings as private configuration. Do not change live settings as part of interface work.
@@ -34,4 +34,4 @@ Review comments and docstrings recursively across all project files, including s
 
 Use MAJOR.MINOR.PATCH versioning for new releases without zero-padding. Bump MINOR and reset PATCH for backward-compatible, substantial engine changes. Use PATCH for smaller fixes. Preserve published tags and assets.
 
-- Show engine messages and diagnostic reasons in plain Polish inside distinct light yellow fields throughout the dashboard. Keep raw identifiers out of displayed text. The idle message area is light blue.
+- Show engine messages and diagnostic reasons in plain Polish inside distinct light yellow fields throughout the dashboard. Keep raw identifiers out of displayed text. Use the same padding, border and typography in all sections, including history and tables. The idle message area is light blue. Clicking the message area opens or closes the history.
