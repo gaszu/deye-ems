@@ -3,6 +3,7 @@ import probatio as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry
 from .appearance import DATA_APPEARANCE
 from .const import DOMAIN, DEFAULT_OPTIONS, DEFAULT_SOURCES, VERSION
 from .updates import DATA_UPDATES
@@ -37,6 +38,19 @@ def _payload(coordinator, appearance=None, updates=None):
         "sources": {**DEFAULT_SOURCES, **options.get("sources", {})}}
 
 
+def _panel_payload(hass, coordinator):
+    result = _payload(coordinator, hass.data.get(DATA_APPEARANCE), hass.data.get(DATA_UPDATES))
+    registry = entity_registry.async_get(hass)
+    prefix = f"{coordinator.entry.entry_id}_"
+    # The registry returns actual entity IDs, including names changed by the user.
+    result["history_entities"] = {
+        row.unique_id.removeprefix(prefix): row.entity_id
+        for row in entity_registry.async_entries_for_config_entry(registry, coordinator.entry.entry_id)
+        if row.platform == DOMAIN and row.disabled_by is None and row.unique_id.startswith(prefix)
+    }
+    return result
+
+
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/status"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -45,7 +59,7 @@ async def status(hass, connection, msg):
     if coordinator is None:
         connection.send_error(msg["id"], "not_loaded", "Deye EMS is not loaded")
         return
-    connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE), hass.data.get(DATA_UPDATES)))
+    connection.send_result(msg["id"], _panel_payload(hass, coordinator))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "deye_ems/tariff_catalog"})
@@ -112,7 +126,7 @@ async def command(hass, connection, msg):
     except (ValueError, KeyError, HomeAssistantError) as err:
         connection.send_error(msg["id"], "invalid_request", str(err))
         return
-    connection.send_result(msg["id"], _payload(coordinator, hass.data.get(DATA_APPEARANCE), hass.data.get(DATA_UPDATES)))
+    connection.send_result(msg["id"], _panel_payload(hass, coordinator))
 
 
 @callback

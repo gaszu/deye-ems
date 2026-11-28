@@ -1,6 +1,6 @@
 """User-editable defaults for the independent Deye EMS engine."""
 DOMAIN = "deye_ems"
-VERSION = "2.7.6"
+VERSION = "2.7.7"
 PANEL_MODULE_PATH = "/deye_ems_static/deye-ems-panel.js"
 PANEL_MODULE_URL = f"{PANEL_MODULE_PATH}?v={VERSION}"
 PLATFORMS = ["sensor", "binary_sensor", "number", "select", "button", "update"]

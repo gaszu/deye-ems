@@ -2,10 +2,12 @@
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import EntityCategory
 from .entity import DeyeEMSEntity
+from .runtime_messages import runtime_message
 from .telemetry import build_entities
 
 DESCRIPTIONS = (
     ("status", "Stan silnika", None),
+    ("runtime_message", "Komunikat silnika", None),
     ("plan", "Jakość planu", None),
     ("night_soc", "Modelowy cel SoC noc", "%"),
     ("peak_soc", "Modelowy cel SoC popołudnie", "%"),
@@ -41,6 +43,10 @@ class DeyeEMSSensor(DeyeEMSEntity, SensorEntity):
         plan, control = self.snapshot.get("plan", {}), self.snapshot.get("control", {})
         if self.key == "status":
             return self.snapshot.get("status", "starting")
+        if self.key == "runtime_message":
+            # Recorder stores the same Polish states the native history shows.
+            code = self.snapshot.get("error")
+            return runtime_message(code)[1] if code else "Brak komunikatów"
         if self.key == "plan":
             return plan.get("status", "waiting")
         if self.key in ("night_soc", "peak_soc"):
