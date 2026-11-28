@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-7-4";
-const PANEL_VERSION = "2.7.4";
+const PANEL_TAG = "deye-ems-panel-2-7-5";
+const PANEL_VERSION = "2.7.5";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",
@@ -280,21 +280,21 @@ class DeyeEMSPanel extends HTMLElement {
       return '<div role="status" class="notice runtime-idle">Brak komunikatów</div>';
     }
     if(code==="last_moment_charge_need_guard"){
-      return '<div role="status" class="notice" data-runtime-status="true">Ostatnie wstrzymane polecenie: EMS ponownie przeliczył potrzebny prąd ładowania z sieci i wstrzymał zmianę nastawy.</div>';
+      return '<div role="status" class="notice ems-message" data-runtime-status="true">Ostatnie wstrzymane polecenie: EMS ponownie przeliczył potrzebny prąd ładowania z sieci i wstrzymał zmianę nastawy.</div>';
     }
     if(code==="last_moment_dispatch_guard"){
-      return '<div role="status" class="notice" data-runtime-status="true">EMS wstrzymał ostatnią zmianę limitu prądu ładowania z sieci po ponownym sprawdzeniu warunków.</div>';
+      return '<div role="status" class="notice ems-message" data-runtime-status="true">EMS wstrzymał ostatnią zmianę limitu prądu ładowania z sieci po ponownym sprawdzeniu warunków.</div>';
     }
     // Silnik wskazuje wstrzymaną operację bez podania niespełnionego warunku.
     if(code==="last_moment_gc_guard"){
-      return '<div role="status" class="notice" data-runtime-status="true">EMS wstrzymał włączenie ładowania z sieci, ponieważ końcowa kontrola nie potwierdziła warunków potrzebnych do jego uruchomienia.</div>';
+      return '<div role="status" class="notice ems-message" data-runtime-status="true">EMS wstrzymał włączenie ładowania z sieci, ponieważ końcowa kontrola nie potwierdziła warunków potrzebnych do jego uruchomienia.</div>';
     }
     if(code==="last_moment_grid_step_guard"){
-      return '<div role="status" class="notice" data-runtime-status="true">EMS wstrzymał zwiększenie prądu ładowania z sieci. Żądana nastawa przekroczyła limit wyliczony tuż przed wysłaniem polecenia.</div>';
+      return '<div role="status" class="notice ems-message" data-runtime-status="true">EMS wstrzymał zwiększenie prądu ładowania z sieci. Żądana nastawa przekroczyła limit wyliczony tuż przed wysłaniem polecenia.</div>';
     }
     // Nieznane zabezpieczenia opisujemy ogólnie, bo kod nie wyjaśnia przyczyny decyzji.
     if(/^last_moment_[a-z_]+_guard$/.test(code)&&code!=="last_moment_current_guard"){
-      return '<div role="status" class="notice" data-runtime-status="true">EMS wstrzymał polecenie po końcowej kontroli warunków sterowania.</div>';
+      return '<div role="status" class="notice ems-message" data-runtime-status="true">EMS wstrzymał polecenie po końcowej kontroli warunków sterowania.</div>';
     }
     const messages={last_moment_current_guard:"EMS wstrzymał zmianę prądu ładowania z sieci, ponieważ końcowa kontrola bezpieczeństwa jej nie dopuściła.",restored_active_preflight_failed:"Po uruchomieniu nie wznowiono sterowania. Sprawdź świeże pomiary i plan, a następnie włącz sterowanie jawnie.",ownership_conflict:"Działa inny sterownik. EMS pozostaje w obserwacji.",battery_low_soc_unavailable:"Brak poprawnego odczytu Battery low SOC. Sprawdź diagnostykę i przypisanie encji."};
     // Kody i wyjątki silnika pozostają w diagnostyce, a panel pokazuje polski opis.
@@ -317,7 +317,7 @@ class DeyeEMSPanel extends HTMLElement {
       native_report_shutdown_failed:"Nie udało się poprawnie zamknąć połączenia odbierającego pomiary."
     };
     const message=Object.hasOwn(descriptions,reason)?descriptions[reason]:"Silnik zgłasza błąd. Sprawdź diagnostykę.";
-    return '<div role="alert" class="notice error" data-runtime-error="true">'+(!this.snapshotFresh()?'Ostatnio zgłoszony błąd; stan silnika wymaga odświeżenia. ':'')+esc(message)+'</div>';
+    return '<div role="alert" class="notice ems-message" data-runtime-error="true">'+(!this.snapshotFresh()?'Ostatnio zgłoszony błąd; stan silnika wymaga odświeżenia. ':'')+esc(message)+'</div>';
   }
   startupControlHtml(){
     const issue=this.payload?.data?.startup_control_issue;
@@ -411,10 +411,10 @@ class DeyeEMSPanel extends HTMLElement {
       const at=updateTimestamp(event?.at);
       if(at===null||typeof event.code!=="string"||typeof event.description!=="string")return [];
       const clock=new Date(at).toLocaleString("pl-PL",{timeZone:"Europe/Warsaw"});
-      return ['<tr><td>'+esc(clock)+'</td><td><code>'+esc(event.code)+'</code></td><td>'+esc(event.description)+'</td></tr>'];
+      return ['<tr><td>'+esc(clock)+'</td><td><span class="ems-message">'+esc(event.description)+'</span></td></tr>'];
     });
     return '<section aria-label="Historia komunikatów silnika"><h2>Historia komunikatów silnika</h2>'+
-      (rows.length?'<table aria-label="Historia komunikatów silnika"><thead><tr><th>Czas</th><th>Kod</th><th>Opis</th></tr></thead><tbody>'+rows.join("")+'</tbody></table>':'<p>Brak zapisanych komunikatów silnika.</p>')+'</section>';
+      (rows.length?'<table aria-label="Historia komunikatów silnika"><thead><tr><th>Czas</th><th>Opis</th></tr></thead><tbody>'+rows.join("")+'</tbody></table>':'<p>Brak zapisanych komunikatów silnika.</p>')+'</section>';
   }
   commandDiagnosticsHtml(){
     const heading='<section aria-label="Zapisy do falownika"><h2>Zapisy do falownika</h2><p>Próby zmiany limitu prądu ładowania z sieci od uruchomienia integracji.</p>';
@@ -432,25 +432,26 @@ class DeyeEMSPanel extends HTMLElement {
     const counter=value=>Number.isSafeInteger(value)&&value>=0?num(value,0):"—";
     const kinds={ordinary:"Zwykła",safety:"Ochronna"};
     const outcomes={accepted:"Przyjęte przez HA (usługa)",uncertain:"Wynik niepewny",not_sent:"Nie wysłano"};
-    const extraReasons={ordinary_current:"Zwykła nastawa prądu",protective_current:"Ochronna nastawa prądu",matching_ha_state:"Odczyt HA zgodny z żądaniem",accepted_settling:"Oczekiwanie na odczyt przyjętej nastawy",uncertain_backoff:"Przerwa po niepewnej próbie",safety_current_intent_guard:"Zachowanie niższego żądania ochronnego",ordinary_dispatch_wait:"Odstęp między zwykłymi nastawami",attempt_cooldown_or_ledger:"Przerwa lub kontrola historii"};
+    const extraReasons={ordinary_current:"Zwykła nastawa prądu",protective_current:"Ochronna nastawa prądu",matching_ha_state:"Pominięto zapis, ponieważ Home Assistant już pokazuje żądaną nastawę",accepted_settling:"Oczekiwanie na odczyt przyjętej nastawy",uncertain_backoff:"Przerwa po niepewnej próbie",safety_current_intent_guard:"Zachowanie niższego żądania ochronnego",ordinary_dispatch_wait:"Odstęp między zwykłymi nastawami",attempt_cooldown_or_ledger:"Przerwa lub kontrola historii"};
+    // Raw reasons belong in the engine trace. The dashboard presents only Polish descriptions.
     const reason=value=>{
-      if(typeof value!=="string"||!/^[a-z][a-z0-9_]{0,79}$/.test(value))return "Nieprawidłowy kod przyczyny";
-      const plain=value.replace(/^safety_/,""),label=Object.hasOwn(extraReasons,value)?extraReasons[value]:Object.hasOwn(reasons,value)?reasons[value]:Object.hasOwn(reasons,plain)?reasons[plain]:"Kod diagnostyczny";
-      return esc(label)+'<br><code>'+esc(value)+'</code>';
+      if(typeof value!=="string"||!/^[a-z][a-z0-9_]{0,79}$/.test(value))return "Silnik nie podał czytelnej przyczyny";
+      const plain=value.replace(/^safety_/,""),label=Object.hasOwn(extraReasons,value)?extraReasons[value]:Object.hasOwn(reasons,value)?reasons[value]:Object.hasOwn(reasons,plain)?reasons[plain]:"Silnik nie podał szczegółowej przyczyny";
+      return esc(label);
     };
     const validRow=row=>object(row)&&stamp(row.at)!==null&&validAmp(row.value_a)&&Object.hasOwn(kinds,row.kind);
     const rows=Array.isArray(trace.attempts)?trace.attempts.slice(-20):null;
     const valid=rows?rows.filter(row=>validRow(row)&&Object.hasOwn(outcomes,row.outcome)):[];
     const latest=valid.slice().reverse().sort((a,b)=>stamp(b.at)-stamp(a.at)).slice(0,5);
-    const table=latest.length?'<div class="table"><table><caption>Najnowsze próby nastawy: '+latest.length+'. Pokazano najwyżej 5 z 20 przechowywanych w RAM.</caption><thead><tr><th>Czas</th><th>Nastawa</th><th>Rodzaj</th><th>Powód</th><th>Wynik usługi</th></tr></thead><tbody>'+latest.map(row=>'<tr><td>'+esc(clock(stamp(row.at)))+'</td><td>'+esc(amp(row.value_a))+'</td><td>'+esc(kinds[row.kind])+'</td><td>'+reason(row.reason)+'</td><td>'+esc(outcomes[row.outcome])+'</td></tr>').join("")+'</tbody></table></div>':rows&&rows.length===0?'<p>Lista prób jest pusta w tym odczycie.</p>':'<p>Brak poprawnych wpisów prób nastawy prądu.</p>';
+    const table=latest.length?'<div class="table"><table><caption>Najnowsze próby nastawy: '+latest.length+'. Pokazano najwyżej 5 z 20 przechowywanych w RAM.</caption><thead><tr><th>Czas</th><th>Nastawa</th><th>Rodzaj</th><th>Powód</th><th>Wynik usługi</th></tr></thead><tbody>'+latest.map(row=>'<tr><td>'+esc(clock(stamp(row.at)))+'</td><td>'+esc(amp(row.value_a))+'</td><td>'+esc(kinds[row.kind])+'</td><td><span class="ems-message">'+reason(row.reason)+'</span></td><td>'+esc(outcomes[row.outcome])+'</td></tr>').join("")+'</tbody></table></div>':rows&&rows.length===0?'<p>Lista prób jest pusta w tym odczycie.</p>':'<p>Brak poprawnych wpisów prób nastawy prądu.</p>';
     const invalid=rows&&valid.length<rows.length?'<p class="notice warning">Pominięto nieprawidłowe wpisy śladu poleceń.</p>':"";
     const counts=object(trace.counts)?trace.counts:{};
     const summary='<p>Usługi przyjęte przez HA: <b>'+esc(counter(counts.accepted))+'</b> · wynik niepewny: <b>'+esc(counter(counts.uncertain))+'</b> · niewysłane próby: <b>'+esc(counter(counts.not_sent))+'</b> · pominięte zapisy: <b>'+esc(counter(counts.suppressed))+'</b>.</p>';
-    const suppressed=validRow(trace.last_suppressed)?'<p>Ostatnie pominięcie zapisu: '+esc(clock(stamp(trace.last_suppressed.at)))+' · '+esc(amp(trace.last_suppressed.value_a))+' · '+esc(kinds[trace.last_suppressed.kind])+'. '+reason(trace.last_suppressed.reason)+'.</p>':"";
+    const suppressed=validRow(trace.last_suppressed)?'<p class="notice ems-message">Ostatnie pominięcie zapisu: '+esc(clock(stamp(trace.last_suppressed.at)))+' · '+esc(amp(trace.last_suppressed.value_a))+' · '+esc(kinds[trace.last_suppressed.kind])+'. '+reason(trace.last_suppressed.reason)+'.</p>':"";
     const read=trace.readback,readNames={unknown:"Brak ustalonej zgodności",pending:"Oczekiwanie na nowszy odczyt HA",matched:"Odczyt HA zgodny z żądaniem",mismatch:"Odczyt HA różny od żądania"};
     const readOk=object(read)&&read.source==="home_assistant_state"&&read.physical_confirmation===false&&stamp(read.observed_at)!==null&&Object.hasOwn(readNames,read.status);
     const matchedOk=readOk&&read.status==="matched"&&typeof read.value_a==="number"&&typeof read.intent_a==="number"&&amp(read.value_a)!=="—"&&read.value_a===read.intent_a&&updateTimestamp(read.reported_at)!==null&&updateTimestamp(read.reported_at)<=now;
-    const readback=readOk&&(read.status!=="matched"||matchedOk)?'<p>Osobny odczyt HA: '+esc(amp(read.value_a))+' · żądanie '+esc(amp(read.intent_a))+' · '+esc(readNames[read.status])+'. Sprawdzono: '+esc(clock(stamp(read.observed_at)))+'. To stan HA, nie potwierdzenie fizycznego zapisu urządzenia.</p>':'<p>Brak poprawnego osobnego odczytu HA w śladzie.</p>';
+    const readback=readOk&&(read.status!=="matched"||matchedOk)?'<p class="notice ems-message">Osobny odczyt HA: '+esc(amp(read.value_a))+' · żądanie '+esc(amp(read.intent_a))+' · '+esc(readNames[read.status])+'. Sprawdzono: '+esc(clock(stamp(read.observed_at)))+'. To stan HA, nie potwierdzenie fizycznego zapisu urządzenia.</p>':'<p>Brak poprawnego osobnego odczytu HA w śladzie.</p>';
     return heading+'<p>Ślad od uruchomienia EMS: '+esc(clock(since))+' · upłynęło '+esc(num(Math.floor((now-since)/1000),0))+' s.</p><p class="legend">Pamięć RAM od bieżącego uruchomienia; restart lub przeładowanie EMS rozpoczyna ślad od nowa. Brak rekonstrukcji wcześniejszej historii.</p>'+summary+note+table+invalid+suppressed+readback+'</section>';
   }
   nextCurrentChangeText(){
@@ -1717,7 +1718,7 @@ class DeyeEMSPanel extends HTMLElement {
       // Keep each day on one track. Scroll the row when the cards reach their readable minimum.
       ".slot-plan-heading{margin-top:24px}.slot-plan-heading h3{font-size:21px;margin-bottom:6px}.slot-plan-heading p,.slot-plan-note{line-height:1.6;color:var(--secondary-text-color);font-size:13px;max-width:760px}.slot-day{margin-top:22px}.slot-day>h3{font-size:16px;margin:0 0 12px}.slot-grid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(130px,1fr);gap:12px;overflow-x:auto;padding-bottom:6px}.slot-card{padding:18px 14px;text-align:center;min-width:0;box-shadow:none;border-radius:16px}.slot-card.is-current{border-color:var(--primary-color);background:var(--ha-color-fill-primary-quiet-resting,var(--ha-card-background,var(--card-background-color,#fff)))}.slot-card.is-past{background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;text-align:left;min-height:26px}.slot-zone{font-size:12px;font-weight:650;color:var(--secondary-text-color)}.slot-card h4{font-size:15px;line-height:1.5;margin:10px 0 6px}.slot-permission{font-size:12px;min-height:36px;line-height:1.5;margin:0 0 10px;color:var(--secondary-text-color)}.slot-badge{display:inline-block;font-size:10px;line-height:1.5;font-weight:650;padding:3px 7px;border-radius:20px;background:var(--secondary-background-color);color:var(--secondary-text-color)}.slot-badge.current{background:var(--ha-color-primary-90,var(--secondary-background-color));color:var(--primary-text-color)}.slot-badge.fallback{background:var(--ha-color-warning-90,var(--secondary-background-color));color:var(--primary-text-color);margin:6px 0}.slot-gauge{position:relative;width:min(100%,112px);height:112px;margin:0 auto;color:var(--primary-color)}.slot-gauge.reserve{color:var(--secondary-text-color)}.slot-gauge svg{width:112px;height:112px;transform:rotate(-90deg);overflow:visible}.slot-gauge circle{fill:none;stroke-width:8}.gauge-track{stroke:var(--divider-color)}.gauge-value{stroke:currentColor;stroke-linecap:round}.gauge-reading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:2px;color:var(--primary-text-color)}.gauge-reading b{font-size:29px;font-weight:650;letter-spacing:-1px}.gauge-reading span{font-size:13px;color:var(--secondary-text-color)}.slot-role{font-size:13px;font-weight:650;margin:10px 0 4px}.slot-explanation{font-size:11px;line-height:1.5;color:var(--secondary-text-color);min-height:33px;margin:0}.slot-reserve{font-size:11px;color:var(--secondary-text-color);margin:7px 0}.slot-projection{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider-color)}.slot-projection span,.slot-projection small{display:block;color:var(--secondary-text-color);font-size:11px;line-height:1.5}.slot-projection b{display:block;font-size:15px;line-height:1.7;font-weight:600}.slot-plan-note{margin-bottom:0}.stats article{padding:18px}.stats strong{font-size:28px;overflow-wrap:anywhere}.stats .sub{line-height:1.5}.slot-grid article strong{font-size:28px}details>summary{font-size:17px;line-height:1.5}details{border-top:1px solid var(--divider-color);margin-top:24px}details[open]>summary{margin-bottom:4px}@media(max-width:480px){.slot-card{padding:14px 9px}.slot-card h4{font-size:13px}.slot-zone{font-size:10px}.slot-card-top{align-items:flex-start;flex-direction:column}.slot-gauge,.slot-gauge svg{width:100px;height:100px}.slot-explanation{min-height:48px}.stats strong{font-size:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}"+
       // Use the HA theme surface and its switch/slider accents. Keep explicit semantic labels and iOS status fallbacks.
-      ":host{--ems-ok:var(--switch-checked-track-color,#30d158);--ems-bad:var(--error-color,#ff453a);--ems-info:#ffd60a;--ems-load:var(--paper-slider-active-color,#0984ff);--ems-surface:var(--ha-card-background,var(--card-background-color,#fff))}.notice{--ems-tone:var(--ems-info);--ems-tint:#ffd60a20;border-inline-start:4px solid var(--ems-tone);background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}.notice.runtime-idle{--ems-tone:#5aa7e6;--ems-tint:#5aa7e622}.notice.error{--ems-tone:var(--ems-bad);--ems-tint:#ff453a33}.notice.success{--ems-tone:var(--ems-ok);--ems-tint:#30d15824}.pill.status-good,.pill.status-info{border-color:var(--ems-tone);background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}.pill.status-good{--ems-tone:var(--ems-ok);--ems-tint:#30d15824}.pill.status-info{--ems-tone:var(--ems-info);--ems-tint:#ffd60a24}"+
+      ":host{--ems-ok:var(--switch-checked-track-color,#30d158);--ems-bad:var(--error-color,#ff453a);--ems-info:#ffd60a;--ems-load:var(--paper-slider-active-color,#0984ff);--ems-surface:var(--ha-card-background,var(--card-background-color,#fff))}.notice{--ems-tone:var(--ems-info);--ems-tint:#ffd60a20;border-inline-start:4px solid var(--ems-tone);background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}.ems-message,.notice.ems-message{--ems-tone:#e6c75c;--ems-tint:#f6d95d35;background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}span.ems-message{display:inline-block;padding:3px 8px;border-radius:6px}.notice.runtime-idle{--ems-tone:#5aa7e6;--ems-tint:#5aa7e622}.notice.error{--ems-tone:var(--ems-bad);--ems-tint:#ff453a33}.notice.success{--ems-tone:var(--ems-ok);--ems-tint:#30d15824}.pill.status-good,.pill.status-info{border-color:var(--ems-tone);background:linear-gradient(var(--ems-tint),var(--ems-tint)),var(--ems-surface)}.pill.status-good{--ems-tone:var(--ems-ok);--ems-tint:#30d15824}.pill.status-info{--ems-tone:var(--ems-info);--ems-tint:#ffd60a24}"+
       // Only the opaque HA toolbar is sticky. Keeping the EMS header in normal
       // flow prevents its translucent background from showing cards beneath it.
       ".ems-header{position:static;flex-direction:column;align-items:stretch;gap:12px}.ems-ha-bar{--ems-ha-bar-height:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px));position:sticky;top:0;z-index:5;height:var(--ems-ha-bar-height);background:var(--primary-background-color,#2c2c2e);--app-header-background-color:var(--primary-background-color,#2c2c2e);color:var(--app-header-text-color,var(--primary-text-color))}.ems-ha-bar.fallback{display:flex;align-items:center;gap:12px;padding:var(--safe-area-inset-top,0px) 16px 0;border-bottom:1px solid var(--divider-color)}.ems-ha-bar a{color:inherit;text-decoration:none;padding:6px}.ems-ha-title{font-weight:650;margin-inline-end:auto}.ems-ha-bar button{padding:6px 9px;color:inherit}.ems-side-nav{display:flex;gap:6px}.ems-side-nav a{display:block;padding:8px 12px;border-radius:10px;color:var(--primary-text-color);text-decoration:none;font-weight:600}.ems-side-nav a:hover{background:var(--secondary-background-color);color:var(--primary-color)}.ems-layout{display:grid;grid-template-columns:154px minmax(0,1fr);gap:16px}.ems-side-nav{position:sticky;top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 12px);align-self:start;flex-direction:column;padding:8px;background:var(--ems-surface);border-radius:var(--ha-card-border-radius,12px)}.ems-content{min-width:0}.ems-menu-toggle{display:none}[data-panel-section]:focus-visible{outline-offset:1px}[id^=ems-][tabindex]{scroll-margin-top:calc(var(--header-height,56px) + var(--safe-area-inset-top,0px) + 16px)}@media(max-width:900px){.ems-layout{display:block}.ems-menu-toggle{display:inline-flex}.ems-side-nav{display:none;position:static;margin-bottom:12px}.ems-side-nav.menu-open{display:flex;flex-flow:row wrap}}"+

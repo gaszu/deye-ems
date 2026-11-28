@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.7.4](https://github.com/gaszu/deye-ems/releases/tag/v2.7.4)
+**Aktualne wydanie / Current release:** [Deye EMS 2.7.5](https://github.com/gaszu/deye-ems/releases/tag/v2.7.5)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -27,7 +27,9 @@ Podsumowanie pokazuje SoC i rezerwę, moc sieci i domu, najbliższy cel oraz sta
 
 *Zrzuty panelu Deye EMS w ciemnym motywie podglądu z danymi syntetycznymi.*
 
-Zasób modułu karty zapisany w Lovelace jest odświeżany po zmianie wersji EMS. Pole komunikatów silnika jest zawsze widoczne. Pokazuje polski opis decyzji lub błędu, a gdy silnik nie zgłasza zdarzenia, wyświetla „Brak komunikatów” na jasnoniebieskim tle.
+Zasób modułu karty zapisany w Lovelace jest odświeżany po zmianie wersji EMS. Pole komunikatów silnika jest zawsze widoczne. Decyzje i błędy są opisane po polsku w jasnożółtych polach, również w historii i diagnostyce. Pasek pokazuje bieżący komunikat, a gdy silnik nie zgłasza zdarzenia, wyświetla „Brak komunikatów” na jasnoniebieskim tle.
+
+![Przykład jasnożółtego komunikatu o wstrzymanym zwiększeniu prądu](preview/screenshots/2.7.5/komunikat-silnika.png)
 
 ![Menu sekcji EMS, pole komunikatów i kafelki podsumowania](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
@@ -125,7 +127,9 @@ The overview shows battery SoC and reserve, grid and household power, the next t
 
 *Deye EMS dashboard screenshots in the dark preview theme with synthetic data.*
 
-The stored Lovelace card module follows the installed EMS version. The engine message area stays visible. It describes decisions and errors in Polish and shows “Brak komunikatów” on a light blue background when there is no active message.
+The stored Lovelace card module follows the installed EMS version. The engine message area stays visible. Engine messages, history and command diagnostics use plain Polish descriptions in separate light yellow fields. The message area shows “Brak komunikatów” on a light blue background when there is no active message.
+
+![Light yellow message explaining why EMS held a current increase](preview/screenshots/2.7.5/komunikat-silnika.png)
 
 ![EMS section menu, engine message area and overview tiles](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
@@ -208,13 +212,13 @@ W obu trybach wewnętrzne CT Deye mierzy port GRID. W Zero Export To CT zewnętr
 
 Deye EMS można również osadzić w natywnym pulpicie Home Assistant. Deye EMS can also be embedded in a native Home Assistant dashboard. [Instalacja / Setup](INSTALL.md#deye-ems-w-natywnym-pulpicie-home-assistant)
 
-Poniższy przewodnik opisuje wydanie **2.7.4**. The layout below describes release **2.7.4**.
+Poniższy przewodnik opisuje wydanie **2.7.5**. The layout below describes release **2.7.5**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.4** |
-| [tests](tests) | Testy offline / Offline tests · **2.7.4** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.4** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.4** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.5** |
+| [tests](tests) | Testy offline / Offline tests · **2.7.5** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.5** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.5** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).
