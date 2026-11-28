@@ -29,7 +29,7 @@ Podsumowanie pokazuje SoC i rezerwę, moc sieci i domu, najbliższy cel oraz sta
 
 Zasób modułu karty zapisany w Lovelace jest odświeżany po zmianie wersji EMS. Pole komunikatów silnika jest zawsze widoczne. Kliknij je, aby otworzyć natywne okno encji Home Assistanta i zobaczyć historię zapisaną przez Recorder. Decyzje i błędy są opisane po polsku w jasnożółtych polach, również w historii i diagnostyce. Pasek pokazuje bieżący komunikat, a gdy silnik nie zgłasza zdarzenia, wyświetla „Brak komunikatów” na jasnoniebieskim tle.
 
-![Pole komunikatów i wartości otwierające okno encji](preview/screenshots/2.7.7/pole-komunikatow.png)
+![Pole komunikatów i wartości otwierające okno encji w motywie iOS Dark Mode Blue Red](preview/screenshots/2.7.7/pole-komunikatow.png)
 
 ![Menu sekcji EMS, pole komunikatów i kafelki podsumowania](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
@@ -129,7 +129,7 @@ The overview shows battery SoC and reserve, grid and household power, the next t
 
 The stored Lovelace card module follows the installed EMS version. The engine message area stays visible. Click it to open the native Home Assistant entity dialog and view the history stored by Recorder. Engine messages, history and command diagnostics use plain Polish descriptions in separate light yellow fields. The message area shows “Brak komunikatów” on a light blue background when there is no active message.
 
-![Message area and values that open the entity dialog](preview/screenshots/2.7.7/pole-komunikatow.png)
+![Message area and values that open the entity dialog in the iOS Dark Mode Blue Red theme](preview/screenshots/2.7.7/pole-komunikatow.png)
 
 ![EMS section menu, engine message area and overview tiles](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
