@@ -16,6 +16,8 @@ def websocket_module():
     identity = lambda func: func
     return load("websocket.py", {
         **C, "HomeAssistantError": RuntimeError, "callback": identity,
+        "entity_registry": SimpleNamespace(async_get=lambda hass: hass,
+            async_entries_for_config_entry=lambda registry, entry_id: []),
         "vol": SimpleNamespace(Required=lambda key: key, Optional=lambda key: key,
                                In=lambda values: values, Any=lambda *values: values),
         "websocket_api": SimpleNamespace(websocket_command=lambda _schema: identity,
