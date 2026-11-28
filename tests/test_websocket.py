@@ -112,6 +112,8 @@ def load_module():
         "websocket_api": api,
         "callback": lambda func: func,
         "HomeAssistantError": HomeAssistantError,
+        "entity_registry": SimpleNamespace(async_get=lambda hass: hass,
+            async_entries_for_config_entry=lambda registry, entry_id: getattr(registry, "entity_rows", [])),
         "DATA_APPEARANCE": "deye_ems_appearance",
         "DATA_UPDATES": "deye_ems_updates",
         "calendar_operators": CALENDAR.calendar_operators,
@@ -149,6 +151,11 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         module, _ = load_module()
         co = coordinator()
         hass, connection = Hass(co), Connection(SimpleNamespace(is_admin=True))
+        prefix = f"{co.entry.entry_id}_"
+        hass.entity_rows = [SimpleNamespace(unique_id=prefix + "runtime_message", entity_id="sensor.renamed_message",
+                           platform=CONSTANTS["DOMAIN"], disabled_by=None),
+                            SimpleNamespace(unique_id=prefix + "selected_soc", entity_id="sensor.disabled_soc",
+                           platform=CONSTANTS["DOMAIN"], disabled_by="user")]
         cached = {"status": "available", "latest_version": "1.0.18", "checked_at": "2026-11-12T12:00:00+00:00",
                   "retry_at": None, "reason": None,
                   "release_url": "https://github.com/gaszu/deye-ems/releases/tag/v1.0.18",
@@ -167,6 +174,7 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
             await hass.drain()
             payload = connection.results[-1][1]
             self.assertEqual(payload["backend_version"], CONSTANTS["VERSION"])
+            self.assertEqual(payload["history_entities"], {"runtime_message": "sensor.renamed_message"})
             self.assertEqual(payload["updates"], cached)
             payload["updates"]["latest_version"] = "changed-client-copy"
         self.assertEqual(cached["latest_version"], "1.0.18")
