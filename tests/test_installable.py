@@ -4,6 +4,7 @@ import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
+import logging
 import importlib.util
 from pathlib import Path
 import shutil
@@ -18,7 +19,7 @@ from uuid import uuid4
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1] / "custom_components/deye_ems"
-C = {}
+C = {"logging": logging, "LOVELACE_DATA": "lovelace", "MODE_STORAGE": "storage"}
 exec((ROOT/"const.py").read_text(encoding="utf-8"), C)
 spec = importlib.util.spec_from_file_location("offline_solcast", ROOT/"solcast.py")
 SOLCAST = importlib.util.module_from_spec(spec)
@@ -199,7 +200,8 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         updates = SimpleNamespace(status={"status": "not_checked"}, async_check=AsyncMock(),
             async_start=Mock(), async_stop=AsyncMock())
         updates_factory = Mock(return_value=updates)
-        h=SimpleNamespace(data={},is_running=True,bus=SimpleNamespace(async_listen_once=Mock(return_value=Mock())),http=SimpleNamespace(async_register_static_paths=static),
+        resources, refresh_resource = object(), AsyncMock()
+        h=SimpleNamespace(data={"lovelace": SimpleNamespace(resource_mode="storage", resources=resources)},is_running=True,bus=SimpleNamespace(async_listen_once=Mock(return_value=Mock())),http=SimpleNamespace(async_register_static_paths=static),
             config_entries=SimpleNamespace(async_forward_entry_setups=AsyncMock(),
                 async_unload_platforms_or_raise=AsyncMock(),async_reload=AsyncMock()))
         m=load("__init__.py",{**C,"__name__":"offline_init","__file__":str(ROOT/"__init__.py"),
@@ -208,6 +210,7 @@ class Installation(unittest.IsolatedAsyncioTestCase):
             "UpdateManager": updates_factory, "DATA_UPDATES": "deye_ems_updates",
             "EVENT_HOMEASSISTANT_STARTED": "homeassistant_started", "EVENT_HOMEASSISTANT_STOP": "homeassistant_stop",
             "StaticPathConfig":lambda *a:a,"async_register":Mock(),
+            "async_refresh_panel_resource": refresh_resource,
             "frontend":SimpleNamespace(async_remove_panel=Mock()),
             "panel_custom":SimpleNamespace(async_register_panel=panel)})
         e=SimpleNamespace(entry_id="one",async_on_unload=Mock(),add_update_listener=Mock())
@@ -224,6 +227,8 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         updates.async_stop.assert_awaited_once_with()
         self.assertIs(h.data["deye_ems_updates"], updates)
         self.assertEqual(panel.await_count,2)
+        self.assertEqual(refresh_resource.await_count, 2)
+        refresh_resource.assert_awaited_with(resources)
         self.assertTrue(panel.await_args.kwargs["require_admin"])
         self.assertEqual(panel.await_args.kwargs["webcomponent_name"],
             "deye-ems-panel-" + C["VERSION"].replace(".", "-"))
@@ -236,7 +241,7 @@ class Installation(unittest.IsolatedAsyncioTestCase):
         manifest=json.loads((ROOT/"manifest.json").read_text(encoding="utf-8"))
         self.assertTrue(manifest["config_flow"])
         self.assertEqual(manifest["requirements"],[])
-        self.assertEqual(set(manifest["after_dependencies"]), {"esphome", "zeroconf"})
+        self.assertEqual(set(manifest["after_dependencies"]), {"esphome", "lovelace", "zeroconf"})
         for platform in C["PLATFORMS"]:
             self.assertTrue((ROOT/(platform+".py")).is_file())
         self.assertTrue((ROOT/"frontend/deye-ems-panel.js").is_file())

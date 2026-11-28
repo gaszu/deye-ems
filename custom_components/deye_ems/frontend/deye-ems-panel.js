@@ -1,6 +1,6 @@
 /* Deye EMS panel: native web component, no CDN, framework or external service. */
-const PANEL_TAG = "deye-ems-panel-2-7-3";
-const PANEL_VERSION = "2.7.3";
+const PANEL_TAG = "deye-ems-panel-2-7-4";
+const PANEL_VERSION = "2.7.4";
 const chargePauseMessages = {
   connection_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na przyłączu",
   inverter_grid_headroom_blocked: "Doładowanie z sieci wstrzymane — brak zapasu mocy na porcie GRID falownika",

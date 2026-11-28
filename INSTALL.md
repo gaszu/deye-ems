@@ -6,7 +6,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Alternatywne nazwy encji miernika portu przypisz ręcznie.
 
-Instrukcja dla wydania [Deye EMS 2.7.3](https://github.com/gaszu/deye-ems/releases/tag/v2.7.3).
+Instrukcja dla wydania [Deye EMS 2.7.4](https://github.com/gaszu/deye-ems/releases/tag/v2.7.4).
 
 Do instalacji użyj [najnowszego stabilnego wydania](https://github.com/gaszu/deye-ems/releases/latest). Przed konfiguracją sprawdź połączenie falownika przez mostek Modbus RS-485, przypisanie encji Home Assistant i zgodność profilu taryfy z umową.
 
@@ -220,7 +220,7 @@ Pasek HA pozostaje przy górnej krawędzi podczas przewijania. Przycisk menu ste
 ## Deye EMS w natywnym pulpicie Home Assistant
 
 1. W **Ustawienia → Pulpity → Zasoby** dodaj moduł JavaScript o adresie
-   `/deye_ems_static/deye-ems-panel.js`. Adres jest stały przy aktualizacjach EMS.
+   `/deye_ems_static/deye-ems-panel.js`. EMS aktualizuje numer wersji istniejącego zasobu modułu Lovelace zapisanego w interfejsie HA. W konfiguracji zasobów zarządzanej przez YAML ustaw wersję w adresie ręcznie.
 2. Utwórz osobny pulpit administratora i wybierz układ widoku **Panel**.
 3. Dodaj jedną kartę ręcznie, z konfiguracją `type: custom:deye-ems-dashboard-card`.
 

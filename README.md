@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.7.3](https://github.com/gaszu/deye-ems/releases/tag/v2.7.3)
+**Aktualne wydanie / Current release:** [Deye EMS 2.7.4](https://github.com/gaszu/deye-ems/releases/tag/v2.7.4)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -27,7 +27,7 @@ Podsumowanie pokazuje SoC i rezerwę, moc sieci i domu, najbliższy cel oraz sta
 
 *Zrzuty panelu Deye EMS w ciemnym motywie podglądu z danymi syntetycznymi.*
 
-Pole komunikatów silnika jest zawsze widoczne. Pokazuje polski opis decyzji lub błędu, a gdy silnik nie zgłasza zdarzenia, wyświetla „Brak komunikatów” na jasnoniebieskim tle.
+Zasób modułu karty zapisany w Lovelace jest odświeżany po zmianie wersji EMS. Pole komunikatów silnika jest zawsze widoczne. Pokazuje polski opis decyzji lub błędu, a gdy silnik nie zgłasza zdarzenia, wyświetla „Brak komunikatów” na jasnoniebieskim tle.
 
 ![Menu sekcji EMS, pole komunikatów i kafelki podsumowania](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
@@ -125,7 +125,7 @@ The overview shows battery SoC and reserve, grid and household power, the next t
 
 *Deye EMS dashboard screenshots in the dark preview theme with synthetic data.*
 
-The engine message area stays visible. It describes decisions and errors in Polish and shows “Brak komunikatów” on a light blue background when there is no active message.
+The stored Lovelace card module follows the installed EMS version. The engine message area stays visible. It describes decisions and errors in Polish and shows “Brak komunikatów” on a light blue background when there is no active message.
 
 ![EMS section menu, engine message area and overview tiles](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
@@ -208,13 +208,13 @@ W obu trybach wewnętrzne CT Deye mierzy port GRID. W Zero Export To CT zewnętr
 
 Deye EMS można również osadzić w natywnym pulpicie Home Assistant. Deye EMS can also be embedded in a native Home Assistant dashboard. [Instalacja / Setup](INSTALL.md#deye-ems-w-natywnym-pulpicie-home-assistant)
 
-Poniższy przewodnik opisuje wydanie **2.7.3**. The layout below describes release **2.7.3**.
+Poniższy przewodnik opisuje wydanie **2.7.4**. The layout below describes release **2.7.4**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.3** |
-| [tests](tests) | Testy offline / Offline tests · **2.7.3** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.3** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.3** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.4** |
+| [tests](tests) | Testy offline / Offline tests · **2.7.4** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.4** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.4** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).

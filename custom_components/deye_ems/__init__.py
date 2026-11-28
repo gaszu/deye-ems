@@ -2,20 +2,25 @@
 
 Installing the integration does not transfer control of the inverter.
 """
+import logging
 from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace import LOVELACE_DATA, MODE_STORAGE
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP, Platform
+from homeassistant.exceptions import HomeAssistantError
 
 from .appearance import AppearanceManager, DATA_APPEARANCE
-from .const import DOMAIN, PLATFORMS, VERSION
+from .const import DOMAIN, PANEL_MODULE_URL, PLATFORMS, VERSION
 from .coordinator import DeyeEMSCoordinator
+from .lovelace_resource import async_refresh_panel_resource
 from .post_save import cancel_post_save, get_post_save_manager
 from .updates import UpdateManager, DATA_UPDATES
 from .websocket import async_register
 
 PANEL_PATH = "deye-ems"
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry):
@@ -47,6 +52,13 @@ async def async_setup_entry(hass, entry):
         hass.data[DOMAIN + "_static"] = True
     if not hass.data.get(DOMAIN + "_panel"):
         await async_update_panel(hass)
+        lovelace = hass.data.get(LOVELACE_DATA)
+        if lovelace is not None and lovelace.resource_mode == MODE_STORAGE:
+            try:
+                await async_refresh_panel_resource(lovelace.resources)
+            except (HomeAssistantError, OSError):
+                # A dashboard storage failure must not interrupt the loaded engine.
+                _LOGGER.warning("Nie udało się odświeżyć zasobu karty Deye EMS w Lovelace.", exc_info=True)
     await _async_enable_update_checks(hass)
     if activate_after_install:
         manager = get_post_save_manager(hass)
@@ -93,7 +105,7 @@ async def async_update_panel(hass):
         frontend_url_path=PANEL_PATH, webcomponent_name="deye-ems-panel-" + VERSION.replace(".", "-"),
         sidebar_title="Deye EMS" if getattr(manager, "sidebar_visible", True) else None,
         sidebar_icon="mdi:solar-power",
-        module_url=f"/deye_ems_static/deye-ems-panel.js?v={VERSION}",
+        module_url=PANEL_MODULE_URL,
         require_admin=True, config_panel_domain=DOMAIN)
     hass.data[DOMAIN + "_panel"] = True
 
