@@ -28,6 +28,8 @@
     solcast:{status:"ok",api_configured:true,api_enabled:true,quota:{utc:{day:new Date().toISOString().slice(0,10),used:3},limit:10},
       forecast_summary:{date:forecastDate,as_of:new Date().toISOString(),source_updated_at:new Date().toISOString(),
         today:{complete:true,p10_kwh:0.8,p50_kwh:1.7},tomorrow:{complete:true,p10_kwh:6.4,p50_kwh:12.8}}},
+    runtime_error_history:[{at:new Date(Date.now()-360000).toISOString(),code:"last_moment_gc_guard",
+      description:"EMS wstrzymał włączenie ładowania z sieci po końcowej kontroli warunków."}],
     command_diagnostics:{since:new Date(Date.now()-900000).toISOString(),retention:"since_boot",counts:{accepted:1,uncertain:0,not_sent:0,suppressed:2},
       attempts:[{at:new Date(Date.now()-120000).toISOString(),value_a:25,kind:"ordinary",reason:"scheduled_setpoint",outcome:"accepted"}],
       last_suppressed:{at:new Date(Date.now()-5000).toISOString(),value_a:25,kind:"ordinary",reason:"matching_ha_state"},

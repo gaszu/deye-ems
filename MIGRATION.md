@@ -2,7 +2,7 @@
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów. Jeżeli zmieniły się efektywne źródła, EMS przechodzi do obserwacji. Przed ponowną aktywacją sprawdź przypisania i bilans mocy.
 
-Instrukcja dla wydania [Deye EMS 2.7.2](https://github.com/gaszu/deye-ems/releases/tag/v2.7.2). Wybierz niżej procedurę odpowiednią do tego, czy aktualizujesz istniejący Deye EMS, przechodzisz z innego sterownika, czy wracasz do poprzedniej wersji.
+Instrukcja dla wydania [Deye EMS 2.7.3](https://github.com/gaszu/deye-ems/releases/tag/v2.7.3). Wybierz niżej procedurę odpowiednią do tego, czy aktualizujesz istniejący Deye EMS, przechodzisz z innego sterownika, czy wracasz do poprzedniej wersji.
 
 ## Aktualizacja istniejącego Deye EMS
 
@@ -26,7 +26,7 @@ Przed usunięciem starych automatyzacji lub helperów sprawdź ich zależności.
 ## Powrót do poprzedniego wydania Deye EMS
 
 1. Przejdź do obserwacji. Potwierdź zatrzymanie ładowania sieciowego i sprawdź odczyty nastawy prądu oraz Grid Charge. Sam restart lub wyładowanie integracji nie zeruje falownika.
-2. Zabezpiecz bieżący stan. Wybierz dokładną wersję z wcześniej zachowanej paczki lub z [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Dla powrotu z 2.7.2 do bezpośredniego poprzednika użyj [Deye EMS 2.7.1](https://github.com/gaszu/deye-ems/releases/tag/v2.7.1). Jeżeli aktualizujesz bezpośrednio z 2.3.07, zachowaj paczkę 2.3.07 jako własny punkt powrotu.
+2. Zabezpiecz bieżący stan. Wybierz dokładną wersję z wcześniej zachowanej paczki lub z [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Dla powrotu z 2.7.3 do bezpośredniego poprzednika użyj [Deye EMS 2.7.2](https://github.com/gaszu/deye-ems/releases/tag/v2.7.2). Jeżeli aktualizujesz bezpośrednio z 2.3.07, zachowaj paczkę 2.3.07 jako własny punkt powrotu.
 3. Zainstaluj poprzednią wersję, sprawdź konfigurację HA i uruchom ponownie. Zachowaj wpis integracji. Jeżeli dana ścieżka wymaga starszego formatu konfiguracji lub runtime, odtwórz pasującą kopię zgodnie z notatkami konkretnego wydania. Pełne przywrócenie kopii HA może cofnąć też niezwiązane zmiany.
 4. Potwierdź wersję załadowaną przez HA i wersję panelu, ustawienia i przypisania, bieżące pomiary oraz plan. Po sprawdzeniu jawnie przywróć sterowanie, jeżeli było wcześniej włączone.
 

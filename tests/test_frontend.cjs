@@ -55,13 +55,13 @@ function fixture(previousElements = [], now = NOW) {
     customElements:{get:name=>registry.get(name),define:(name,type)=>registry.set(name,type)},
     setInterval:()=>1,clearInterval:()=>{},setTimeout:(fn,ms)=>{const timer={id:++timerId,fn,ms,cleared:false};timers.push(timer);return timer.id;},clearTimeout:id=>{const timer=timers.find(t=>t.id===id);if(timer)timer.cleared=true;},fetch:()=>{throw Error("External requests are forbidden");}});
   vm.runInContext(source,context,{filename:"deye-ems-panel.js"});
-  const Panel = registry.get("deye-ems-panel-2-7-2");
+  const Panel = registry.get("deye-ems-panel-2-7-3");
   const panel = new Panel();
   const calls=[];
   panel._hass={themes:{themes:{},darkMode:false,theme:"default"},selectedTheme:{dark:false},
     states:{"sensor.raw_stale":{state:"99",attributes:{friendly_name:"Raw stale reading"}}},
     callWS:async message=>{calls.push(message);return panel.payload;}};
-  panel.payload={entry_id:"test-entry",backend_version:"2.7.2",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
+  panel.payload={entry_id:"test-entry",backend_version:"2.7.3",appearance:{theme:""},mode:"shadow",effective_loads:[],loads_revision:"revision-1",options:{topology:"load_only",min_soc_lower_bound:15,min_soc_bound_valid:true,min_soc_percent:50,grid_import_limit_kw:12,grid_phase_limit_kw:5,extra_loads:[]},
     sources:{soc:"sensor.raw_stale"},data:{updated_at:new Date(NOW).toISOString(),
       inputs:{topology:"load_only",soc:62,soc_valid:true,telemetry_valid:true,grid_power:0,grid_port_power:0,load_power:2800,raw_load_power:2800,current_a:27,battery_power:-1400},
       control:{next_a:29,cap_a:45,read_setting_a:27,target_soc:75,target_deadline:"2026-11-11T07:00:00+01:00",target_source:"dated_cache",reason:"ramp_up"},
@@ -107,8 +107,8 @@ test("an existing browser session registers the updated panel alongside the old 
   assert.equal(registry.get("deye-ems-panel-1-0-1"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-5"),LegacyPanel);
   assert.equal(registry.get("deye-ems-panel-1-0-10"),LegacyPanel);
-  assert.notEqual(registry.get("deye-ems-panel-2-7-2"),LegacyPanel);
-  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.7\.2/);
+  assert.notEqual(registry.get("deye-ems-panel-2-7-3"),LegacyPanel);
+  assert.match(panel.shadowRoot.innerHTML,/Wersja 2\.7\.3/);
 });
 
 function setSettingsOpen(panel,open){
@@ -134,8 +134,8 @@ test("software version and manual update check stay inside existing advanced det
   const [primary,html]=panel.shadowRoot.innerHTML.split("<details>");
   assert.doesNotMatch(primary,/Wersja i aktualizacje|id="updates-check"/);
   assert.match(html,/<h2>Wersja i aktualizacje<\/h2>/);
-  assert.match(html,/Uruchomiona w HA: <b>2\.7\.2<\/b>/);
-  assert.match(html,/Interfejs tej karty: <b>2\.7\.2<\/b>/);
+  assert.match(html,/Uruchomiona w HA: <b>2\.7\.3<\/b>/);
+  assert.match(html,/Interfejs tej karty: <b>2\.7\.3<\/b>/);
   assert.match(html,/Nie sprawdzono jeszcze dostępności/);
   assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,false);
   assert.equal(calls.length,0);assert.equal(reloads(),0);
@@ -144,18 +144,18 @@ test("software version and manual update check stay inside existing advanced det
 test("update states require validated versions and a completed check and use numeric version order",()=>{
   const {panel}=fixture();
   const checked_at=new Date(NOW).toISOString();
-  let html=updateInfo(panel,{status:"current",latest_version:"2.7.2",checked_at});
+  let html=updateInfo(panel,{status:"current",latest_version:"2.7.3",checked_at});
   assert.match(html,/Ostatnie sprawdzenie: brak nowszego wydania/);
   html=updateInfo(panel,{status:"available",latest_version:"2.7.200",checked_at});
   assert.match(html,/Dostępna aktualizacja: 2\.7\.200/);
   html=updateInfo(panel,{status:"ahead",latest_version:"1.0.9",checked_at});
   assert.match(html,/nowsza niż ostatnie wydanie publiczne/);
-  for(const changes of [{status:"current",latest_version:"2.7.3",checked_at},
+  for(const changes of [{status:"current",latest_version:"2.7.4",checked_at},
     {status:"available",latest_version:"1.0.9",checked_at},
-    {status:"current",latest_version:"2.7.2"},
-    {status:"current",latest_version:"2.7.2",checked_at:"0"},
-    {status:"current",latest_version:"2.7.2",checked_at:new Date(NOW+1).toISOString()},
-    {status:"current",latest_version:"2.7.2",checked_at,stale:true}]){
+    {status:"current",latest_version:"2.7.3"},
+    {status:"current",latest_version:"2.7.3",checked_at:"0"},
+    {status:"current",latest_version:"2.7.3",checked_at:new Date(NOW+1).toISOString()},
+    {status:"current",latest_version:"2.7.3",checked_at,stale:true}]){
     html=updateInfo(panel,changes);
     assert.doesNotMatch(html,/Ostatnie sprawdzenie: brak nowszego wydania|Dostępna aktualizacja:/);
   }
@@ -163,12 +163,12 @@ test("update states require validated versions and a completed check and use num
 
 test("software version mismatch distinguishes an old tab from a backend awaiting restart without automatic reload",()=>{
   const {panel,reloads,calls}=fixture();
-  panel.payload.backend_version="2.7.3";panel.render();
+  panel.payload.backend_version="2.7.4";panel.render();
   assert.match(panel.updatesHtml(),/Otwarta karta ma starszy interfejs/);
   panel.payload.backend_version="1.0.16";panel.render();
   assert.match(panel.updatesHtml(),/Interfejs jest nowszy niż wersja uruchomiona w HA/);
   assert.match(panel.updatesHtml(),/wymagany jest restart HA/);
-  for(const value of [undefined,null,17,"unknown","v2.7.2","2.7.2-beta","02.7.2"]){
+  for(const value of [undefined,null,17,"unknown","v2.7.3","2.7.3-beta","02.7.3"]){
     panel.payload.backend_version=value;panel.render();
     assert.match(panel.updatesHtml(),/Brak potwierdzonej wersji uruchomionej w HA/);
     assert.equal(panel.shadowRoot.getElementById("updates-check").disabled,true);
@@ -178,22 +178,22 @@ test("software version mismatch distinguishes an old tab from a backend awaiting
 
 test("update error keeps a stale last known release without claiming current or exposing provider text",()=>{
   const {panel}=fixture();
-  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.7.3",
+  const html=updateInfo(panel,{status:"error",reason:"rate_limited",latest_version:"2.7.4",
     checked_at:new Date(NOW).toISOString(),stale:true,error:"sensitive-provider-body",message:"unsafe-secret"});
   assert.match(html,/Osiągnięto limit sprawdzania wydań/);
-  assert.match(html,/Ostatnio znane wydanie: 2\.7\.3/);
+  assert.match(html,/Ostatnio znane wydanie: 2\.7\.4/);
   assert.match(html,/Ta informacja może być nieaktualna/);
   assert.doesNotMatch(html,/Dostępna aktualizacja:|brak nowszego wydania|sensitive-provider-body|unsafe-secret/);
 });
 
 test("update navigation never accepts remote URLs or malformed release tags from the server",()=>{
   const {panel}=fixture();
-  let html=updateInfo(panel,{status:"available",latest_version:"2.7.3",checked_at:new Date(NOW).toISOString(),
+  let html=updateInfo(panel,{status:"available",latest_version:"2.7.4",checked_at:new Date(NOW).toISOString(),
     release_url:"javascript:unexpected()",marketplace_url:"https://untrusted.example/install"});
   assert.match(html,/href="\/marketplace"/);
-  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.7\.3"/);
+  assert.match(html,/href="https:\/\/github\.com\/gaszu\/deye-ems\/releases\/tag\/v2\.7\.4"/);
   assert.doesNotMatch(html,/javascript:|untrusted\.example|unexpected/);
-  for(const latest_version of ['2.7.3\" onclick=\"unexpected()','<img src=x>','2.7.3/../../x',"v2.7.3",true,18,"2.7.3-beta","999999999.0.1"]){
+  for(const latest_version of ['2.7.4\" onclick=\"unexpected()','<img src=x>','2.7.4/../../x',"v2.7.4",true,18,"2.7.4-beta","999999999.0.1"]){
     html=updateInfo(panel,{status:"available",latest_version,checked_at:new Date(NOW).toISOString()});
     assert.doesNotMatch(html,/github\.com|unexpected|<img|Dostępna aktualizacja:/);
   }
@@ -212,9 +212,9 @@ test("manual update check leaves stop control usable and merges only update data
   assert.equal(await panel.checkUpdates(),false);
   await panel.shadowRoot.getElementById("mode").events.click();
   const afterStop=JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data});
-  finish({...old,updates:{status:"available",latest_version:"2.7.3",checked_at:new Date(NOW).toISOString()}});
+  finish({...old,updates:{status:"available",latest_version:"2.7.4",checked_at:new Date(NOW).toISOString()}});
   assert.equal(await checking,true);
-  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.7.3");
+  assert.equal(panel.updatesBusy,false);assert.equal(panel.payload.updates.latest_version,"2.7.4");
   assert.equal(JSON.stringify({mode:panel.payload.mode,options:panel.payload.options,sources:panel.payload.sources,data:panel.payload.data}),afterStop);
   assert.equal(panel.payload.mode,"shadow");assert.equal(panel.payload.options.capacity_kwh,77);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{type:"deye_ems/command",command:"check_updates"},{type:"deye_ems/command",command:"mode",mode:"shadow"}]);
@@ -224,9 +224,9 @@ test("late update response cannot replace a newly observed backend version",asyn
   const {panel}=fixture();let finish;
   panel._hass.callWS=()=>new Promise(resolve=>{finish=resolve;});
   const checking=panel.checkUpdates();
-  panel.payload={...panel.payload,backend_version:"2.7.3",updates:{status:"not_checked"}};
-  finish({backend_version:"2.7.2",updates:{status:"current",latest_version:"2.7.2",checked_at:new Date(NOW).toISOString()}});
-  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.7.3");
+  panel.payload={...panel.payload,backend_version:"2.7.4",updates:{status:"not_checked"}};
+  finish({backend_version:"2.7.3",updates:{status:"current",latest_version:"2.7.3",checked_at:new Date(NOW).toISOString()}});
+  assert.equal(await checking,false);assert.equal(panel.payload.backend_version,"2.7.4");
   assert.equal(panel.payload.updates.status,"not_checked");
   assert.match(panel.updatesHtml(),/Wersja HA mogła się zmienić/);
 });
@@ -261,20 +261,20 @@ test("reload is explicit and respects unsaved forms while update polling preserv
 
 test("an older polling response preserves a newer completed update check without losing new telemetry",async()=>{
   const {panel}=fixture();
-  updateInfo(panel,{status:"available",latest_version:"2.7.3",checked_at:new Date(NOW).toISOString()});
+  updateInfo(panel,{status:"available",latest_version:"2.7.4",checked_at:new Date(NOW).toISOString()});
   const old={...panel.payload,data:{...panel.payload.data,inputs:{...panel.payload.data.inputs,soc:63}},
     updates:{status:"not_checked",checked_at:null}};
   panel._hass.callWS=async()=>old;
   await panel.refresh();
-  assert.equal(panel.payload.updates.latest_version,"2.7.3");assert.equal(panel.payload.data.inputs.soc,63);
-  const newerError={...old,updates:{status:"error",latest_version:"2.7.3",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
+  assert.equal(panel.payload.updates.latest_version,"2.7.4");assert.equal(panel.payload.data.inputs.soc,63);
+  const newerError={...old,updates:{status:"error",latest_version:"2.7.4",stale:true,checked_at:new Date(NOW+1000).toISOString()}};
   panel._hass.callWS=async()=>newerError;await panel.refresh();
   assert.equal(panel.payload.updates.status,"error");
 });
 
 test("rendering or refreshing never automatically checks releases or reloads the page",async()=>{
   const {panel,calls,reloads}=fixture();
-  panel.payload.backend_version="2.7.3";
+  panel.payload.backend_version="2.7.4";
   for(let i=0;i<3;i++){panel.render();await panel.refresh();}
   assert.equal(reloads(),0);assert.equal(calls.length,3);
   assert.ok(calls.every(call=>call.type==="deye_ems/status"));
@@ -297,18 +297,18 @@ test("automatic Deye current ceiling is read-only and independent of the control
   assert.equal(calls.length,0);
 });
 
-const storeRow=(available_version="v2.7.2",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
+const storeRow=(available_version="v2.7.3",changes={})=>({id:"1451991710",full_name:"gaszu/deye-ems",category:"integration",domain:"deye_ems",installed:true,available_version,...changes});
 function storeFixture(){
   const result=fixture(),{panel}=result;
   panel.isConnected=true;panel._hass.user={is_admin:true};
-  panel.payload.updates={status:"available",latest_version:"2.7.3",checked_at:new Date(NOW).toISOString(),stale:false};
+  panel.payload.updates={status:"available",latest_version:"2.7.4",checked_at:new Date(NOW).toISOString(),stale:false};
   return result;
 }
 function successfulStore(panel,calls,{legacy=false,alreadyCurrent=false}={}){
   let refreshed=false;
   panel._hass.callWS=async message=>{calls.push(message);
     if(legacy&&message.type.startsWith("marketplace/"))throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.7.2")];
+    if(message.type.endsWith("/repositories/list"))return [storeRow(alreadyCurrent||refreshed?"v"+panel.payload.updates.latest_version:"v2.7.3")];
     if(message.type.endsWith("/repository/refresh")){refreshed=true;return {};}
     throw Error("Unexpected store request");};
 }
@@ -324,7 +324,7 @@ test("open admin panel synchronizes only its older installed repository metadata
   assert.equal(calls.length,3);assert.equal(reloads(),0);assert.equal(panel.busy,false);
   assert.match(panel.updatesHtml(),/Marketplace otrzymał aktualne metadane/);
   assert.ok(calls.every(message=>!JSON.stringify(message).match(/install|download|restart|version\"|mode/)));
-  panel.payload.updates.latest_version="2.7.4";successfulStore(panel,calls);
+  panel.payload.updates.latest_version="2.7.5";successfulStore(panel,calls);
   assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,6);
 });
 
@@ -334,18 +334,18 @@ test("store metadata work is single-flight and never occupies the EMS stop contr
   const first=panel.syncStoreMetadata(),second=panel.syncStoreMetadata();
   assert.equal(first,second);assert.equal(calls.length,1);assert.equal(panel.busy,false);
   assert.equal(panel.shadowRoot.getElementById("mode").disabled,false);
-  finish([storeRow("v2.7.3")]);assert.equal(await first,true);assert.equal(calls.length,1);
+  finish([storeRow("v2.7.4")]);assert.equal(await first,true);assert.equal(calls.length,1);
 });
 
 test("already current marketplace metadata does not issue refresh and cannot downgrade a newer store release",async()=>{
-  for(const version of ["2.7.3","v2.7.3"]){
+  for(const version of ["2.7.4","v2.7.4"]){
     const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return [storeRow(version)];};
     assert.equal(await panel.syncStoreMetadata(),true);assert.equal(calls.length,1);
   }
 });
 
 test("metadata sync requires an open admin panel and a fresh validated available release",async()=>{
-  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.7.3"},{latest_version:"2.7.2"},
+  const bad=[{status:"error"},{status:"current"},{stale:true},{latest_version:"v2.7.4"},{latest_version:"2.7.3"},
     {latest_version:"<img src=x>"},{checked_at:new Date(NOW+1).toISOString()},
     {checked_at:new Date(NOW-7200001).toISOString()},{checked_at:null}];
   for(const changes of bad){const {panel,calls}=storeFixture();Object.assign(panel.payload.updates,changes);assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,0);}
@@ -356,9 +356,9 @@ test("metadata sync requires an open admin panel and a fresh validated available
 });
 
 test("wrong ambiguous uninstalled or malformed repository metadata never permits a refresh",async()=>{
-  const rows=[[],{},[storeRow("2.7.2",{id:"different"})],[storeRow("2.7.2",{full_name:"other/repo"})],
-    [storeRow("2.7.2",{domain:"other"})],[storeRow("2.7.2",{category:"plugin"})],
-    [storeRow("2.7.2",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
+  const rows=[[],{},[storeRow("2.7.3",{id:"different"})],[storeRow("2.7.3",{full_name:"other/repo"})],
+    [storeRow("2.7.3",{domain:"other"})],[storeRow("2.7.3",{category:"plugin"})],
+    [storeRow("2.7.3",{installed:false})],[storeRow("malformed")],[storeRow(),storeRow()]];
   for(const response of rows){const {panel,calls}=storeFixture();panel._hass.callWS=async message=>{calls.push(message);return response;};
     assert.equal(await panel.syncStoreMetadata(),false);assert.equal(calls.length,1);await panel.syncStoreMetadata();assert.equal(calls.length,1);}
 });
@@ -379,7 +379,7 @@ test("legacy HACS fallback is allowed only for unknown_command and uses the same
 test("an unknown refresh endpoint rediscovers the same repository through legacy HACS before refreshing",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="marketplace/repository/refresh")throw {code:"unknown_command"};
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.7.3":"v2.7.2")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.7.4":"v2.7.3")];done=true;return {};};
   assert.equal(await panel.syncStoreMetadata(),true);
   assert.deepEqual(calls.map(message=>message.type),["marketplace/repositories/list","marketplace/repository/refresh","hacs/repositories/list","hacs/repository/refresh","hacs/repositories/list"]);
 });
@@ -401,7 +401,7 @@ test("metadata responses after unmount cancellation or release changes never tri
     panel._hass.callWS=message=>{calls.push(message);return new Promise(resolve=>{finish=resolve;});};
     const pending=panel.syncStoreMetadata();
     if(reason==="disconnect"){panel.isConnected=false;panel.disconnectedCallback();}
-    else if(reason==="changed_release")panel.payload.updates.latest_version="2.7.4";else panel.payload.updates.stale=true;
+    else if(reason==="changed_release")panel.payload.updates.latest_version="2.7.5";else panel.payload.updates.stale=true;
     finish([storeRow()]);assert.equal(await pending,false);assert.equal(calls.length,1);
   }
 });
@@ -423,7 +423,7 @@ test("successful metadata fetch does not claim the store offers an unconfirmed n
 test("normal status polling can trigger metadata synchronization without a separate release check command",async()=>{
   const {panel,calls}=storeFixture();let done=false;
   panel._hass.callWS=async message=>{calls.push(message);if(message.type==="deye_ems/status")return panel.payload;
-    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.7.3":"v2.7.2")];done=true;return {};};
+    if(message.type.endsWith("/repositories/list"))return [storeRow(done?"v2.7.4":"v2.7.3")];done=true;return {};};
   await panel.refresh();await panel.storeSyncFlight;
   assert.equal(calls.filter(message=>message.type==="marketplace/repository/refresh").length,1);
   assert.ok(calls.every(message=>message.command!=="check_updates"));
@@ -1557,7 +1557,7 @@ test("an old in-flight status cannot overwrite a confirmed option save",async()=
   assert.equal(panel.shadowRoot.querySelector('input[data-key="min_soc_percent"]').value,"55");
 });
 
-test("command errors retain the requested input and escape the error",async()=>{
+test("błąd polecenia zachowuje wpisane dane i wyświetla polski komunikat",async()=>{
   const {panel}=fixture();
   panel.drafts.min_soc_percent="55";
   panel._hass.callWS=async()=>{throw new Error('<script>fail()</script>');};
@@ -1566,7 +1566,7 @@ test("command errors retain the requested input and escape the error",async()=>{
   assert.equal(panel.drafts.min_soc_percent,"55");
   assert.equal(panel.shadowRoot.querySelector('input[data-key="min_soc_percent"]').value,"55");
   assert.doesNotMatch(panel.shadowRoot.innerHTML,/<script>/);
-  assert.match(panel.shadowRoot.innerHTML,/&lt;script&gt;/);
+  assert.match(panel.shadowRoot.innerHTML,/Home Assistant nie potwierdził wykonania polecenia/);
 });
 
 test("additional-load management is inline and has no external requests",()=>{
@@ -1617,10 +1617,10 @@ test("load editor drafts and focus survive polling and blur",async()=>{
   const html=panel.shadowRoot.innerHTML;await panel.refresh();assert.equal(panel.shadowRoot.innerHTML,html);
   panel.shadowRoot.activeElement=null;panel.render();assert.equal(panel.shadowRoot.querySelector('[data-load-field="name"]').value,"Klimatyzacja");
 });
-test("load validation failure preserves draft, original revision and escaped error",async()=>{
+test("błąd zapisu odbiornika zachowuje formularz i jego pierwotną rewizję",async()=>{
   const {panel}=fixture();panel.editLoad();panel.loadDraft.name="Nowy";panel.payload.loads_revision="revision-2";
   let sent;panel._hass.callWS=async message=>{sent=message;throw Error('<script>conflict</script>');};
-  await panel.saveLoad();assert.equal(sent.expected_loads_revision,"revision-1");assert.equal(panel.loadDraft.name,"Nowy");assert.match(panel.loadsHtml(),/&lt;script&gt;conflict/);assert.doesNotMatch(panel.loadsHtml(),/<script>/);
+  await panel.saveLoad();assert.equal(sent.expected_loads_revision,"revision-1");assert.equal(panel.loadDraft.name,"Nowy");assert.match(panel.loadsHtml(),/Home Assistant nie potwierdził wykonania polecenia/);assert.doesNotMatch(panel.loadsHtml(),/<script>|conflict/);
 });
 test("receiver form models SoC and never offers adding its demand to total LOAD",()=>{
   const {panel}=fixture();panel.editLoad(PUMP);
@@ -2436,7 +2436,7 @@ function nativeTariff(panel,{plan,confirm,finish,catalogError=false}={}){
   const apiCalls=[],wsCalls=[],effects={writes:0};
   panel._hass.callWS=async message=>{wsCalls.push(message);if(message.type==="deye_ems/tariff_catalog"){
     if(catalogError)throw Error("private-catalog-body");
-    return {backend_version:"2.7.2",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:tariffProfiles.map(row=>({profile_id:row.value,operator_id:"tauron_dystrybucja",label:row.label,tariff:row.label,supported:true,runtime_allowed:true,private_key:"must-not-retain"})),private_body:"must-not-retain"};}
+    return {backend_version:"2.7.3",operators:tariffOperators.map(row=>({operator_id:row.value,label:row.label,private_key:"must-not-retain"})),profiles:tariffProfiles.map(row=>({profile_id:row.value,operator_id:"tauron_dystrybucja",label:row.label,tariff:row.label,supported:true,runtime_allowed:true,private_key:"must-not-retain"})),private_body:"must-not-retain"};}
     return panel.payload;};
   panel._hass.callApi=async(method,route,data)=>{apiCalls.push({method,route,data});if(method==="DELETE")return {};
     if(route==="config/config_entries/options/flow")return {type:"menu",flow_id:"tariff-flow",step_id:"init",menu_options:["tariff","inverter","sources"]};
@@ -2471,8 +2471,8 @@ test("failed action stays visible through normal polling and is escaped until ex
   const {panel}=fixture();panel._hass.callWS=async()=>{throw Error('Brak świeżych pomiarów <img src=x>');};
   assert.equal(await panel.command({command:"mode",mode:"active"}),false);
   panel._hass.callWS=async()=>panel.payload;for(let i=0;i<4;i++)await panel.refresh();
-  assert.match(panel.shadowRoot.innerHTML,/Brak świeżych pomiarów &lt;img/);assert.doesNotMatch(panel.shadowRoot.innerHTML,/<img/);
-  await panel.shadowRoot.getElementById("action-error-dismiss").events.click();assert.equal(panel.actionError,null);assert.doesNotMatch(panel.shadowRoot.innerHTML,/Brak świeżych pomiarów &lt;img/);
+  assert.match(panel.shadowRoot.innerHTML,/Home Assistant nie potwierdził wykonania polecenia/);assert.doesNotMatch(panel.shadowRoot.innerHTML,/Brak świeżych pomiarów|<img/);
+  await panel.shadowRoot.getElementById("action-error-dismiss").events.click();assert.equal(panel.actionError,null);assert.doesNotMatch(panel.shadowRoot.innerHTML,/Home Assistant nie potwierdził wykonania polecenia/);
 });
 test("only a successful related command clears a persistent action error",async()=>{
   const {panel}=fixture();panel._hass.callWS=async()=>{throw Error("Activation guard rejected");};await panel.command({command:"mode",mode:"active"});
@@ -2501,6 +2501,40 @@ test("a deferred charging current change is shown as an informational status",()
   const html=panel.runtimeErrorHtml();
   assert.match(html,/role="status".*EMS wstrzymał ostatnią zmianę limitu/);
   assert.doesNotMatch(html,/data-runtime-error|Błąd silnika|last_moment_dispatch_guard/);
+});
+test("pole komunikatów pokazuje niebieski stan pusty i polski opis blokady wzrostu",()=>{
+  const {panel}=fixture();
+  assert.match(panel.shadowRoot.innerHTML,/class="notice runtime-idle">Brak komunikatów/);
+  panel.payload.data.error="last_moment_grid_step_guard";
+  panel.render();
+  assert.match(panel.runtimeErrorHtml(),/Żądana nastawa przekroczyła limit wyliczony tuż przed wysłaniem/);
+  assert.doesNotMatch(panel.runtimeErrorHtml(),/Brak komunikatów|last_moment_grid_step_guard|runtime-idle/);
+});
+test("a blocked grid-charge start is explained in Polish without claiming a specific cause",()=>{
+  const {panel}=fixture();
+  panel.payload.data.error="last_moment_gc_guard";
+  const html=panel.runtimeErrorHtml();
+  assert.match(html,/role="status".*EMS wstrzymał włączenie ładowania z sieci/);
+  assert.doesNotMatch(html,/data-runtime-error|Błąd silnika|last_moment_gc_guard/);
+});
+test("an unrecognized final guard still has a Polish status message",()=>{
+  const {panel}=fixture();
+  panel.payload.data.error="last_moment_dc_guard";
+  const html=panel.runtimeErrorHtml();
+  assert.match(html,/role="status".*EMS wstrzymał polecenie po końcowej kontroli/);
+  assert.doesNotMatch(html,/last_moment_dc_guard/);
+});
+test("historia silnika pokazuje najnowsze zdarzenie najpierw i chroni tekst tabeli",()=>{
+  const {panel}=fixture();
+  panel.payload.data.runtime_error_history=[
+    {at:"2026-11-26T21:30:00+01:00",code:"command_failed",description:"Polecenie niepotwierdzone."},
+    {at:"2026-11-27T21:30:00+01:00",code:"last_moment_gc_guard",description:"EMS wstrzymał polecenie. <img>"}
+  ];
+  const html=panel.runtimeHistoryHtml();
+  assert.match(html,/Historia komunikatów silnika/);
+  assert.ok(html.indexOf("last_moment_gc_guard")<html.indexOf("command_failed"));
+  assert.match(html,/EMS wstrzymał polecenie\. &lt;img&gt;/);
+  assert.doesNotMatch(html,/<img>/);
 });
 test("tariff render shows operator meter clock and operator zone names without requests",()=>{
   const {panel,calls}=fixture();const html=calendarData(panel,{profile_id:"pge_g12w_2026",operator:"pge_dystrybucja",operator_label:"PGE Dystrybucja",tariff:"G12w",clock_basis:"fixed_cet",current_zone:"low",current_interval:{zone_label:"Pozaszczytowa — święto"}});

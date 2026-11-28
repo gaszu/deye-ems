@@ -48,6 +48,25 @@ def channel_entities(harness):
 
 
 class TelemetryLoads(unittest.TestCase):
+    def test_extra_loads_keep_quiet_readings_and_use_zero_for_invalid_states(self):
+        channel = {"energy_entity": "sensor.pump_energy", "power_entity": "sensor.pump_power"}
+        h = Harness(options={"extra_loads": [channel]})
+        for sensor, unit, raw, expected in zip(channel_entities(h), ("Wh", "kW"),
+                                               ("1250", "1.25"), (1.25, 1250)):
+            sensor.hass = h.co.hass
+            entity_id = channel["power_entity" if sensor.power else "energy_entity"]
+            state = SimpleNamespace(state=raw, attributes={"unit_of_measurement": unit},
+                                    last_reported=datetime(2000, 1, 1, tzinfo=timezone.utc))
+            h.states[entity_id] = state
+            self.assertEqual(sensor.native_value, expected)
+            for invalid in ("unavailable", "unknown", "NaN", "niedostępne", "inf"):
+                state.state = invalid
+                self.assertEqual(sensor.native_value, 0)
+            state.state = raw
+            self.assertEqual(sensor.native_value, expected)
+            del h.states[entity_id]
+            self.assertEqual(sensor.native_value, 0)
+
     def test_legacy_implicit_heatpump_remains_once_with_existing_unique_id(self):
         h = Harness(options={"extra_loads": []})
         entities = channel_entities(h)

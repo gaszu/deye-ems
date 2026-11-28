@@ -5,6 +5,23 @@ from test_runtime import Harness
 
 
 class ActivationErrorReset(unittest.IsolatedAsyncioTestCase):
+    async def test_historia_komunikatow_przetrwa_restart(self):
+        h = Harness()
+        h.co._last_error = "command_failed:OSError"
+        h.co._last_error = "command_failed:TimeoutError"
+        h.co._last_error = None
+        h.co._last_error = "last_moment_dc_guard"
+        await h.co._save()
+
+        restored = Harness()
+        restored.store.saved = h.store.saved
+        await restored.co.async_initialize()
+        events = restored.co._memory["runtime_error_history"]["events"]
+        self.assertEqual([event["code"] for event in events], ["command_failed", "last_moment_dc_guard"])
+        self.assertIn("Home Assistant nie potwierdził", events[0]["description"])
+        self.assertIn("EMS wstrzymał polecenie", events[1]["description"])
+        self.assertIsNone(restored.co._last_error)
+
     async def test_successful_explicit_activation_clears_historical_startup_error(self):
         h = Harness()
         h.co._last_error = "restored_active_preflight_failed"

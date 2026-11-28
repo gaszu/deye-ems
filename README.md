@@ -2,7 +2,7 @@
 
 [Polski](#polski) · [English](#english) · [Wydania / Releases](https://github.com/gaszu/deye-ems/releases)
 
-**Aktualne wydanie / Current release:** [Deye EMS 2.7.2](https://github.com/gaszu/deye-ems/releases/tag/v2.7.2)
+**Aktualne wydanie / Current release:** [Deye EMS 2.7.3](https://github.com/gaszu/deye-ems/releases/tag/v2.7.3)
 
 [![Zainstaluj Deye EMS / Install Deye EMS](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gaszu&repository=deye-ems&category=integration)
 
@@ -25,9 +25,11 @@ EMS jest dostępny w menu bocznym HA. Można go też osadzić w widoku Lovelace,
 
 Podsumowanie pokazuje SoC i rezerwę, moc sieci i domu, najbliższy cel oraz stan doładowania. Zielone kafelki wskazują stan poprawny lub cel SoC, czerwone blokadę lub błąd, a żółte informację. Po zapisie nastawy liczbowej w integracji HA aktywny EMS przechodzi w obserwację i wznawia sterowanie po potwierdzeniu bezpiecznej pauzy, świeżych pomiarów i aktualnego planu. [Instrukcja konfiguracji](INSTALL.md)
 
-*Panel Deye EMS 2.7.2 w ciemnym motywie podglądu z danymi syntetycznymi.*
+*Zrzuty panelu Deye EMS w ciemnym motywie podglądu z danymi syntetycznymi.*
 
-![Menu sekcji EMS, pasek sterowania i cztery kafelki podsumowania](preview/screenshots/dark-2.7.2/podsumowanie.png)
+Pole komunikatów silnika jest zawsze widoczne. Pokazuje polski opis decyzji lub błędu, a gdy silnik nie zgłasza zdarzenia, wyświetla „Brak komunikatów” na jasnoniebieskim tle.
+
+![Menu sekcji EMS, pole komunikatów i kafelki podsumowania](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
 ![Prognoza SoC z wykresem i ryzykiem niedoboru](preview/screenshots/dark-2.7.2/plan-soc.png)
 
@@ -74,6 +76,8 @@ Przy kolejnych przeliczeniach planu EMS pobiera z historii Home Assistant nowe d
 
 Żeby uniknąć podwójnego doliczania energii, EMS odejmuje historyczne zużycie osobno modelowanego odbiornika od pomiaru łącznego, a następnie sumuje prognozę odbiornika z prognozą pozostałego zużycia. Ograniczanie importu nadal korzysta z bieżących pomiarów instalacji. [Konfiguracja odbiorników](INSTALL.md#dodatkowe-zużycia)
 
+Encje mocy i energii dodatkowych odbiorników pokazują zero, gdy źródło nie podaje prawidłowej liczby. Dostępny odczyt pozostaje widoczny między raportami.
+
 ![Konfiguracja dodatkowego odbiornika w panelu EMS](preview/screenshots/dark-2.7.2/odbiorniki.png)
 
 ### Taryfy
@@ -119,9 +123,11 @@ EMS is available from the HA sidebar. It can also be embedded in a Lovelace view
 
 The overview shows battery SoC and reserve, grid and household power, the next target and grid charging status. Green tiles show a healthy state or an SoC target, red indicates a block or error, and yellow provides information. When a numeric setting is saved from the HA integration, an active EMS enters observation mode and resumes control after confirming a safe pause, fresh measurements and a current plan. [Setup guide](INSTALL.md)
 
-*Deye EMS 2.7.2 dashboard in the dark preview theme with synthetic data.*
+*Deye EMS dashboard screenshots in the dark preview theme with synthetic data.*
 
-![EMS section menu, control bar and four overview tiles](preview/screenshots/dark-2.7.2/podsumowanie.png)
+The engine message area stays visible. It describes decisions and errors in Polish and shows “Brak komunikatów” on a light blue background when there is no active message.
+
+![EMS section menu, engine message area and overview tiles](preview/screenshots/dark-2.7.3/podsumowanie.png)
 
 ![Projected SoC chart with energy shortage risk](preview/screenshots/dark-2.7.2/plan-soc.png)
 
@@ -168,6 +174,8 @@ When recalculating the plan, EMS reads the latest available hourly statistics fr
 
 To avoid double-counting, EMS subtracts each separately modelled device’s historical demand from the aggregate measurement, then adds the device forecast to the forecast for the remaining demand. Import limiting continues to use live installation measurements. [Load setup](INSTALL.md#dodatkowe-zużycia)
 
+Custom load power and energy entities show zero when the source has no valid numeric reading. An available reading stays visible between reports.
+
 ![Custom load configuration in the EMS dashboard](preview/screenshots/dark-2.7.2/odbiorniki.png)
 
 ### Tariffs
@@ -200,13 +208,13 @@ W obu trybach wewnętrzne CT Deye mierzy port GRID. W Zero Export To CT zewnętr
 
 Deye EMS można również osadzić w natywnym pulpicie Home Assistant. Deye EMS can also be embedded in a native Home Assistant dashboard. [Instalacja / Setup](INSTALL.md#deye-ems-w-natywnym-pulpicie-home-assistant)
 
-Poniższy przewodnik opisuje wydanie **2.7.2**. The layout below describes release **2.7.2**.
+Poniższy przewodnik opisuje wydanie **2.7.3**. The layout below describes release **2.7.3**.
 
 | Ścieżka / Path | Zawartość / Contents |
 | --- | --- |
-| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.2** |
-| [tests](tests) | Testy offline / Offline tests · **2.7.2** |
-| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.2** |
-| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.2** |
+| [custom_components/deye_ems](custom_components/deye_ems) | Kod integracji / Integration source · **2.7.3** |
+| [tests](tests) | Testy offline / Offline tests · **2.7.3** |
+| [preview](preview) | Aktualny panel z danymi syntetycznymi / Current panel with synthetic data · **2.7.3** |
+| [release-notes](release-notes) | Notatki bieżącego wydania / Current release notes · **2.7.3** |
 
 Paczki ZIP i archiwum wersji są w [GitHub Releases](https://github.com/gaszu/deye-ems/releases). Published ZIPs and release history are available in [GitHub Releases](https://github.com/gaszu/deye-ems/releases).

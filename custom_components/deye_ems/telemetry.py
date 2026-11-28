@@ -101,25 +101,23 @@ class ExtraLoadSensor(DeyeEMSEntity, SensorEntity):
 
     @property
     def native_value(self):
-        # Keep measurement validation centralized in the runtime.
+        # These display sensors follow HA's source state. Quiet reporters can
+        # hold a valid reading indefinitely. A missing reading is shown as zero
+        # here only, so it cannot reset the recorder counter used by the model.
         key = "power_entity" if self.power else "energy_entity"
         entity = self.channel.get(key)
         state = self.hass.states.get(entity) if entity else None
         if state is None or state.attributes.get("restored"):
-            return None
+            return 0
         from math import isfinite
         try:
             value = float(state.state)
             if not isfinite(value) or value < 0:
-                return None
-            stamp = getattr(state, "last_reported", None) or state.last_updated
-            age = datetime.now(timezone.utc).timestamp() - stamp.timestamp()
-            if age < 0 or (self.power and age > 30):
-                return None
+                return 0
             unit = state.attributes.get("unit_of_measurement")
             if self.power:
                 return value * (1000 if unit == "kW" else 1) if unit in ("W", "kW") else None
             return value / (1000 if unit == "Wh" else 1) if unit in ("Wh", "kWh") else None
         except (ValueError, TypeError, AttributeError):
-            return None
+            return 0
 

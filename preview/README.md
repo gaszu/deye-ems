@@ -4,7 +4,7 @@ Menu boczne EMS zawiera odnośniki do sekcji. Na telefonie jest dostępne pod pr
 
 Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID, a w trybie CT także przyłącza. Odczyty faz są na tych samych kafelkach. Zielony oznacza poprawny stan, czerwony błąd, żółty informację, a niebieski grupuje odczyty odbiorów.
 
-Podgląd dokumentuje wydanie **2.7.2** i ładuje panel z bieżącego drzewa kodu. Boczne menu przewija do sekcji, a karty znikają pod paskiem sterowania z zachowaniem odstępu również podczas ręcznego przewijania.
+Podgląd dokumentuje wydanie **2.7.3** i ładuje panel z bieżącego drzewa kodu. Boczne menu przewija do sekcji, a karty znikają pod paskiem sterowania z zachowaniem odstępu również podczas ręcznego przewijania.
 
 Podgląd dobiera identyfikator i wersję z załadowanego komponentu panelu, więc pokazuje interfejs z bieżącego drzewa kodu.
 
@@ -39,4 +39,4 @@ Prognozę i licznik zapytań pokazuje wspólna sekcja Solcast. Podsumowanie i ce
 
 Kafelki limitów i bieżącego prądu ładowania są pod układem LOAD/CT. Prąd jest wyliczany z mocy i napięcia DC baterii.
 
-Zrzuty strony głównej GitHuba są w [screenshots/dark-2.7.2](screenshots/dark-2.7.2). Pokazują bieżący komponent w ciemnym motywie podglądu z przykładowymi danymi. Przy zmianie interfejsu odśwież dotknięte zrzuty i oba opisy w głównym README.
+Aktualny zrzut podsumowania z polem komunikatów jest w [screenshots/dark-2.7.3](screenshots/dark-2.7.3). Pozostałe zrzuty strony głównej GitHuba są w [screenshots/dark-2.7.2](screenshots/dark-2.7.2). Zrzuty pokazują ciemny motyw podglądu z danymi syntetycznymi. Przy zmianie interfejsu odśwież dotknięte zrzuty i oba opisy w głównym README.

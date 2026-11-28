@@ -39,6 +39,7 @@ from .tariff_calendar import describe_calendar
 from .telemetry_diagnostics import describe_telemetry, activation_diagnostics, POWER_TIME_SKEW_SECONDS
 from .esphome_provider import async_create_adapter
 from .report_state import effective_state
+from .runtime_messages import runtime_message
 from .post_save import cancel_post_save, get_post_save_status, configuration_requires_reload
 
 _LOGGER = logging.getLogger(__name__)
@@ -116,9 +117,10 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                         "solcast_cache": {}, "solcast_context": {}, "solcast_seed": {},
                         "grid_dispatch": {}, "current_policy": {}, "initial_charge_window": {},
                         "metering_context": {}, "soc_floor_guard": {}, "tariff_slot_history": {},
-                        "top_balance": {}}
+                        "top_balance": {}, "runtime_error_history": {"events": []}}
         self._soc_history = {}
         self._last_save_ts = 0
+        self._runtime_history_dirty = False
         self._last_error = None
         self._tariff_runtime_cache = {}
         self._configuration_pause_sleep = asyncio.sleep
@@ -264,6 +266,26 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
     def mode(self):
         return self._memory.get("mode", "shadow")
 
+    @property
+    def _last_error(self):
+        return self._runtime_error_code
+
+    @_last_error.setter
+    def _last_error(self, value):
+        previous = getattr(self, "_runtime_error_code", None)
+        self._runtime_error_code = value
+        if not value or value == previous:
+            return
+        code, description = runtime_message(value)
+        if previous and runtime_message(previous)[0] == code:
+            return
+        # Odrębna historia pozostawia zapis po skasowaniu bieżącego błędu.
+        # Używa okresowego zapisu Store, żeby diagnostyka nie wstrzymywała sterowania.
+        events = self._memory["runtime_error_history"]["events"]
+        events.append({"at": self._now().isoformat(), "code": code, "description": description})
+        del events[:-50]
+        self._runtime_history_dirty = True
+
     async def async_initialize(self):
         """Load state only. The caller performs the first coordinator refresh."""
         self._startup_plan_deadline = asyncio.get_running_loop().time() + 60
@@ -279,6 +301,22 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 elif isinstance(saved.get(key), dict):
                     self._memory[key] = saved[key]
         self._memory = self._redact(self._memory)
+        events = self._memory["runtime_error_history"].get("events")
+        restored = []
+        for event in events[-50:] if isinstance(events, list) else ():
+            if not isinstance(event, dict) or not isinstance(event.get("code"), str):
+                continue
+            at = event.get("at")
+            if not isinstance(at, str) or len(at) > 40:
+                continue
+            try:
+                timestamp = datetime.fromisoformat(at)
+            except ValueError:
+                continue
+            if timestamp.tzinfo is not None:
+                code, description = runtime_message(event["code"])
+                restored.append({"at": timestamp.isoformat(), "code": code, "description": description})
+        self._memory["runtime_error_history"] = {"events": restored}
         # A restarted process restores the journal before any new override is allowed.
         if self._memory["top_balance"]:
             self._memory["top_balance"]["enabled"] = False
@@ -340,6 +378,11 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         shutdown = getattr(super(), "async_shutdown", None)
         if shutdown is not None:
             await shutdown()
+        if self._runtime_history_dirty:
+            try:
+                await self._save()
+            except Exception:
+                _LOGGER.warning("Nie udało się zapisać historii komunikatów przy zamykaniu EMS.")
 
     async def async_set_option(self, key, value, *, from_number_entity=False):
         if from_number_entity and key not in OPTION_RANGES:
@@ -881,6 +924,8 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
         async with self._store_lock:
             # Snapshot only after acquiring the lock. A queued forecast save
             # must include every newer quota reservation and hardware ledger.
+            events = self._memory["runtime_error_history"]["events"]
+            last_event = events[-1] if events else None
             writing = asyncio.create_task(self._store.async_save(self._redact(self._memory)))
             try:
                 await asyncio.shield(writing)
@@ -889,6 +934,9 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
                 # is still running; a newer ledger must be written after it.
                 await writing
                 raise
+            # Zdarzenie dopisane podczas zapisu musi trafić do kolejnego zapisu Store.
+            if (events[-1] if events else None) is last_event:
+                self._runtime_history_dirty = False
             self._last_save_ts = self._now().timestamp()
 
     async def _cancel_planning(self):
@@ -3165,6 +3213,7 @@ class DeyeEMSCoordinator(DataUpdateCoordinator):
             return {"mode": self.mode, "owner": {"active": active, "conflicts": self._owner_conflicts()},
                     "status": control.get("runtime_reason", "active" if active else "shadow"),
                     "error": self._last_error, "conflicts": conflicts,
+                    "runtime_error_history": deepcopy(self._memory["runtime_error_history"]["events"]),
                     "startup_control_issue": self._startup_control_issue if self.mode == "active" else None,
                     "top_balance": {key: self._memory["top_balance"].get(key) for key in ("enabled", "target")},
                     "inputs": inputs, "plan": public_plan, "tariff_calendar": self.options["tariff_calendar"],

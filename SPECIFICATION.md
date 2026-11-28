@@ -4,7 +4,7 @@ Kafelki układu pod podsumowaniem pokazują moc i kierunek przepływu portu GRID
 
 EMS używa wewnętrznego CT Deye (suma i wymagane fazy) do pomiaru portu GRID w obu trybach. Zewnętrzne CT jest wymagane tylko w Zero Export To CT, gdzie mierzy przyłącze. Zapisane niestandardowe przypisania pozostają w użyciu. EMS blokuje sterowanie bez wymaganych świeżych pomiarów.
 
-Specyfikacja wydania [Deye EMS 2.7.2](https://github.com/gaszu/deye-ems/releases/tag/v2.7.2). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
+Specyfikacja wydania [Deye EMS 2.7.3](https://github.com/gaszu/deye-ems/releases/tag/v2.7.3). Silnik planowania i regulacji działa lokalnie w Home Assistant. Prognozy, statystyki Recorder i panel korzystają z tego samego modelu instalacji. Odczyt historii i pobieranie Solcast odbywają się w tle, poza ścieżką ochronnej regulacji prądu.
 
 ## Pomiary i topologie
 
@@ -22,6 +22,8 @@ Recorder dostarcza godzinowe statystyki z maksymalnie 42 dni. Model wyznacza śr
 Kiedy próbka pozwala porównać ostatnie dni z wcześniejszymi tygodniami, silnik dodaje połowę obserwowanej różnicy, ograniczoną do większej z wartości 100 W i 30% średniej bazowej. Korekta ma tłumić jednorazowe skoki i zachować reakcję na powtarzający się wzrost lub spadek obciążenia. Przy niewystarczających danych do porównania model bazuje na średniej z dostępnych próbek.
 
 Dla dodatkowych odbiorników silnik oddziela ich historyczne zużycie od pomiaru łącznego tylko tam, gdzie dane godzinowe są wystarczające i spójne. Suma prognoz odbiorników i pozostałego zużycia tworzy prognozę domu. Gdy nie można bezpiecznie wydzielić kanałów, używany jest profil łączny. Limity importu opierają się na bieżących pomiarach instalacji. [Profil zużycia i źródła danych](custom_components/deye_ems/coordinator.py)
+
+Encje mocy i energii dodatkowych odbiorników pokazują ostatnią prawidłową wartość udostępnianą przez Home Assistant, również gdy czujnik raportuje rzadko. Gdy źródło jest niedostępne, nieznane lub nieliczbowe, encja EMS pokazuje zero. Prognoza nadal pobiera rzeczywiste dane energii ze statystyk Recorder, aby brak raportu nie wyzerował licznika używanego do obliczeń.
 
 ## Prognoza PV i cele SoC
 
